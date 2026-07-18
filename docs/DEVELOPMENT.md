@@ -50,14 +50,22 @@ After an install, verify separately:
    rectangles, arcs, dots and hatch-filled polygon/ellipse/pie shapes.
 5. One mixed answer containing a heading, list, bold and inline code, fenced
    code, a table and a vector block in the expected order.
-6. Beautify text does not answer a question embedded in the selection.
-7. Beautify drawing creates a faithful movable copy and preserves the source.
-8. Thinking, success and error notifications.
-9. A GPT photo or ordinary illustration appears as a native image object; move
+6. Beautify text does not answer a question embedded in the selection; it
+   removes the selected source only after generation and replaces it at the
+   same position.
+7. Beautify drawing replaces the selected sketch with a faithful movable vector
+   reconstruction at the same bounds.
+8. Start Beautify, then change the selection or page before completion: the
+   original must remain and no result may be written. Also test an offline or
+   forced-error request and confirm the source remains.
+9. Test Undo/Redo after both Beautify routes. Record whether one or multiple
+   Undo actions are required; single-step grouping is not yet accepted.
+10. Thinking, replacing, success and error notifications.
+11. A GPT photo or ordinary illustration appears as a native image object; move
    and resize it, then test Undo/Redo, close/reopen, reboot, export and sync.
-10. Start a GPT image request and change pages before it finishes; Paper Agent
+12. Start a GPT image request and change pages before it finishes; Paper Agent
     must reject the stale insertion and remove its temporary artifact.
-11. Undo, move, resize, page save, reopen and sync behavior for native ink.
+13. Undo, move, resize, page save, reopen and sync behavior for native ink.
 
 Vector acceptance should also confirm that hatch density remains readable at
 small and large placements. Paper Agent deliberately keeps the active Xochitl

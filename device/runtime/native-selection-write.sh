@@ -127,7 +127,9 @@ test "$magic" = "89504e470d0a1a0a" || { echo "selection screenshot is not PNG" >
 # before accepting this request, so the proven one-shot path remains a safe
 # fallback. Any error after acceptance may follow partial native ink and must
 # never be replayed automatically.
-restore_primary_pen
+if [ "$ACTION" = ai ]; then
+  restore_primary_pen
+fi
 if [ -x "$NODE" ] && [ -f "$STREAM_CLIENT" ]; then
   if "$NODE" "$STREAM_CLIENT" "$ACTION" "$PNG" "$X" "$Y" "$WIDTH" "$HEIGHT"; then
     FINAL_STATUS=done
@@ -139,8 +141,20 @@ if [ -x "$NODE" ] && [ -f "$STREAM_CLIENT" ]; then
       echo "resident native oracle failed after accepting the request" >&2
       exit "$stream_rc"
     fi
+    if [ "$ACTION" = beautify ]; then
+      # Replacement needs the resident oracle's prepare -> QML delete-ack ->
+      # already-open writer handshake. Never fall back to drawing over the
+      # still-selected source or deleting it before the writer is ready.
+      echo "resident native oracle unavailable; refusing unsafe Beautify fallback" >&2
+      exit 1
+    fi
     echo "resident native oracle unavailable; using one-shot fallback" >&2
   fi
+fi
+
+if [ "$ACTION" = beautify ]; then
+  echo "resident native oracle is required for safe Beautify replacement" >&2
+  exit 1
 fi
 
 "$PREPARE" "$ACTION" "$PNG" "$X" "$Y" "$WIDTH" "$HEIGHT" "$JOB"

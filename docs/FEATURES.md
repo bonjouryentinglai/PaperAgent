@@ -30,8 +30,15 @@ than an instruction:
 - Questions are not answered.
 - Documents, tables and GPT images are rejected in this mode.
 
-The preview writes a movable copy beside the original. Undo-safe replacement is
-a later milestone.
+The developer preview replaces the selected source in place. It buffers the
+complete result, accepts only text/vector output, renders and dry-runs a bounded
+stroke job, opens the native writer, then asks Xochitl to delete the still-live
+selection. Writeback starts only after Xochitl acknowledges that delete. Page or
+selection changes and every failure before acknowledgement preserve the source.
+
+Physical Move acceptance is still required for text/sketch placement, failure
+recovery and Undo/Redo behavior. Single-step Undo grouping across Xochitl's
+native delete and virtual-Marker write remains a stability milestone.
 
 ## Deliberate differences
 

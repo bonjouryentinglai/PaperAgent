@@ -29,6 +29,8 @@ const REQUEST_TIMEOUT_MS = 300_000;
 const IMAGE_HELPER_TIMEOUT_MS = 220_000;
 const IMAGE_HEARTBEAT_MS = 10_000;
 const ARTIFACT_MAX_AGE_MS = 24 * 60 * 60 * 1_000;
+const REPLACEMENT_ACK_TIMEOUT_MS = 8_000;
+const REPLACEMENT_WRITE_SETTLE_MS = 200;
 const IMAGE_MAX_WIDTH = boundedEnvironmentInteger("PAPER_AGENT_IMAGE_MAX_WIDTH", 620, 128, 800);
 const IMAGE_MAX_HEIGHT = boundedEnvironmentInteger("PAPER_AGENT_IMAGE_MAX_HEIGHT", 620, 128, 800);
 const LINE_GAP = 24;
@@ -128,6 +130,9 @@ function selfTest() {
   if (artifactIdFor("/home/root/paper-agent/selection/native-selection-1234567890123.png") !== "1234567890123") {
     throw new Error("image artifact id extraction failed");
   }
+  if (replacementAckPathFor("/home/root/paper-agent/selection/native-selection-1234567890123.png") !== "/run/paper-agent-replace-1234567890123.ack") {
+    throw new Error("replacement acknowledgement path failed");
+  }
   if (resultEnvelope("plain fallback", true, "ai").kind !== "text") throw new Error("AI fallback failed");
   const prepared = parsePreparedImageSize("image_size=620x311\n");
   if (prepared.width !== 620 || prepared.height !== 311) throw new Error("prepared image size failed");
@@ -180,6 +185,14 @@ function artifactIdFor(selectionPath) {
   );
   if (!match) throw new Error("selection has no valid image artifact id");
   return match[1];
+}
+
+function replacementAckPathFor(selectionPath) {
+  return `/run/paper-agent-replace-${artifactIdFor(selectionPath)}.ack`;
+}
+
+function delay(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 function sendBroker(signal, message, required = false) {
@@ -504,6 +517,82 @@ async function renderAndWrite(turn, text, kind = "text") {
   console.log(`native-oracle chunk=${seq} elapsed_ms=${elapsedMs} next_y=${turn.nextY}`);
 }
 
+async function requestReplacementCommit(turn) {
+  if (turn.request.action !== "beautify") throw new Error("only Beautify can replace a selection");
+  const artifactId = artifactIdFor(turn.request.png);
+  const ack = replacementAckPathFor(turn.request.png);
+  turn.replacementAckPath = ack;
+  fs.rmSync(ack, { force: true });
+  reportStage(turn, "replacing");
+  sendBroker("paper-agent$replace", `${artifactId},ready`, true);
+
+  const deadline = Date.now() + REPLACEMENT_ACK_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    if (turn.failed) throw new Error("selection replacement was cancelled");
+    try {
+      const info = fs.lstatSync(ack);
+      if (!info.isFile() || info.isSymbolicLink()) {
+        throw new Error("replacement acknowledgement is not a regular file");
+      }
+      fs.rmSync(ack, { force: true });
+      turn.replacementAckPath = null;
+      turn.replacementCommitted = true;
+      // Xochitl's toolbar restore and Scene delete both settle asynchronously.
+      // The writer was opened before the delete signal, so no new failure-prone
+      // preparation remains between this point and native ink delivery.
+      await delay(REPLACEMENT_WRITE_SETTLE_MS);
+      return;
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
+    await delay(50);
+  }
+  throw new Error("Xochitl did not acknowledge the selection replacement");
+}
+
+async function renderAndReplace(turn, text, kind) {
+  if (turn.request.action !== "beautify" || !["text", "vector"].includes(kind)) {
+    throw new Error("invalid Beautify replacement result");
+  }
+  const chunk = text.trim();
+  if (!chunk) throw new Error("Beautify returned an empty replacement");
+  const seq = turn.chunkCount + 1;
+  const stem = `replace-${turn.id}-${seq}`;
+  const input = path.join(JOBS, `${stem}.${kind}`);
+  const job = path.join(JOBS, `${stem}.strokes`);
+  turn.temp.add(input);
+  turn.temp.add(job);
+  fs.writeFileSync(input, chunk, { mode: 0o600 });
+  const stdout = await execFileText(BIN, [
+    kind === "text" ? "render-text" : "render-vector",
+    input,
+    job,
+    String(turn.request.x), String(turn.request.y),
+    String(turn.request.width), String(turn.request.height),
+  ], { env: { ...process.env, PAPER_AGENT_CJK_SCALE: CJK_SCALE } });
+  if (!stdout.match(/pixel_bounds=(-?\d+),(-?\d+)\.\.(-?\d+),(-?\d+)/)) {
+    throw new Error("replacement renderer returned no pixel bounds");
+  }
+
+  // Fully parse the bounded job and open the Marker writer before asking
+  // Xochitl to delete anything. Model, renderer, job, device and lock failures
+  // therefore leave the selected source untouched.
+  await execFileText(BIN, ["dry-run", job]);
+  if (!turn.writer) turn.writer = new WriterPipe();
+  await turn.writer.ready;
+  await requestReplacementCommit(turn);
+  await turn.writer.write(job);
+
+  turn.chunkCount = seq;
+  fs.rmSync(input, { force: true });
+  fs.rmSync(job, { force: true });
+  turn.temp.delete(input);
+  turn.temp.delete(job);
+  const elapsedMs = Date.now() - turn.started;
+  send(turn.socket, { type: "chunk", kind, index: seq, elapsedMs });
+  console.log(`native-oracle replacement=${seq} kind=${kind} elapsed_ms=${elapsedMs}`);
+}
+
 function queueAvailable(turn, done) {
   if (turn.failed) return;
   let envelope;
@@ -519,6 +608,21 @@ function queueAvailable(turn, done) {
     return;
   }
   turn.kind = envelope.kind;
+
+  // Beautify is transactional at the model/render boundary: never stream
+  // partial text and never touch the source until the complete result has
+  // passed the restricted text/vector renderer.
+  if (turn.request.action === "beautify") {
+    if (done && !turn.structuredQueued) {
+      turn.structuredQueued = true;
+      const body = envelope.kind === "vector"
+        ? validateVectorBody(envelope.body)
+        : envelope.body;
+      turn.writeChain = turn.writeChain.then(() => renderAndReplace(turn, body, envelope.kind));
+    }
+    turn.writeChain.catch((error) => failTurn(turn, error));
+    return;
+  }
 
   if (envelope.kind === "image") {
     if (done && !turn.structuredQueued) {
@@ -577,6 +681,8 @@ async function finishTurn(turn) {
 function cleanupTurn(turn) {
   for (const file of turn.temp) fs.rmSync(file, { force: true });
   turn.temp.clear();
+  if (turn.replacementAckPath) fs.rmSync(turn.replacementAckPath, { force: true });
+  turn.replacementAckPath = null;
 }
 
 function failTurn(turn, error) {
@@ -709,6 +815,8 @@ const server = net.createServer((socket) => {
         failed: false,
         finishing: false,
         structuredQueued: false,
+        replacementAckPath: null,
+        replacementCommitted: false,
       };
       turn.timeout = setTimeout(() => failTurn(turn, new Error("native oracle timed out")), REQUEST_TIMEOUT_MS);
       active = turn;

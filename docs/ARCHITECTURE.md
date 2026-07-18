@@ -5,9 +5,9 @@ Paper Agent uses a thin Xochitl integration and a separate local runtime.
 ## Request path
 
 1. The QMD adds AI and Beautify icons to Xochitl's lasso menu.
-2. It snapshots selection bounds before the transient menu closes, asks
-   `rm-shot` for a bounded PNG and schedules a systemd worker with a direct
-   action argument.
+2. It snapshots selection bounds, asks `rm-shot` for a bounded PNG and schedules
+   a systemd worker with a direct action argument. AI closes the lasso
+   immediately; Beautify retains the exact lasso until replacement commit.
 3. The worker waits for a complete PNG and sends an allowlisted request to a
    mode-`0600` Unix socket.
 4. A persistent Pi RPC process sees the image and returns a typed result.
@@ -16,7 +16,9 @@ Paper Agent uses a thin Xochitl integration and a separate local runtime.
    normalized to a bounded RGBA PNG.
 6. StrokeJobs use the guarded Marker writer. Images use Xochitl 3.27's native
    scene-image insertion method only if the originating controller and page are
-   still active.
+   still active. Beautify validates its entire text/vector job and opens the
+   writer before a broker handshake asks Xochitl to delete the unchanged live
+   selection; native ink starts only after an owner-only acknowledgement.
 
 ## Result protocol
 
@@ -58,9 +60,16 @@ it rejects and deletes a result if the user changed pages while generation was
 running. The source file is removed after Xochitl synchronously reads it.
 
 Beautify accepts only `::text` or `::vector`; untyped content and attempts to
-return a table or image are rejected. In the current preview it creates a copy
-beside the source. Replacement requires keeping the selection alive, validating
-the new result, deleting through Xochitl and preserving Undo as one operation.
+return a table or image are rejected. It never streams partial output. The QMD
+retains the original SceneController, page, layer, bounds and selected-item
+count. Once the complete bounded job and writer are ready, it revalidates those
+values, calls Xochitl's native selected-item delete, waits for the Scene
+transaction to settle, and acknowledges the resident oracle through an
+owner-controlled `/run` file. No acknowledgement means no Marker writeback.
+
+This deliberately does not edit notebook files or sweep the rectangle with a
+virtual eraser. Single-step Undo grouping across the native delete and Marker
+write is pending physical acceptance.
 
 ## Trust boundaries
 
