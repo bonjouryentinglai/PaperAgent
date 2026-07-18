@@ -9,9 +9,10 @@ use crate::geometry::canvas_point_to_axes;
 use crate::job::{Point, StrokeJob};
 use crate::protocol;
 use std::ffi::CString;
-use std::fs::{self, OpenOptions};
+use std::fs::{File, OpenOptions};
 use std::io;
-use std::os::fd::RawFd;
+use std::os::fd::{AsRawFd, RawFd};
+use std::os::unix::fs::OpenOptionsExt;
 use std::process::Command;
 use std::thread::sleep;
 use std::time::Duration;
@@ -145,22 +146,41 @@ fn interpolate(
     Ok(())
 }
 
-struct WriterLock;
+struct WriterLock {
+    // flock(2) is attached to this open file description. The kernel releases
+    // it even when the writer is SIGTERM/SIGKILLed, so a failed replacement
+    // can never leave a stale pathname that blocks every later request.
+    file: File,
+}
 
 impl WriterLock {
     fn acquire() -> Result<Self, String> {
-        OpenOptions::new()
+        Self::acquire_at(LOCK_PATH)
+    }
+
+    fn acquire_at(path: &str) -> Result<Self, String> {
+        let file = OpenOptions::new()
+            .read(true)
             .write(true)
-            .create_new(true)
-            .open(LOCK_PATH)
+            .create(true)
+            .mode(0o600)
+            .custom_flags(libc::O_CLOEXEC | libc::O_NOFOLLOW)
+            .open(path)
             .map_err(|e| format!("native writer already active or lock unavailable: {e}"))?;
-        Ok(Self)
+        let result = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
+        if result != 0 {
+            return Err(format!(
+                "native writer already active or lock unavailable: {}",
+                io::Error::last_os_error()
+            ));
+        }
+        Ok(Self { file })
     }
 }
 
 impl Drop for WriterLock {
     fn drop(&mut self) {
-        let _ = fs::remove_file(LOCK_PATH);
+        let _ = unsafe { libc::flock(self.file.as_raw_fd(), libc::LOCK_UN) };
     }
 }
 
@@ -247,6 +267,17 @@ fn open_writer(path: &str) -> io::Result<RawFd> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn writer_lock_is_exclusive_and_reusable() {
+        let path = format!("/tmp/paper-agent-native-lock-test-{}", std::process::id());
+        let first = WriterLock::acquire_at(&path).unwrap();
+        assert!(WriterLock::acquire_at(&path).is_err());
+        drop(first);
+        let second = WriterLock::acquire_at(&path).unwrap();
+        drop(second);
+        let _ = std::fs::remove_file(path);
+    }
 
     #[test]
     fn interpolation_includes_target_not_source() {

@@ -30,7 +30,9 @@ const IMAGE_HELPER_TIMEOUT_MS = 220_000;
 const IMAGE_HEARTBEAT_MS = 10_000;
 const ARTIFACT_MAX_AGE_MS = 24 * 60 * 60 * 1_000;
 const REPLACEMENT_ACK_TIMEOUT_MS = 8_000;
-const REPLACEMENT_WRITE_SETTLE_MS = 200;
+const REPLACEMENT_SIGNAL_INITIAL_DELAY_MS = 100;
+const REPLACEMENT_SIGNAL_RETRY_MS = 300;
+const REPLACEMENT_WRITE_SETTLE_MS = 650;
 const IMAGE_MAX_WIDTH = boundedEnvironmentInteger("PAPER_AGENT_IMAGE_MAX_WIDTH", 620, 128, 800);
 const IMAGE_MAX_HEIGHT = boundedEnvironmentInteger("PAPER_AGENT_IMAGE_MAX_HEIGHT", 620, 128, 800);
 const LINE_GAP = 24;
@@ -524,9 +526,9 @@ async function requestReplacementCommit(turn) {
   turn.replacementAckPath = ack;
   fs.rmSync(ack, { force: true });
   reportStage(turn, "replacing");
-  sendBroker("paper-agent$replace", `${artifactId},ready`, true);
 
   const deadline = Date.now() + REPLACEMENT_ACK_TIMEOUT_MS;
+  let nextSignalAt = Date.now() + REPLACEMENT_SIGNAL_INITIAL_DELAY_MS;
   while (Date.now() < deadline) {
     if (turn.failed) throw new Error("selection replacement was cancelled");
     try {
@@ -544,6 +546,14 @@ async function requestReplacementCommit(turn) {
       return;
     } catch (error) {
       if (error?.code !== "ENOENT") throw error;
+    }
+    const now = Date.now();
+    if (now >= nextSignalAt) {
+      // The XOVI broker is a FIFO and may legitimately lose a one-shot signal
+      // while its QML listener is being rebuilt or another writer disconnects.
+      // Retrying is safe because the QML commit handler is idempotent.
+      sendBroker("paper-agent$replace", `${artifactId},ready`);
+      nextSignalAt = now + REPLACEMENT_SIGNAL_RETRY_MS;
     }
     await delay(50);
   }

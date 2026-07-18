@@ -56,8 +56,7 @@ AFFECT [[11806562588218124596]]
 	property double paperAgentCachedSelectionAt: 0
 	property var paperAgentPendingImageRequests: ({})
 	property var paperAgentPendingReplacementRequests: ({})
-	property string paperAgentReplacementAckRequest: ""
-	property int paperAgentReplacementAckAttempts: 0
+	property string paperAgentActiveRequest: ""
 
 	XoviMessageBroker {
 		id: paperAgentScreenshotBroker
@@ -116,6 +115,15 @@ AFFECT [[11806562588218124596]]
 		repeat: true
 		running: true
 		onTriggered: paperAgentRefreshSelectionBounds()
+	}
+
+	Timer {
+		id: paperAgentActiveRequestTimer
+		interval: 325000
+		onTriggered: {
+			console.log("paper-agent active request guard timed out", paperAgentActiveRequest)
+			paperAgentActiveRequest = ""
+		}
 	}
 
 	function paperAgentBestSelectionBounds() {
@@ -334,7 +342,8 @@ AFFECT [[11806562588218124596]]
 			layer: Number(controller.currentLayer),
 			bounds: retainedBounds,
 			itemCount: paperAgentSelectionItemCount(),
-			deleted: false
+			deleted: false,
+			acknowledged: false
 		}
 		paperAgentPendingReplacementRequests = next
 		console.log("paper-agent remembered replacement", requestId,
@@ -346,6 +355,8 @@ AFFECT [[11806562588218124596]]
 		var key = String(requestId)
 		var pending = paperAgentPendingReplacementRequests[key]
 		if (!pending) return
+		if (closeSelection && pending.deleted && !pending.acknowledged)
+			paperAgentRollbackUnacknowledgedDelete(pending, key)
 		if (closeSelection && !pending.deleted) {
 			var currentView = ~&6504254477&~
 			if (currentView && currentView.controller === pending.controller
@@ -361,10 +372,6 @@ AFFECT [[11806562588218124596]]
 		var next = paperAgentPendingReplacementRequests
 		delete next[key]
 		paperAgentPendingReplacementRequests = next
-		if (paperAgentReplacementAckRequest === key) {
-			paperAgentReplacementAckTimer.stop()
-			paperAgentReplacementAckRequest = ""
-		}
 	}
 
 	function paperAgentBoundsMatch(expected, actual) {
@@ -401,6 +408,10 @@ AFFECT [[11806562588218124596]]
 			paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "error")
 			return false
 		}
+		if (pending.deleted) {
+			console.log("paper-agent ignored duplicate replacement ready", key)
+			return true
+		}
 		var currentBounds = paperAgentLookupSelectionBounds(false)
 		var currentCount = paperAgentSelectionItemCount()
 		if (!paperAgentBoundsMatch(pending.bounds, currentBounds)
@@ -421,55 +432,16 @@ AFFECT [[11806562588218124596]]
 			pending.deleted = true
 			~&6504254477&~.~&12148339614529610933&~()
 			paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$tool", "primary")
-			paperAgentReplacementAckRequest = key
-			paperAgentReplacementAckAttempts = 0
-			paperAgentReplacementAckTimer.restart()
-			console.log("paper-agent scheduled selection replacement delete", key)
+			paperAgentCommandExecutor.executeCommand("/usr/bin/touch",
+				["/run/paper-agent-replace-" + key + ".ack"])
+			pending.acknowledged = true
+			console.log("paper-agent acknowledged replacement delete", key)
 			return true
 		} catch (error) {
+			paperAgentRollbackUnacknowledgedDelete(pending, key)
 			console.log("paper-agent selection replacement delete failed", String(error))
 			paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "error")
 			return false
-		}
-	}
-
-	Timer {
-		id: paperAgentReplacementAckTimer
-		interval: 50
-		repeat: true
-		onTriggered: {
-			var key = paperAgentReplacementAckRequest
-			var pending = paperAgentPendingReplacementRequests[key]
-			paperAgentReplacementAckAttempts += 1
-			if (!key || !pending || !pending.controller) {
-				stop()
-				paperAgentReplacementAckRequest = ""
-				return
-			}
-			var running = false
-			try { running = !!pending.controller["transactionRunning"] }
-			catch (error) { running = false }
-			// Allow the asynchronous Scene action to start before accepting an idle
-			// state. The resident writer is already open and waiting at this point.
-			if (!running && paperAgentReplacementAckAttempts >= 4) {
-				stop()
-				paperAgentReplacementAckRequest = ""
-				try {
-					paperAgentCommandExecutor.executeCommand("/usr/bin/touch",
-						["/run/paper-agent-replace-" + key + ".ack"])
-					console.log("paper-agent acknowledged replacement delete", key)
-				} catch (error) {
-					console.log("paper-agent replacement acknowledgement failed", String(error))
-					paperAgentRollbackUnacknowledgedDelete(pending, key)
-					paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "error")
-				}
-			} else if (paperAgentReplacementAckAttempts >= 100) {
-				stop()
-				paperAgentReplacementAckRequest = ""
-				console.log("paper-agent replacement delete timed out", key)
-				if (!running) paperAgentRollbackUnacknowledgedDelete(pending, key)
-				paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "error")
-			}
 		}
 	}
 
@@ -491,6 +463,10 @@ AFFECT [[11806562588218124596]]
 			if (!/^[0-9]{10,20}$/.test(requestId)) return
 			if (signal === "paper-agent$request") {
 				if (fields.length === 2 && (fields[1] === "done" || fields[1] === "error")) {
+					if (paperAgentActiveRequest === requestId) {
+						paperAgentActiveRequestTimer.stop()
+						paperAgentActiveRequest = ""
+					}
 					paperAgentForgetImageRequest(requestId)
 					paperAgentForgetReplacementRequest(requestId, fields[1] === "error")
 				}
@@ -580,6 +556,8 @@ AFFECT [[11806562588218124596]]
 			if (action === "ai") paperAgentRememberImageRequest(stamp, bounds)
 			else if (!paperAgentRememberReplacementRequest(stamp, bounds))
 				throw new Error("replacement selection could not be retained")
+			paperAgentActiveRequest = String(stamp)
+			paperAgentActiveRequestTimer.restart()
 			var unit = "paper-agent-native-selection-" + stamp
 			var output = paperAgentCommandExecutor.executeCommand(
 				"/bin/systemd-run",
@@ -590,6 +568,10 @@ AFFECT [[11806562588218124596]]
 			console.log("paper-agent native write scheduled", unit, output)
 			return true
 		} catch (error) {
+			if (paperAgentActiveRequest === String(stamp)) {
+				paperAgentActiveRequestTimer.stop()
+				paperAgentActiveRequest = ""
+			}
 			paperAgentForgetImageRequest(stamp)
 			paperAgentForgetReplacementRequest(stamp, false)
 			console.log("paper-agent native write schedule failed", String(error))
@@ -599,6 +581,10 @@ AFFECT [[11806562588218124596]]
 	}
 
 	function paperAgentRunSelection(action) {
+		if (paperAgentActiveRequest !== "") {
+			console.log("paper-agent ignored duplicate request", paperAgentActiveRequest, action)
+			return
+		}
 		var bounds = paperAgentBestSelectionBounds()
 		var crop = paperAgentCropForSelection(bounds)
 		var placement = action === "beautify"

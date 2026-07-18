@@ -28,6 +28,8 @@ Safety: write requires Chiappa detection, active Xochitl, a single-writer lock,
 and the exact confirmation string shown above.
 ";
 
+const STREAMING_JOB_DIR: &str = "/home/root/paper-agent/native/jobs";
+
 fn main() {
     if let Err(e) = dispatch() {
         eprintln!("paper-agent-native: {e}");
@@ -199,7 +201,7 @@ fn write_stream(args: &[String]) -> Result<(), String> {
             stdout.flush().map_err(|e| format!("stream stdout: {e}"))?;
             return Ok(());
         }
-        if !path.starts_with("/home/root/paper-agent/native/jobs/stream-") {
+        if !is_allowed_streaming_job_path(path) {
             return Err(format!("refusing unexpected streaming job path: {path}"));
         }
         let job = StrokeJob::from_path(Path::new(path))?;
@@ -208,6 +210,22 @@ fn write_stream(args: &[String]) -> Result<(), String> {
         stdout.flush().map_err(|e| format!("stream stdout: {e}"))?;
     }
     Err("stream input closed before 'done'".into())
+}
+
+fn is_allowed_streaming_job_path(path: &str) -> bool {
+    let path = Path::new(path);
+    if path.parent() != Some(Path::new(STREAMING_JOB_DIR)) {
+        return false;
+    }
+    let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    let known_kind = file_name.starts_with("stream-") || file_name.starts_with("replace-");
+    known_kind
+        && file_name.ends_with(".strokes")
+        && file_name
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'.'))
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -296,4 +314,35 @@ fn parse_u32(value: &str, label: &str) -> Result<u32, String> {
     value
         .parse()
         .map_err(|_| format!("invalid {label} '{value}'"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_allowed_streaming_job_path;
+
+    #[test]
+    fn streaming_job_path_accepts_stream_and_replacement_jobs() {
+        assert!(is_allowed_streaming_job_path(
+            "/home/root/paper-agent/native/jobs/stream-1784379886992-1.strokes"
+        ));
+        assert!(is_allowed_streaming_job_path(
+            "/home/root/paper-agent/native/jobs/replace-1784379886992-1-1.strokes"
+        ));
+    }
+
+    #[test]
+    fn streaming_job_path_rejects_escape_and_unknown_jobs() {
+        assert!(!is_allowed_streaming_job_path(
+            "/home/root/paper-agent/native/jobs/replace-../../escape.strokes"
+        ));
+        assert!(!is_allowed_streaming_job_path(
+            "/home/root/paper-agent/native/jobs/other-1784379886992.strokes"
+        ));
+        assert!(!is_allowed_streaming_job_path(
+            "/tmp/replace-1784379886992-1-1.strokes"
+        ));
+        assert!(!is_allowed_streaming_job_path(
+            "/home/root/paper-agent/native/jobs/replace-1784379886992-1-1.json"
+        ));
+    }
 }
