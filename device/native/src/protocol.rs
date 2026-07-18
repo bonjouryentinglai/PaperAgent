@@ -15,7 +15,7 @@ pub const ABS_DISTANCE: u16 = 25;
 pub const BTN_TOOL_PEN: u16 = 320;
 pub const BTN_TOUCH: u16 = 330;
 
-pub const DRAW_PRESSURE: i32 = 2300;
+pub const DRAW_PRESSURE: i32 = 2100;
 pub const HOVER_DISTANCE: i32 = 100;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -90,7 +90,7 @@ mod tests {
     #[test]
     fn down_sets_pressure_only_after_hover() {
         let events = touch_down();
-        assert_eq!(DRAW_PRESSURE, 2300);
+        assert_eq!(DRAW_PRESSURE, 2100);
         assert_eq!(events[0], Event::new(EV_KEY, BTN_TOUCH, 1));
         assert!(events.contains(&Event::new(EV_ABS, ABS_PRESSURE, DRAW_PRESSURE)));
         assert!(events.contains(&Event::new(EV_ABS, ABS_DISTANCE, 0)));
