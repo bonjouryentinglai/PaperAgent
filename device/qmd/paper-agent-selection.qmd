@@ -441,6 +441,7 @@ END AFFECT
 ; device-specific synthetic tap.
 AFFECT [[11313888899523275277]]
 	IMPORT net.asivery.XoviMessageBroker [[180923.180921]]
+	IMPORT net.asivery.CommandExecutor [[180922.180921]]
 	TRAVERSE [[8397993708429497603]]
 		LOCATE AFTER ALL
 		INSERT {
@@ -448,7 +449,13 @@ AFFECT [[11313888899523275277]]
 			id: paperAgentToolBroker
 			listeningFor: ["paper-agent$tool"]
 			function onSignalReceived(signal, message) {
-				if (signal !== "paper-agent$tool" || message !== "primary") return
+				if (signal !== "paper-agent$tool") return
+				var fields = String(message).split(",")
+				if (fields[0] !== "primary" || (fields.length !== 1 && fields.length !== 3)) return
+				var requestId = fields.length === 3 ? fields[1] : ""
+				var sequence = fields.length === 3 ? fields[2] : ""
+				if (requestId && (!/^[0-9]{10,20}$/.test(requestId)
+						|| !/^[0-9]{1,4}$/.test(sequence))) return
 				try {
 					~&6504254477&~.~&254547531013823564&~("primary")
 					~&7842069035455457876&~.~&8399230650759060099&~ = "primary"
@@ -468,11 +475,19 @@ AFFECT [[11313888899523275277]]
 						~&6504254477&~.~&16536305558369217168&~ = primary
 						primary.~&7713561545874130&~ = true
 					}
-					console.log("paper-agent restored primary pen")
+					if (~&7842069035455457876&~.~&8399230650759060099&~ !== "primary")
+						throw new Error("Xochitl active tool did not become primary")
+					if (requestId)
+						paperAgentToolCommandExecutor.executeCommand("/usr/bin/touch",
+							["/run/paper-agent-tool-" + requestId + "-" + sequence + ".ack"])
+					console.log("paper-agent restored primary pen", requestId, sequence)
 				} catch (error) {
 					console.log("paper-agent primary pen restore failed", String(error))
 				}
 			}
+		}
+		CommandExecutor {
+			id: paperAgentToolCommandExecutor
 		}
 		}
 	END TRAVERSE

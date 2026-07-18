@@ -48,10 +48,25 @@ send_request_state() {
   fi
 }
 
-restore_primary_pen() {
-  if [ -p /run/xovi-mb ]; then
-    printf 'upaper-agent$tool:primary\n' > /run/xovi-mb || true
-  fi
+ensure_primary_pen() {
+  sequence=$1
+  ack="/run/paper-agent-tool-$REQUEST_ID-$sequence.ack"
+  rm -f "$ack"
+  attempt=0
+  while [ "$attempt" -lt 34 ]; do
+    if [ -p /run/xovi-mb ]; then
+      printf 'upaper-agent$tool:primary,%s,%s\n' "$REQUEST_ID" "$sequence" > /run/xovi-mb || true
+    fi
+    sleep 0.08
+    if [ -f "$ack" ] && [ ! -L "$ack" ]; then
+      rm -f "$ack"
+      sleep 0.1
+      return 0
+    fi
+    attempt=$((attempt + 1))
+  done
+  echo "Xochitl did not confirm the primary pen" >&2
+  return 1
 }
 
 case "$PNG" in
@@ -86,6 +101,8 @@ cleanup() {
   send_request_state "$FINAL_STATUS"
 }
 trap cleanup EXIT INT TERM
+send_status thinking
+sleep 0.08
 send_status thinking
 # BusyBox mktemp requires the six trailing X characters to be the final
 # template characters; a suffix such as `.XXXXXX.strokes` is rejected on Move.
@@ -127,9 +144,9 @@ test "$magic" = "89504e470d0a1a0a" || { echo "selection screenshot is not PNG" >
 # before accepting this request, so the proven one-shot path remains a safe
 # fallback. Any error after acceptance may follow partial native ink and must
 # never be replayed automatically.
-# AI and Beautify both dismiss the lasso and write below it. Repeat the tool
-# restore from the detached worker so both actions use the same proven path.
-restore_primary_pen
+# Never let the resident oracle start while Xochitl still owns the lasso tool.
+# The oracle repeats this acknowledged guard immediately before every job.
+ensure_primary_pen 0
 if [ -x "$NODE" ] && [ -f "$STREAM_CLIENT" ]; then
   if "$NODE" "$STREAM_CLIENT" "$ACTION" "$PNG" "$X" "$Y" "$WIDTH" "$HEIGHT"; then
     FINAL_STATUS=done
@@ -146,11 +163,9 @@ if [ -x "$NODE" ] && [ -f "$STREAM_CLIENT" ]; then
 fi
 
 "$PREPARE" "$ACTION" "$PNG" "$X" "$Y" "$WIDTH" "$HEIGHT" "$JOB"
-# The QMD normally restores the pen as soon as the selection closes. Repeat
-# the request immediately before writing so a slow UI transition cannot leave
-# the injected Marker events assigned to the lasso tool.
-restore_primary_pen
-sleep 0.15
+# The one-shot fallback has no resident oracle, so repeat the same acknowledged
+# guard immediately before its direct Marker write.
+ensure_primary_pen 4096
 "$BIN" write "$JOB" --confirm PAPER_AGENT_NATIVE_WRITE_V1
 FINAL_STATUS=done
 echo "native_writeback=complete"

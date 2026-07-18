@@ -11,7 +11,7 @@ use std::sync::OnceLock;
 const LATIN_TTF: &[u8] = include_bytes!("../assets/fonts/Kalam-Regular.ttf");
 const CJK_HAND_TTF: &[u8] = include_bytes!("../assets/fonts/ChenYuluoyan-2.0-Thin.ttf");
 const CJK_FALLBACK_TTF: &[u8] = include_bytes!("../assets/fonts/jf-openhuninn-2.1.ttf");
-const DEFAULT_CJK_SCALE: f32 = 0.68;
+const DEFAULT_CJK_SCALE: f32 = 0.78;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Face {

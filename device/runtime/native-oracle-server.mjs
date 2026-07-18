@@ -23,12 +23,15 @@ const PI = path.join(PI_BIN_DIR, "pi");
 const PROVIDER = process.env.PAPER_AGENT_PROVIDER || "openai-codex";
 const MODEL = process.env.PAPER_AGENT_MODEL || "gpt-5.6-sol";
 const THINKING = process.env.PAPER_AGENT_THINKING || "off";
-const CJK_SCALE = process.env.PAPER_AGENT_CJK_SCALE || "0.68";
+const CJK_SCALE = process.env.PAPER_AGENT_CJK_SCALE || "0.78";
 const MAX_IMAGE = 4 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 300_000;
 const IMAGE_HELPER_TIMEOUT_MS = 220_000;
 const IMAGE_HEARTBEAT_MS = 10_000;
 const ARTIFACT_MAX_AGE_MS = 24 * 60 * 60 * 1_000;
+const TOOL_ACK_TIMEOUT_MS = 4_000;
+const TOOL_SIGNAL_RETRY_MS = 120;
+const TOOL_WRITE_SETTLE_MS = 100;
 const IMAGE_MAX_WIDTH = boundedEnvironmentInteger("PAPER_AGENT_IMAGE_MAX_WIDTH", 620, 128, 800);
 const IMAGE_MAX_HEIGHT = boundedEnvironmentInteger("PAPER_AGENT_IMAGE_MAX_HEIGHT", 620, 128, 800);
 const LINE_GAP = 24;
@@ -128,6 +131,10 @@ function selfTest() {
   if (artifactIdFor("/home/root/paper-agent/selection/native-selection-1234567890123.png") !== "1234567890123") {
     throw new Error("image artifact id extraction failed");
   }
+  if (toolAckPathFor("/home/root/paper-agent/selection/native-selection-1234567890123.png", 7)
+      !== "/run/paper-agent-tool-1234567890123-7.ack") {
+    throw new Error("primary-pen acknowledgement path failed");
+  }
   const beautified = resultEnvelope("::text\n你好", true, "beautify");
   if (beautified.kind !== "text" || beautified.body !== "你好") {
     throw new Error("Beautify typed text envelope failed");
@@ -184,6 +191,17 @@ function artifactIdFor(selectionPath) {
   );
   if (!match) throw new Error("selection has no valid image artifact id");
   return match[1];
+}
+
+function toolAckPathFor(selectionPath, sequence) {
+  if (!Number.isSafeInteger(sequence) || sequence < 0 || sequence > 4096) {
+    throw new Error("invalid primary-pen acknowledgement sequence");
+  }
+  return `/run/paper-agent-tool-${artifactIdFor(selectionPath)}-${sequence}.ack`;
+}
+
+function delay(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 function sendBroker(signal, message, required = false) {
@@ -497,6 +515,8 @@ async function renderAndWrite(turn, text, kind = "text") {
   const match = stdout.match(/pixel_bounds=(-?\d+),(-?\d+)\.\.(-?\d+),(-?\d+)/);
   if (!match) throw new Error("renderer returned no pixel bounds");
   if (!turn.writer) turn.writer = new WriterPipe();
+  await turn.writer.ready;
+  await ensurePrimaryPen(turn, seq);
   await turn.writer.write(job);
   turn.nextY = Number(match[4]) + LINE_GAP;
   fs.rmSync(input, { force: true });
@@ -506,6 +526,37 @@ async function renderAndWrite(turn, text, kind = "text") {
   const elapsedMs = Date.now() - turn.started;
   send(turn.socket, { type: "chunk", index: seq, elapsedMs });
   console.log(`native-oracle chunk=${seq} elapsed_ms=${elapsedMs} next_y=${turn.nextY}`);
+}
+
+async function ensurePrimaryPen(turn, sequence) {
+  const artifactId = artifactIdFor(turn.request.png);
+  const ack = toolAckPathFor(turn.request.png, sequence);
+  turn.toolAckPath = ack;
+  fs.rmSync(ack, { force: true });
+  const deadline = Date.now() + TOOL_ACK_TIMEOUT_MS;
+  let nextSignalAt = 0;
+  while (Date.now() < deadline) {
+    if (turn.failed) throw new Error("primary-pen confirmation was cancelled");
+    try {
+      const info = fs.lstatSync(ack);
+      if (!info.isFile() || info.isSymbolicLink()) {
+        throw new Error("primary-pen acknowledgement is not a regular file");
+      }
+      fs.rmSync(ack, { force: true });
+      turn.toolAckPath = null;
+      await delay(TOOL_WRITE_SETTLE_MS);
+      return;
+    } catch (error) {
+      if (error?.code !== "ENOENT") throw error;
+    }
+    const now = Date.now();
+    if (now >= nextSignalAt) {
+      sendBroker("paper-agent$tool", `primary,${artifactId},${sequence}`);
+      nextSignalAt = now + TOOL_SIGNAL_RETRY_MS;
+    }
+    await delay(40);
+  }
+  throw new Error("Xochitl did not confirm the primary pen before writeback");
 }
 
 function queueAvailable(turn, done) {
@@ -595,6 +646,8 @@ async function finishTurn(turn) {
 function cleanupTurn(turn) {
   for (const file of turn.temp) fs.rmSync(file, { force: true });
   turn.temp.clear();
+  if (turn.toolAckPath) fs.rmSync(turn.toolAckPath, { force: true });
+  turn.toolAckPath = null;
 }
 
 function failTurn(turn, error) {
@@ -727,10 +780,12 @@ const server = net.createServer((socket) => {
         failed: false,
         finishing: false,
         structuredQueued: false,
+        toolAckPath: null,
       };
       turn.timeout = setTimeout(() => failTurn(turn, new Error("native oracle timed out")), REQUEST_TIMEOUT_MS);
       active = turn;
       send(socket, { type: "accepted", id });
+      reportStage(turn, "thinking");
       writePi({ id: turn.resetId, type: "new_session" });
     } catch (error) {
       send(socket, { type: "error", code: error.code || "invalid", error: safeError(error) });

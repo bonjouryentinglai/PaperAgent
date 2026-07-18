@@ -26,7 +26,7 @@ ordinary strokes. Raster output uses Xochitl's native notebook-image path.
 |---|---|
 | AI answers and calculations | Implemented; streams sentence-sized native ink |
 | Rich and mixed answers | Implemented locally; headings, paragraphs, lists, bold, inline/fenced code, tables and vectors; device acceptance pending |
-| Traditional Chinese handwriting | Implemented with ChenYuLuoyan and Open Huninn fallback |
+| Handwriting fonts | Kalam Regular for Latin; ChenYuLuoyan 2.0 Thin for Chinese, with jf open 粉圓 2.1 fallback |
 | Native tables | Implemented in the bounded local renderer; device acceptance pending |
 | Native vector figures | Bounded non-executable DSL with lines, polygons, sampled curves, rounded shapes, arcs and sparse hatch fills; device acceptance pending |
 | Beautify text or sketch | Preserves the source and writes a complete validated text/vector result below it; physical acceptance pending |

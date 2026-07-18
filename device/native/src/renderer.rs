@@ -9,8 +9,8 @@ use crate::job::{Point, StrokeJob};
 use crate::traditional;
 use std::f32::consts::PI;
 
-const TEXT_MIN_PX: i32 = 24;
-const TEXT_MAX_PX: i32 = 84;
+const TEXT_MIN_PX: i32 = 26;
+const TEXT_MAX_PX: i32 = 92;
 const TEXT_MARGIN: i32 = 12;
 const MAX_INPUT_CHARS: usize = 16_000;
 const MAX_OUTPUT_STROKES: usize = 4096;
@@ -106,7 +106,7 @@ pub fn text_to_job(
         TEXT_MIN_PX,
         TEXT_MAX_PX,
         TEXT_MARGIN,
-        true,
+        false,
     )?;
     build_job(strokes, canvas_width, canvas_height)
 }
@@ -558,9 +558,9 @@ fn render_rich_markdown(
             let raster_height = raster.height as i32;
             let line_y = y + ((line.height - raster_height) / 2).max(0);
             let weight = if span.bold || matches!(line.kind, RichLineKind::Heading(_)) {
-                3
-            } else {
                 2
+            } else {
+                1
             };
             for stroke in handwriting::trace_line(raster) {
                 let mapped: Vec<Point> = stroke
@@ -1569,6 +1569,32 @@ mod tests {
             .iter()
             .flatten()
             .all(|point| contains(box_target, *point)));
+    }
+
+    #[test]
+    fn plain_text_uses_single_trace_weight() {
+        let box_target = target();
+        let light = render_text_box(
+            "Paper",
+            box_target,
+            TEXT_MIN_PX,
+            TEXT_MAX_PX,
+            TEXT_MARGIN,
+            false,
+        )
+        .unwrap();
+        let weighted = render_text_box(
+            "Paper",
+            box_target,
+            TEXT_MIN_PX,
+            TEXT_MAX_PX,
+            TEXT_MARGIN,
+            true,
+        )
+        .unwrap();
+        let job = text_to_job("Paper", box_target, 954, 1696).unwrap();
+        assert_eq!(job.strokes.len(), light.len());
+        assert!(weighted.len() > light.len());
     }
 
     #[test]
