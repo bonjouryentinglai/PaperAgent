@@ -1,0 +1,10 @@
+paper-agent-strokes 1
+canvas 954 1696
+# A harmless planning rectangle. The current binary can only dry-run it.
+stroke
+100 220
+300 220
+300 420
+100 420
+100 220
+end

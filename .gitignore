@@ -1,0 +1,17 @@
+/dist/
+/build/
+/.cache/
+**/target/
+*.log
+*.strokes
+!device/native/examples/*.strokes
+*.tar.gz
+.DS_Store
+._*
+
+# Credentials and local configuration must never be committed.
+config/paper-agent.env
+auth.json
+*.token
+*.key
+*.pem

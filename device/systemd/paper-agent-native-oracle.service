@@ -1,0 +1,16 @@
+[Unit]
+Description=Paper Agent native streaming oracle
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=/home/root/.pi/agent/auth.json
+
+[Service]
+Type=simple
+ExecStart=/home/root/paper-agent/native/native-oracle-service.sh
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=8
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,532 @@
+; Paper Agent native lasso bridge
+; SPDX-License-Identifier: GPL-3.0-only
+;
+; Selection-menu insertion and selection-bound lookup are adapted from the
+; MIT-licensed linkToDocumentFromSelection.qmd at:
+; https://github.com/Marty-W/remarkable-doc-links
+; pinned commit: 23e41858818ae2c1f836043852118a323cb1e77d
+; by Martin Weber, based on Mitchell Scott's tocFromSelection.qmd.
+;
+; The primary-pen restoration block is adapted from the GPL-3.0-only
+; alefaraci/xovi-qmd-extensions project. See THIRD_PARTY_NOTICES.md.
+;
+; Requires xovi-message-broker, framebuffer-spy, rm-shot and
+; qt-command-executor.
+AFFECT [[3197972396468700595]]
+	TRAVERSE ?#[[10742505294233322867]]
+	LOCATE BEFORE [[197082485]]
+	INSERT {
+		signal paperAgentAiSelection
+		signal paperAgentBeautifySelection
+	}
+	END TRAVERSE
+	TRAVERSE ?#[[214642769434]]
+		LOCATE BEFORE [[425121728314878811.16765000136167945189.7081261925573]]#[[3012293087768835154]]
+		INSERT {
+			~&425121728314878811&~.~&16765000136167945189&~.~&7081261925573&~ {
+				~&5972374&~: paperAgentAiSelectionButton
+				~&481641799955318521&~: ~&5971598&~.~&233696851602406&~
+				~&6504337259&~: ~&214642769434&~.~&6504337259&~
+				~&8399601734642709923&~: ~&"10806537930630303861&~
+				~&254542236275632405&~: ~&10742505294233322867&~.paperAgentAiSelection()
+			}
+			~&425121728314878811&~.~&16765000136167945189&~.~&7081261925573&~ {
+				~&5972374&~: paperAgentBeautifySelectionButton
+				~&481641799955318521&~: ~&5971598&~.~&233696851602406&~
+				~&6504337259&~: ~&214642769434&~.~&6504337259&~
+				~&8399601734642709923&~: ~&"1888152859568244425&~
+				~&254542236275632405&~: ~&10742505294233322867&~.paperAgentBeautifySelection()
+			}
+		}
+	END TRAVERSE
+END AFFECT
+
+; Resolve the current lasso, capture it after the popout closes, then detach the
+; subscription request and guarded native writer from Xochitl's transient scene.
+AFFECT [[11806562588218124596]]
+	IMPORT net.asivery.XoviMessageBroker [[180923.180921]]
+	IMPORT net.asivery.CommandExecutor [[180922.180921]]
+	TRAVERSE ?#[[18399528329672988301]]
+	LOCATE AFTER ALL
+	INSERT {
+	property string paperAgentCropMode: "unresolved"
+	property var paperAgentCachedSelectionBounds: null
+	property double paperAgentCachedSelectionAt: 0
+	property var paperAgentPendingImageRequests: ({})
+
+	XoviMessageBroker {
+		id: paperAgentScreenshotBroker
+	}
+
+	CommandExecutor {
+		id: paperAgentCommandExecutor
+	}
+
+	function paperAgentCopyBounds(bounds) {
+		if (!bounds || !isFinite(bounds.x) || !isFinite(bounds.y)
+				|| !isFinite(bounds.width) || !isFinite(bounds.height)
+				|| Number(bounds.width) <= 0 || Number(bounds.height) <= 0)
+			return null
+		return {
+			x: Number(bounds.x), y: Number(bounds.y),
+			width: Number(bounds.width), height: Number(bounds.height)
+		}
+	}
+
+	function paperAgentLookupSelectionBounds(logFailure) {
+		var items = null
+		var bounds = null
+		try {
+			items = ~&8399340108982949229&~.~&5308518110917893541&~(
+				~&8399340108982949229&~.~&15752433948179392809&~,
+				~&6504254477&~.~&15777890623490054006&~)
+			if (~&8399340108982949229&~["getItemBoundingRect"])
+				bounds = ~&8399340108982949229&~["getItemBoundingRect"](items)
+		} catch (error) {
+			if (logFailure) console.log("paper-agent selection lookup failed", String(error))
+		}
+		return paperAgentCopyBounds(bounds)
+	}
+
+	function paperAgentRefreshSelectionBounds() {
+		var bounds = paperAgentLookupSelectionBounds(false)
+		if (!bounds) return
+		paperAgentCachedSelectionBounds = bounds
+		paperAgentCachedSelectionAt = (new Date()).getTime()
+	}
+
+	Timer {
+		interval: 200
+		repeat: true
+		running: true
+		onTriggered: paperAgentRefreshSelectionBounds()
+	}
+
+	function paperAgentBestSelectionBounds() {
+		var bounds = paperAgentLookupSelectionBounds(true)
+		if (bounds) {
+			paperAgentCachedSelectionBounds = bounds
+			paperAgentCachedSelectionAt = (new Date()).getTime()
+			return bounds
+		}
+		var age = (new Date()).getTime() - paperAgentCachedSelectionAt
+		if (paperAgentCachedSelectionBounds && age >= 0 && age <= 1500) {
+			console.log("paper-agent using cached selection", "age=" + age)
+			return paperAgentCachedSelectionBounds
+		}
+		return null
+	}
+
+	function paperAgentCropForSelection(bounds) {
+
+		// On Chiappa, getItemBoundingRect() is already expressed at framebuffer
+		// scale: Y is top-origin and X is centre-origin. sceneToView() applies the
+		// notebook zoom a second time, which moves a correct selection down/right.
+		// Translate only the centred X axis into rm-shot's top-left-origin surface.
+		var view = ~&6504254477&~
+		var shotW = 954
+		var shotH = 1696
+		if (!bounds || !view || !isFinite(view.width) || Number(view.width) <= 0) {
+			paperAgentCropMode = "invalid-selection"
+			console.log("paper-agent crop unavailable", "bounds=" + (!!bounds), "view=" + (!!view))
+			return null
+		}
+
+		var xOrigin = Number(view.width) / 2 + Number(view.x || 0)
+		var x0 = xOrigin + Number(bounds.x)
+		var y0 = Number(bounds.y)
+		var x1 = x0 + Number(bounds.width)
+		var y1 = y0 + Number(bounds.height)
+
+		// rm-shot on Chiappa exposes Xochitl's 954x1696 RGB565 surface. Keep the
+		// padding in physical pixels after the scene transform.
+		var padX = 48
+		var padY = 36
+		if (!isFinite(x0) || !isFinite(y0) || !isFinite(x1) || !isFinite(y1)
+				|| x1 <= 0 || y1 <= 0 || x0 >= shotW || y0 >= shotH
+				|| x1 <= x0 || y1 <= y0) {
+			paperAgentCropMode = "outside-framebuffer"
+			console.log("paper-agent crop outside framebuffer", [x0, y0, x1, y1].join(","))
+			return null
+		}
+		var left = Math.max(0, Math.floor(x0 - padX))
+		var top = Math.max(0, Math.floor(y0 - padY))
+		var right = Math.min(shotW, Math.ceil(x1 + padX))
+		var bottom = Math.min(shotH, Math.ceil(y1 + padY))
+		if (right - left < 32 || bottom - top < 32) {
+			paperAgentCropMode = "too-small"
+			console.log("paper-agent crop too small", [left, top, right, bottom].join(","))
+			return null
+		}
+
+		var controller = view.controller || null
+		var pageBounds = controller ? (controller.paperNoteBounds || controller.boundingRect || null) : null
+		paperAgentCropMode = "chiappa-centered-x"
+		console.log("paper-agent crop geometry",
+			"bounds=" + [bounds.x, bounds.y, bounds.width, bounds.height].join(","),
+			"pageBounds=" + (pageBounds ? [pageBounds.x, pageBounds.y, pageBounds.width, pageBounds.height].join(",") : "null"),
+			"view=" + [view.width, view.height, view.x, view.y].join(","),
+			"translatedBounds=" + [x0, y0, x1, y1].join(","),
+			"crop=" + [left, top, right, bottom].join(","))
+		return [left, top, right, bottom]
+	}
+
+	function paperAgentNativePlacement(bounds) {
+		var view = ~&6504254477&~
+		var shotW = 954
+		var shotH = 1696
+		if (!bounds || !view || !isFinite(view.width) || Number(view.width) <= 0)
+			return null
+
+		// smart_remarkable places answers below the lasso and uses the space
+		// above only when necessary. Scale that policy to Chiappa's Xochitl
+		// surface and keep clear of the top toolbar and screen edges.
+		var xOrigin = Number(view.width) / 2 + Number(view.x || 0)
+		var selX = xOrigin + Number(bounds.x)
+		var selY = Number(bounds.y)
+		var selW = Number(bounds.width)
+		var selH = Number(bounds.height)
+		if (!isFinite(selX) || !isFinite(selY) || !isFinite(selW) || !isFinite(selH)
+				|| selW <= 0 || selH <= 0)
+			return null
+
+		var sideMargin = 50
+		var topMargin = 150
+		var bottomMargin = 50
+		var gap = 32
+		var minHeight = 260
+		var width = Math.round(Math.max(480, Math.min(shotW - sideMargin * 2, selW * 1.5)))
+		var x = Math.round(Math.max(sideMargin, Math.min(shotW - sideMargin - width, selX)))
+		var belowY = Math.round(selY + selH + gap)
+		var belowHeight = shotH - bottomMargin - belowY
+		var aboveHeight = Math.round(selY - gap - topMargin)
+		var y
+		var height
+		if (belowHeight >= minHeight || belowHeight >= aboveHeight) {
+			y = Math.max(topMargin, belowY)
+			height = shotH - bottomMargin - y
+		} else {
+			y = topMargin
+			height = aboveHeight
+		}
+		if (height < 96) return null
+		height = Math.round(height)
+		var placement = { x: x, y: Math.round(y), width: width, height: height }
+		console.log("paper-agent native placement",
+			"selection=" + [selX, selY, selW, selH].join(","),
+			"placement=" + [placement.x, placement.y, placement.width, placement.height].join(","))
+		return placement
+	}
+
+	// Xochitl 3.27's native image API accepts a scene-space drop point. Keep
+	// this separate from paperAgentNativePlacement(), which is deliberately in
+	// framebuffer coordinates for virtual-Marker stroke injection.
+	function paperAgentRememberImageRequest(requestId, bounds) {
+		var view = ~&6504254477&~
+		var controller = view ? (view.controller || null) : null
+		if (!controller || !bounds) return false
+		var paper = controller.paperNoteBounds || controller.boundingRect || null
+		var next = paperAgentPendingImageRequests
+		next[String(requestId)] = {
+			controller: controller,
+			pageId: view.pageId !== undefined ? String(view.pageId) : "",
+			bounds: {
+				x: Number(bounds.x), y: Number(bounds.y),
+				width: Number(bounds.width), height: Number(bounds.height)
+			},
+			paper: paper ? {
+				x: Number(paper.x), y: Number(paper.y),
+				width: Number(paper.width), height: Number(paper.height)
+			} : null
+		}
+		paperAgentPendingImageRequests = next
+		console.log("paper-agent remembered native image target", requestId,
+			bounds.x, bounds.y, bounds.width, bounds.height)
+		return true
+	}
+
+	function paperAgentImagePoint(pending, imageWidth, imageHeight) {
+		var bounds = pending.bounds
+		var paper = pending.paper
+		var gap = 32
+		var halfWidth = imageWidth / 2
+		var halfHeight = imageHeight / 2
+		var x = bounds.x + bounds.width / 2
+		var below = bounds.y + bounds.height + gap + halfHeight
+		var above = bounds.y - gap - halfHeight
+		var y = below
+		if (paper && isFinite(paper.x) && isFinite(paper.y)
+				&& isFinite(paper.width) && isFinite(paper.height)) {
+			var left = paper.x + 24 + halfWidth
+			var right = paper.x + paper.width - 24 - halfWidth
+			var top = paper.y + 24 + halfHeight
+			var bottom = paper.y + paper.height - 24 - halfHeight
+			x = Math.max(left, Math.min(right, x))
+			if (below > bottom && above >= top) y = above
+			else y = Math.max(top, Math.min(bottom, below))
+		}
+		return Qt.point(x, y)
+	}
+
+	function paperAgentForgetImageRequest(requestId) {
+		var key = String(requestId)
+		if (!paperAgentPendingImageRequests[key]) return
+		var next = paperAgentPendingImageRequests
+		delete next[key]
+		paperAgentPendingImageRequests = next
+	}
+
+	function paperAgentRemoveImageArtifact(requestId) {
+		var filePath = "/home/root/paper-agent/native/artifacts/" + String(requestId) + ".png"
+		try {
+			paperAgentCommandExecutor.executeCommand("/bin/rm", ["-f", filePath])
+		} catch (error) {
+			console.log("paper-agent image artifact cleanup failed", String(error))
+		}
+	}
+
+	XoviMessageBroker {
+		id: paperAgentNativeImageBroker
+		listeningFor: ["paper-agent$image", "paper-agent$request"]
+		function onSignalReceived(signal, message) {
+			var fields = String(message).split(",")
+			var requestId = fields[0]
+			if (!/^[0-9]{10,20}$/.test(requestId)) return
+			if (signal === "paper-agent$request") {
+				if (fields.length === 2 && (fields[1] === "done" || fields[1] === "error"))
+					paperAgentForgetImageRequest(requestId)
+				return
+			}
+			if (signal !== "paper-agent$image" || fields.length !== 3
+					|| !/^[0-9]{2,4}$/.test(fields[1]) || !/^[0-9]{2,4}$/.test(fields[2])) return
+			var imageWidth = Number(fields[1])
+			var imageHeight = Number(fields[2])
+			if (imageWidth < 32 || imageHeight < 32 || imageWidth > 800 || imageHeight > 800) {
+				console.log("paper-agent rejected unsafe image dimensions", requestId,
+					imageWidth, imageHeight)
+				paperAgentRemoveImageArtifact(requestId)
+				paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "error")
+				return
+			}
+			var pending = paperAgentPendingImageRequests[requestId]
+			if (!pending || !pending.controller || !pending.bounds) {
+				console.log("paper-agent rejected image for stale page", requestId)
+				paperAgentRemoveImageArtifact(requestId)
+				paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "error")
+				return
+			}
+			var currentView = ~&6504254477&~
+			if (!currentView || currentView.controller !== pending.controller
+					|| (pending.pageId && String(currentView.pageId) !== pending.pageId)) {
+				console.log("paper-agent rejected image after page changed", requestId)
+				paperAgentRemoveImageArtifact(requestId)
+				paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "error")
+				return
+			}
+			var insert = pending.controller["insertImageFileAsSceneItem"]
+			if (typeof insert !== "function") {
+				console.log("paper-agent native image API unavailable")
+				paperAgentRemoveImageArtifact(requestId)
+				paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "error")
+				return
+			}
+			try {
+				var insertionPoint = paperAgentImagePoint(pending, imageWidth, imageHeight)
+				paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "inserting")
+				var filePath = "/home/root/paper-agent/native/artifacts/" + requestId + ".png"
+				var fileUrl = Qt.resolvedUrl("file://" + filePath)
+				pending.controller["insertImageFileAsSceneItem"](fileUrl, insertionPoint)
+				// Xochitl reads the local file synchronously into a QImage before
+				// scheduling its Scene update, so the source artifact is no longer
+				// referenced after this call returns.
+				paperAgentRemoveImageArtifact(requestId)
+				console.log("paper-agent scheduled native image insertion", requestId,
+					insertionPoint.x, insertionPoint.y, imageWidth, imageHeight)
+			} catch (error) {
+				console.log("paper-agent native image insertion failed", String(error))
+				paperAgentRemoveImageArtifact(requestId)
+				paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "error")
+			}
+		}
+	}
+
+	function paperAgentOpenNativeSelection(action, crop, placement, bounds) {
+		paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "thinking")
+		if ((action !== "ai" && action !== "beautify") || !crop || !placement) {
+			console.log("paper-agent native capture cancelled", paperAgentCropMode)
+			paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "error")
+			return false
+		}
+		var requestId = (new Date()).getTime()
+		var shotPath = "/home/root/paper-agent/selection/native-selection-" + requestId + ".png"
+		var args = shotPath + ",180,0," + crop.join(",")
+		var result = paperAgentScreenshotBroker.sendSimpleSignal("takeScreenshot", args)
+		console.log("paper-agent native capture", result, args)
+		if (result !== "success") {
+			paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "error")
+			return false
+		}
+
+		// systemd owns the long-running GPT request after Xochitl dismisses this
+		// transient selection scene. Arguments are passed directly without a
+		// shell; the coordinator waits for the PNG, prepares a bounded job, then
+		// calls the guarded writer and removes all temporary content.
+		try {
+			var stamp = requestId
+			if (action === "ai") paperAgentRememberImageRequest(stamp, bounds)
+			var unit = "paper-agent-native-selection-" + stamp
+			var output = paperAgentCommandExecutor.executeCommand(
+				"/bin/systemd-run",
+				["--unit=" + unit, "--collect", "--property=RuntimeMaxSec=320",
+				 "/home/root/paper-agent/native/native-selection-write.sh",
+				 action, shotPath, String(placement.x), String(placement.y),
+				 String(placement.width), String(placement.height)])
+			console.log("paper-agent native write scheduled", unit, output)
+			return true
+		} catch (error) {
+			paperAgentForgetImageRequest(stamp)
+			console.log("paper-agent native write schedule failed", String(error))
+			paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "error")
+			return false
+		}
+	}
+
+	function paperAgentRunSelection(action) {
+		var bounds = paperAgentBestSelectionBounds()
+		var crop = paperAgentCropForSelection(bounds)
+		var placement = paperAgentNativePlacement(bounds)
+		~&6504254477&~.~&7282468819357443632&~(function () {
+			paperAgentOpenNativeSelection(action, crop, placement, bounds)
+			~&6504254477&~.~&12148339614529610933&~()
+			// The lasso action otherwise leaves Xochitl in selection mode. Ask the
+			// persistent Toolbar listener to restore the primary pen immediately;
+			// the worker repeats this just before native ink as a race guard.
+			paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$tool", "primary")
+		})
+	}
+
+	onPaperAgentAiSelection: paperAgentRunSelection("ai")
+	onPaperAgentBeautifySelection: paperAgentRunSelection("beautify")
+	}
+	END TRAVERSE
+END AFFECT
+
+; Restore the primary pen through Xochitl's own toolbar model. This is adapted
+; from the 3.27 gestik implementation in alefaraci/xovi-qmd-extensions, which
+; uses selectPen("primary") plus documentViewTools.activeTool instead of a
+; device-specific synthetic tap.
+AFFECT [[11313888899523275277]]
+	IMPORT net.asivery.XoviMessageBroker [[180923.180921]]
+	TRAVERSE [[8397993708429497603]]
+		LOCATE AFTER ALL
+		INSERT {
+		XoviMessageBroker {
+			id: paperAgentToolBroker
+			listeningFor: ["paper-agent$tool"]
+			function onSignalReceived(signal, message) {
+				if (signal !== "paper-agent$tool" || message !== "primary") return
+				try {
+					~&6504254477&~.~&254547531013823564&~("primary")
+					~&7842069035455457876&~.~&8399230650759060099&~ = "primary"
+					var children = ~&8400129135001204805&~.~&7712883416119442&~
+					var primary = null
+					for (var i = 0; i < children.length; i++) {
+						var item = children[i].~&6503936152&~
+						if (!item || item.~&7713561545874130&~ === undefined) continue
+						if (item.~&8399878573055752961&~ === "primaryPenMenu") primary = item
+						else {
+							item.~&7713561545874130&~ = false
+							if (item.~&14458508249923637586&~ !== undefined)
+								item.~&14458508249923637586&~ = false
+						}
+					}
+					if (primary) {
+						~&6504254477&~.~&16536305558369217168&~ = primary
+						primary.~&7713561545874130&~ = true
+					}
+					console.log("paper-agent restored primary pen")
+				} catch (error) {
+					console.log("paper-agent primary pen restore failed", String(error))
+				}
+			}
+		}
+		}
+	END TRAVERSE
+END AFFECT
+
+; Use Xochitl's native NotificationBar rather than an ordinary animated QML
+; Rectangle. The native component owns its e-paper refresh path and stays at
+; the bottom of MainView, clear of the document toolbar.
+AFFECT [[2328484894988065446]]
+	IMPORT [[233700934949963.233693781272506]] [[180922.180921]]
+	IMPORT net.asivery.XoviMessageBroker [[180923.180921]]
+	TRAVERSE [[8397788359424131273]]#[[6504254477]] > [[8397993708429497603]]#[[7713531976371484]]
+		LOCATE AFTER ALL
+		INSERT {
+		~&425121728314878811&~.~&11119534664549952261&~ {
+			id: paperAgentStatusBar
+			property string paperAgentState: "idle"
+			~&233721384511543&~.~&6504027668&~: parent.left
+			~&233721384511543&~.~&214640173127&~: parent.right
+			~&233721384511543&~.~&7082507142622&~: parent.bottom
+			visible: paperAgentState !== "idle"
+			z: 100000
+			~&6504337259&~: ~&254477762679831355&~.~&11119534664549952261&~.~&233740920352621&~
+
+			function paperAgentShowState(nextState) {
+				console.log("paper-agent native notification", nextState)
+				// Image insertion happens in QML after the local oracle has already
+				// delivered its artifact. Keep a native-insertion failure sticky so
+				// the worker's later transport-level `done` cannot hide it.
+				if (paperAgentState === "error" && nextState === "done") return
+				paperAgentState = nextState
+				if (nextState === "thinking" || nextState === "generating_image"
+						|| nextState === "inserting") {
+					paperAgentDeadline.restart()
+					paperAgentResultTimer.stop()
+				} else {
+					paperAgentDeadline.stop()
+					paperAgentResultTimer.interval = nextState === "done" ? 1400 : 4500
+					paperAgentResultTimer.restart()
+				}
+			}
+
+			XoviMessageBroker {
+				id: paperAgentStatusBroker
+				listeningFor: ["paper-agent$status"]
+				function onSignalReceived(signal, message) {
+					if (signal !== "paper-agent$status") return
+					if (message === "thinking" || message === "generating_image"
+							|| message === "inserting" || message === "done" || message === "error")
+						paperAgentStatusBar.paperAgentShowState(message)
+				}
+			}
+
+			Timer {
+				id: paperAgentDeadline
+				interval: 325000
+				onTriggered: paperAgentStatusBar.paperAgentShowState("error")
+			}
+			Timer {
+				id: paperAgentResultTimer
+				onTriggered: paperAgentStatusBar.paperAgentState = "idle"
+			}
+
+			~&425121728314878811&~.~&11119534664549952261&~.~&233695222288046&~ {
+				~&6504315758&~: paperAgentStatusBar.paperAgentState === "thinking"
+					? "Paper Agent is thinking..."
+					: paperAgentStatusBar.paperAgentState === "generating_image"
+						? "Paper Agent is creating an image..."
+						: paperAgentStatusBar.paperAgentState === "inserting"
+							? "Paper Agent is adding the image..."
+					: paperAgentStatusBar.paperAgentState === "done"
+								? "Paper Agent finished"
+								: "Paper Agent failed"
+				~&7081629735527&~.~&254529418434902000&~: true
+				~&7081629735527&~.~&8399743405844438450&~: ~&425121728314878811&~.~&7082020628281&~.~&233740248806464&~.~&214641496386&~
+				~&7081629735527&~.~&499747351624466981&~: ~&425121728314878811&~.~&7082020628281&~.~&233740248806464&~.~&214641496386&~
+			}
+		}
+		}
+	END TRAVERSE
+END AFFECT

@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Rust format
+        working-directory: device/native
+        run: cargo fmt -- --check
+      - name: Rust tests
+        working-directory: device/native
+        run: cargo test --locked
+      - name: Node checks
+        run: |
+          node --check device/runtime/native-oracle-server.mjs
+          node device/runtime/native-oracle-server.mjs --self-test
+          node --check device/runtime/native-oracle-client.mjs
+          node --check device/runtime/rich-document.mjs
+          node --test device/runtime/rich-document.test.mjs
+          node --check device/runtime/image-generate.mjs
+          node --test device/runtime/image-generate.test.mjs
+      - name: Shell syntax
+        run: |
+          sh -n device/runtime/native-oracle-service.sh
+          sh -n device/runtime/native-selection-prepare.sh
+          sh -n device/runtime/native-selection-write.sh
+          bash -n scripts/*.sh
