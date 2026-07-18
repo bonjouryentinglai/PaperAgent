@@ -55,7 +55,6 @@ AFFECT [[11806562588218124596]]
 	property var paperAgentCachedSelectionBounds: null
 	property double paperAgentCachedSelectionAt: 0
 	property var paperAgentPendingImageRequests: ({})
-	property var paperAgentPendingReplacementRequests: ({})
 	property string paperAgentActiveRequest: ""
 
 	XoviMessageBroker {
@@ -90,17 +89,6 @@ AFFECT [[11806562588218124596]]
 			if (logFailure) console.log("paper-agent selection lookup failed", String(error))
 		}
 		return paperAgentCopyBounds(bounds)
-	}
-
-	function paperAgentSelectionItemCount() {
-		try {
-			var items = ~&8399340108982949229&~.~&5308518110917893541&~(
-				~&8399340108982949229&~.~&15752433948179392809&~,
-				~&6504254477&~.~&15777890623490054006&~)
-			return items && items.length !== undefined ? Number(items.length) : -1
-		} catch (error) {
-			return -1
-		}
 	}
 
 	function paperAgentRefreshSelectionBounds() {
@@ -242,32 +230,6 @@ AFFECT [[11806562588218124596]]
 		return placement
 	}
 
-	// Beautify replaces the source in place. The selection bounds use the same
-	// centred-X framebuffer geometry as the capture crop, but without crop
-	// padding. Expand only very small selections to the renderer's safe minimum.
-	function paperAgentReplacementPlacement(bounds) {
-		var view = ~&6504254477&~
-		var shotW = 954
-		var shotH = 1696
-		if (!bounds || !view || !isFinite(view.width) || Number(view.width) <= 0)
-			return null
-		var centerX = Number(view.width) / 2 + Number(view.x || 0)
-			+ Number(bounds.x) + Number(bounds.width) / 2
-		var centerY = Number(bounds.y) + Number(bounds.height) / 2
-		var width = Math.max(48, Math.round(Number(bounds.width)))
-		var height = Math.max(48, Math.round(Number(bounds.height)))
-		if (!isFinite(centerX) || !isFinite(centerY) || !isFinite(width) || !isFinite(height)
-				|| width > shotW || height > shotH)
-			return null
-		var x = Math.round(Math.max(0, Math.min(shotW - width, centerX - width / 2)))
-		var y = Math.round(Math.max(0, Math.min(shotH - height, centerY - height / 2)))
-		var placement = { x: x, y: y, width: width, height: height }
-		console.log("paper-agent replacement placement",
-			"selection=" + [bounds.x, bounds.y, bounds.width, bounds.height].join(","),
-			"placement=" + [x, y, width, height].join(","))
-		return placement
-	}
-
 	// Xochitl 3.27's native image API accepts a scene-space drop point. Keep
 	// this separate from paperAgentNativePlacement(), which is deliberately in
 	// framebuffer coordinates for virtual-Marker stroke injection.
@@ -326,125 +288,6 @@ AFFECT [[11806562588218124596]]
 		paperAgentPendingImageRequests = next
 	}
 
-	function paperAgentRememberReplacementRequest(requestId, bounds) {
-		var view = ~&6504254477&~
-		var controller = view ? (view.controller || null) : null
-		if (!controller || !bounds) return false
-		// convertSelection() may normalize the selected scene items immediately
-		// before this call. Retain those live post-conversion bounds for the later
-		// identity guard, while the screenshot/placement keeps the same geometry.
-		var retainedBounds = paperAgentLookupSelectionBounds(false) || paperAgentCopyBounds(bounds)
-		if (!retainedBounds) return false
-		var next = paperAgentPendingReplacementRequests
-		next[String(requestId)] = {
-			controller: controller,
-			pageId: view.pageId !== undefined ? String(view.pageId) : "",
-			layer: Number(controller.currentLayer),
-			bounds: retainedBounds,
-			itemCount: paperAgentSelectionItemCount(),
-			deleted: false,
-			acknowledged: false
-		}
-		paperAgentPendingReplacementRequests = next
-		console.log("paper-agent remembered replacement", requestId,
-			retainedBounds.x, retainedBounds.y, retainedBounds.width, retainedBounds.height)
-		return true
-	}
-
-	function paperAgentForgetReplacementRequest(requestId, closeSelection) {
-		var key = String(requestId)
-		var pending = paperAgentPendingReplacementRequests[key]
-		if (!pending) return
-		if (closeSelection && pending.deleted && !pending.acknowledged)
-			paperAgentRollbackUnacknowledgedDelete(pending, key)
-		if (closeSelection && !pending.deleted) {
-			var currentView = ~&6504254477&~
-			if (currentView && currentView.controller === pending.controller
-					&& (!pending.pageId || String(currentView.pageId) === pending.pageId)) {
-				try {
-					~&6504254477&~.~&12148339614529610933&~()
-					paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$tool", "primary")
-				} catch (error) {
-					console.log("paper-agent replacement close failed", String(error))
-				}
-			}
-		}
-		var next = paperAgentPendingReplacementRequests
-		delete next[key]
-		paperAgentPendingReplacementRequests = next
-	}
-
-	function paperAgentBoundsMatch(expected, actual) {
-		if (!expected || !actual) return false
-		var tolerance = 6
-		return Math.abs(Number(expected.x) - Number(actual.x)) <= tolerance
-			&& Math.abs(Number(expected.y) - Number(actual.y)) <= tolerance
-			&& Math.abs(Number(expected.width) - Number(actual.width)) <= tolerance
-			&& Math.abs(Number(expected.height) - Number(actual.height)) <= tolerance
-	}
-
-	function paperAgentRollbackUnacknowledgedDelete(pending, requestId) {
-		if (!pending || !pending.deleted || !pending.controller) return
-		try {
-			var undo = pending.controller["undo"]
-			if (typeof undo === "function") {
-				pending.controller["undo"]()
-				pending.deleted = false
-				console.log("paper-agent restored unacknowledged replacement", requestId)
-			}
-		} catch (error) {
-			console.log("paper-agent replacement restore failed", String(error))
-		}
-	}
-
-	function paperAgentCommitReplacement(requestId) {
-		var key = String(requestId)
-		var pending = paperAgentPendingReplacementRequests[key]
-		var currentView = ~&6504254477&~
-		if (!pending || !pending.controller || !pending.bounds
-				|| !currentView || currentView.controller !== pending.controller
-				|| (pending.pageId && String(currentView.pageId) !== pending.pageId)) {
-			console.log("paper-agent rejected stale replacement", key)
-			paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "error")
-			return false
-		}
-		if (pending.deleted) {
-			console.log("paper-agent ignored duplicate replacement ready", key)
-			return true
-		}
-		var currentBounds = paperAgentLookupSelectionBounds(false)
-		var currentCount = paperAgentSelectionItemCount()
-		if (!paperAgentBoundsMatch(pending.bounds, currentBounds)
-				|| (pending.itemCount >= 0 && currentCount >= 0 && pending.itemCount !== currentCount)) {
-			console.log("paper-agent rejected changed replacement selection", key)
-			paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "error")
-			return false
-		}
-		var remove = pending.controller["deleteSelectedItems"]
-		if (typeof remove !== "function") {
-			console.log("paper-agent selection delete API unavailable")
-			paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "error")
-			return false
-		}
-		try {
-			paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "replacing")
-			pending.controller["deleteSelectedItems"](pending.layer)
-			pending.deleted = true
-			~&6504254477&~.~&12148339614529610933&~()
-			paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$tool", "primary")
-			paperAgentCommandExecutor.executeCommand("/usr/bin/touch",
-				["/run/paper-agent-replace-" + key + ".ack"])
-			pending.acknowledged = true
-			console.log("paper-agent acknowledged replacement delete", key)
-			return true
-		} catch (error) {
-			paperAgentRollbackUnacknowledgedDelete(pending, key)
-			console.log("paper-agent selection replacement delete failed", String(error))
-			paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "error")
-			return false
-		}
-	}
-
 	function paperAgentRemoveImageArtifact(requestId) {
 		var filePath = "/home/root/paper-agent/native/artifacts/" + String(requestId) + ".png"
 		try {
@@ -456,7 +299,7 @@ AFFECT [[11806562588218124596]]
 
 	XoviMessageBroker {
 		id: paperAgentNativeImageBroker
-		listeningFor: ["paper-agent$image", "paper-agent$request", "paper-agent$replace"]
+		listeningFor: ["paper-agent$image", "paper-agent$request"]
 		function onSignalReceived(signal, message) {
 			var fields = String(message).split(",")
 			var requestId = fields[0]
@@ -468,13 +311,7 @@ AFFECT [[11806562588218124596]]
 						paperAgentActiveRequest = ""
 					}
 					paperAgentForgetImageRequest(requestId)
-					paperAgentForgetReplacementRequest(requestId, fields[1] === "error")
 				}
-				return
-			}
-			if (signal === "paper-agent$replace") {
-				if (fields.length === 2 && fields[1] === "ready")
-					paperAgentCommitReplacement(requestId)
 				return
 			}
 			if (signal !== "paper-agent$image" || fields.length !== 3
@@ -554,8 +391,6 @@ AFFECT [[11806562588218124596]]
 		try {
 			var stamp = requestId
 			if (action === "ai") paperAgentRememberImageRequest(stamp, bounds)
-			else if (!paperAgentRememberReplacementRequest(stamp, bounds))
-				throw new Error("replacement selection could not be retained")
 			paperAgentActiveRequest = String(stamp)
 			paperAgentActiveRequestTimer.restart()
 			var unit = "paper-agent-native-selection-" + stamp
@@ -573,7 +408,6 @@ AFFECT [[11806562588218124596]]
 				paperAgentActiveRequest = ""
 			}
 			paperAgentForgetImageRequest(stamp)
-			paperAgentForgetReplacementRequest(stamp, false)
 			console.log("paper-agent native write schedule failed", String(error))
 			paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "error")
 			return false
@@ -587,17 +421,11 @@ AFFECT [[11806562588218124596]]
 		}
 		var bounds = paperAgentBestSelectionBounds()
 		var crop = paperAgentCropForSelection(bounds)
-		var placement = action === "beautify"
-			? paperAgentReplacementPlacement(bounds)
-			: paperAgentNativePlacement(bounds)
+		var placement = paperAgentNativePlacement(bounds)
 		~&6504254477&~.~&7282468819357443632&~(function () {
-			var started = paperAgentOpenNativeSelection(action, crop, placement, bounds)
-			// Beautify deliberately keeps the exact lasso alive until the complete,
-			// validated replacement is ready. AI answers still dismiss immediately.
-			if (action !== "beautify" || !started) {
-				~&6504254477&~.~&12148339614529610933&~()
-				paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$tool", "primary")
-			}
+			paperAgentOpenNativeSelection(action, crop, placement, bounds)
+			~&6504254477&~.~&12148339614529610933&~()
+			paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$tool", "primary")
 		})
 	}
 
@@ -677,7 +505,7 @@ AFFECT [[2328484894988065446]]
 				if (paperAgentState === "error" && nextState === "done") return
 				paperAgentState = nextState
 				if (nextState === "thinking" || nextState === "generating_image"
-						|| nextState === "inserting" || nextState === "replacing") {
+						|| nextState === "inserting") {
 					paperAgentDeadline.restart()
 					paperAgentResultTimer.stop()
 				} else {
@@ -693,7 +521,7 @@ AFFECT [[2328484894988065446]]
 				function onSignalReceived(signal, message) {
 					if (signal !== "paper-agent$status") return
 					if (message === "thinking" || message === "generating_image"
-							|| message === "inserting" || message === "replacing"
+							|| message === "inserting"
 							|| message === "done" || message === "error")
 						paperAgentStatusBar.paperAgentShowState(message)
 				}
@@ -716,8 +544,6 @@ AFFECT [[2328484894988065446]]
 						? "Paper Agent is creating an image..."
 						: paperAgentStatusBar.paperAgentState === "inserting"
 							? "Paper Agent is adding the image..."
-						: paperAgentStatusBar.paperAgentState === "replacing"
-							? "Paper Agent is replacing the selection..."
 					: paperAgentStatusBar.paperAgentState === "done"
 								? "Paper Agent finished"
 								: "Paper Agent failed"

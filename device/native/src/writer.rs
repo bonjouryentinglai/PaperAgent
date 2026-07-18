@@ -148,7 +148,7 @@ fn interpolate(
 
 struct WriterLock {
     // flock(2) is attached to this open file description. The kernel releases
-    // it even when the writer is SIGTERM/SIGKILLed, so a failed replacement
+    // it even when the writer is SIGTERM/SIGKILLed, so a failed request
     // can never leave a stale pathname that blocks every later request.
     file: File,
 }

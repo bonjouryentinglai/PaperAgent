@@ -220,8 +220,7 @@ fn is_allowed_streaming_job_path(path: &str) -> bool {
     let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
         return false;
     };
-    let known_kind = file_name.starts_with("stream-") || file_name.starts_with("replace-");
-    known_kind
+    file_name.starts_with("stream-")
         && file_name.ends_with(".strokes")
         && file_name
             .bytes()
@@ -321,11 +320,11 @@ mod tests {
     use super::is_allowed_streaming_job_path;
 
     #[test]
-    fn streaming_job_path_accepts_stream_and_replacement_jobs() {
+    fn streaming_job_path_accepts_only_stream_jobs() {
         assert!(is_allowed_streaming_job_path(
             "/home/root/paper-agent/native/jobs/stream-1784379886992-1.strokes"
         ));
-        assert!(is_allowed_streaming_job_path(
+        assert!(!is_allowed_streaming_job_path(
             "/home/root/paper-agent/native/jobs/replace-1784379886992-1-1.strokes"
         ));
     }
@@ -333,16 +332,16 @@ mod tests {
     #[test]
     fn streaming_job_path_rejects_escape_and_unknown_jobs() {
         assert!(!is_allowed_streaming_job_path(
-            "/home/root/paper-agent/native/jobs/replace-../../escape.strokes"
+            "/home/root/paper-agent/native/jobs/stream-../../escape.strokes"
         ));
         assert!(!is_allowed_streaming_job_path(
             "/home/root/paper-agent/native/jobs/other-1784379886992.strokes"
         ));
         assert!(!is_allowed_streaming_job_path(
-            "/tmp/replace-1784379886992-1-1.strokes"
+            "/tmp/stream-1784379886992-1.strokes"
         ));
         assert!(!is_allowed_streaming_job_path(
-            "/home/root/paper-agent/native/jobs/replace-1784379886992-1-1.json"
+            "/home/root/paper-agent/native/jobs/stream-1784379886992-1.json"
         ));
     }
 }

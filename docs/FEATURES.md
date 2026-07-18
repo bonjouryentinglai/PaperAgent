@@ -30,15 +30,13 @@ than an instruction:
 - Questions are not answered.
 - Documents, tables and GPT images are rejected in this mode.
 
-The developer preview replaces the selected source in place. It buffers the
-complete result, accepts only text/vector output, renders and dry-runs a bounded
-stroke job, opens the native writer, then asks Xochitl to delete the still-live
-selection. Writeback starts only after Xochitl acknowledges that delete. Page or
-selection changes and every failure before acknowledgement preserve the source.
+The developer preview preserves the selected source. It buffers the complete
+result, accepts only text/vector output and writes a bounded result below the
+lasso through the same guarded Marker path as AI. No delete acknowledgement or
+rollback is required, and every failure leaves the source unchanged.
 
-Physical Move acceptance is still required for text/sketch placement, failure
-recovery and Undo/Redo behavior. Single-step Undo grouping across Xochitl's
-native delete and virtual-Marker write remains a stability milestone.
+Physical Move acceptance is still required for text/sketch placement and
+Undo/Redo behavior.
 
 ## Deliberate differences
 

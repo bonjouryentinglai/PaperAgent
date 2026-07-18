@@ -12,8 +12,8 @@
 
 Before the preview is called stable, tables, vectors, GPT images and both
 Beautify routes must be accepted on a physical Move across several selection
-sizes and page positions. Beautify replacement must additionally pass source
-preservation, changed-page/selection, failure-recovery and Undo/Redo tests.
+sizes and page positions. Beautify must additionally pass source-preservation,
+failure-recovery and Undo/Redo tests.
 
 ## Productization
 
@@ -27,7 +27,6 @@ preservation, changed-page/selection, failure-recovery and Undo/Redo tests.
 
 ## Complete notebook integration
 
-- Single-step Undo grouping for the implemented Beautify replacement handshake.
 - Positive Xochitl insertion acknowledgement and compatibility guards for
   generated notebook images.
 - Dashed or variable-weight vector strokes, organic smooth-fill curves and

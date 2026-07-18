@@ -51,16 +51,13 @@ After an install, verify separately:
 5. One mixed answer containing a heading, list, bold and inline code, fenced
    code, a table and a vector block in the expected order.
 6. Beautify text does not answer a question embedded in the selection; it
-   removes the selected source only after generation and replaces it at the
-   same position.
-7. Beautify drawing replaces the selected sketch with a faithful movable vector
-   reconstruction at the same bounds.
-8. Start Beautify, then change the selection or page before completion: the
-   original must remain and no result may be written. Also test an offline or
-   forced-error request and confirm the source remains.
-9. Test Undo/Redo after both Beautify routes. Record whether one or multiple
-   Undo actions are required; single-step grouping is not yet accepted.
-10. Thinking, replacing, success and error notifications.
+   preserves the selected source and writes the transcription below it.
+7. Beautify drawing preserves the selected sketch and writes a faithful movable
+   vector reconstruction below it.
+8. Test an offline or forced-error Beautify request and confirm the source
+   remains unchanged.
+9. Test Undo/Redo after both Beautify routes.
+10. Thinking, success and error notifications.
 11. A GPT photo or ordinary illustration appears as a native image object; move
    and resize it, then test Undo/Redo, close/reopen, reboot, export and sync.
 12. Start a GPT image request and change pages before it finishes; Paper Agent

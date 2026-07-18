@@ -7,9 +7,9 @@ on a reMarkable Paper Pro Move:
   a formatted Markdown document, create a native table, or draw a bounded
   vector figure. It can also generate a raster image through GPT Image. One
   answer may mix text, tables, code and vector drawings.
-- **Beautify** treats the selection as source material only. It replaces text
-  in place with a handwriting face or replaces a sketch with reconstructed
-  native vector ink; it never answers the selected content.
+- **Beautify** treats the selection as source material only. It preserves the
+  original and writes a handwriting transcription or reconstructed native
+  vector below it; it never answers the selected content.
 
 Text, tables and vectors are written back through Xochitl's Marker input path,
 so generated ink remains selectable, movable, resizable and undoable like
@@ -29,7 +29,7 @@ ordinary strokes. Raster output uses Xochitl's native notebook-image path.
 | Traditional Chinese handwriting | Implemented with ChenYuLuoyan and Open Huninn fallback |
 | Native tables | Implemented in the bounded local renderer; device acceptance pending |
 | Native vector figures | Bounded non-executable DSL with lines, polygons, sampled curves, rounded shapes, arcs and sparse hatch fills; device acceptance pending |
-| Beautify text or sketch | In-place replacement with full-result validation, page/selection guards and a Xochitl delete acknowledgement; physical acceptance pending |
+| Beautify text or sketch | Preserves the source and writes a complete validated text/vector result below it; physical acceptance pending |
 | GPT raster images | Implemented locally: ChatGPT OAuth, `gpt-image-2`, bounded PNG normalization and Xochitl 3.27 native image insertion; physical acceptance pending |
 | One-click install and settings UI | Planned |
 
@@ -84,9 +84,8 @@ See [Development](docs/DEVELOPMENT.md) for prerequisites and build details,
 - The local oracle socket is owner-only and accepts only bounded selection PNGs
   under Paper Agent's runtime directory.
 - Model output is parsed into non-executable result formats before rendering.
-- Beautify keeps the lassoed source intact until its complete text/vector job
-  is validated and the native writer is open; changed-page/selection and
-  pre-commit failures abort without deleting the source.
+- Beautify never deletes or edits the lassoed source; it accepts only complete,
+  validated text/vector output and uses the same guarded write-below path as AI.
 - Generated images are decoded, dimension- and memory-bounded, normalized to
   RGBA PNG and inserted only into the page that originated the request.
 - The native writer requires the Move hardware identity, active Xochitl, a
