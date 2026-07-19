@@ -58,7 +58,6 @@ AFFECT [[11806562588218124596]]
 	property double paperAgentCachedSelectionAt: 0
 	property var paperAgentPendingImageRequests: ({})
 	property var paperAgentImageResults: ({})
-	property var paperAgentPendingCapture: null
 	property string paperAgentActiveRequest: ""
 
 	XoviMessageBroker {
@@ -116,12 +115,6 @@ AFFECT [[11806562588218124596]]
 			console.log("paper-agent active request guard timed out", paperAgentActiveRequest)
 			paperAgentActiveRequest = ""
 		}
-	}
-
-	Timer {
-		id: paperAgentCaptureTimer
-		interval: 8000
-		onTriggered: paperAgentCancelPendingCapture("rm-shot completion timed out")
 	}
 
 	function paperAgentBestSelectionBounds() {
@@ -372,10 +365,7 @@ AFFECT [[11806562588218124596]]
 		}
 	}
 
-	function paperAgentCancelPendingCapture(reason) {
-		var capture = paperAgentPendingCapture
-		paperAgentPendingCapture = null
-		paperAgentCaptureTimer.stop()
+	function paperAgentCancelNativeCapture(capture, reason) {
 		if (!capture) return
 		console.log("paper-agent native capture failed", reason, capture.requestId)
 		if (paperAgentActiveRequest === capture.requestId) {
@@ -392,10 +382,8 @@ AFFECT [[11806562588218124596]]
 	}
 
 	function paperAgentScheduleNativeWrite(capture) {
-		if (!capture || !paperAgentPendingCapture
-				|| capture.requestId !== paperAgentPendingCapture.requestId) return false
+		if (!capture) return false
 		try {
-			paperAgentCaptureTimer.stop()
 			var unit = "paper-agent-native-selection-" + capture.requestId
 			var placement = capture.placement
 			var output = paperAgentCommandExecutor.executeCommand(
@@ -405,30 +393,18 @@ AFFECT [[11806562588218124596]]
 				  capture.action, capture.shotPath, String(placement.x), String(placement.y),
 				  String(placement.width), String(placement.height),
 				  placement.newPageRequired ? "1" : "0"])
-			paperAgentPendingCapture = null
 			console.log("paper-agent native write scheduled", unit, output)
 			return true
 		} catch (error) {
-			paperAgentCancelPendingCapture(String(error))
+			paperAgentCancelNativeCapture(capture, String(error))
 			return false
 		}
 	}
 
 	XoviMessageBroker {
 		id: paperAgentNativeImageBroker
-		listeningFor: ["paper-agent$image", "paper-agent$request", "paper-agent$page",
-			"screenshotComplete", "screenshotFailed"]
+		listeningFor: ["paper-agent$image", "paper-agent$request", "paper-agent$page"]
 		function onSignalReceived(signal, message) {
-			if (signal === "screenshotComplete") {
-				var capture = paperAgentPendingCapture
-				if (capture && String(message) === capture.shotPath)
-					paperAgentScheduleNativeWrite(capture)
-				return
-			}
-			if (signal === "screenshotFailed") {
-				if (paperAgentPendingCapture) paperAgentCancelPendingCapture("rm-shot failed")
-				return
-			}
 			var fields = String(message).split(",")
 			var requestId = fields[0]
 			if (!/^[0-9]{10,20}$/.test(requestId)) return
@@ -544,22 +520,20 @@ AFFECT [[11806562588218124596]]
 			requestId: stamp, action: action, shotPath: shotPath,
 			placement: placement
 		}
-		paperAgentPendingCapture = capture
 		if (action === "ai") paperAgentRememberImageRequest(stamp, bounds)
 		paperAgentActiveRequest = stamp
 		paperAgentActiveRequestTimer.restart()
-		// rm-shot captures on a detached thread. Wait for its completion signal
-		// before creating a worker, so an rm-shot/Xochitl crash cannot strand the
-		// coordinator lock and poison every later Paper Agent request.
+		// rm-shot captures on a detached thread and only acknowledges that capture
+		// started. The worker waits for a stable, valid PNG and is bound to the
+		// current Xochitl PID, so it can safely start without a completion signal.
 		var args = shotPath + ",300,0," + crop.join(",")
 		var result = paperAgentScreenshotBroker.sendSimpleSignal("takeScreenshot", args)
 		console.log("paper-agent native capture", result, args)
 		if (result !== "success") {
-			paperAgentCancelPendingCapture("rm-shot did not start")
+			paperAgentCancelNativeCapture(capture, "rm-shot did not start")
 			return false
 		}
-		paperAgentCaptureTimer.restart()
-		return true
+		return paperAgentScheduleNativeWrite(capture)
 	}
 
 	function paperAgentRunSelection(action) {

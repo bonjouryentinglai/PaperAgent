@@ -6,8 +6,9 @@ Paper Agent uses a thin Xochitl integration and a separate local runtime.
 
 1. The QMD adds AI and Beautify icons to Xochitl's lasso menu.
 2. It snapshots selection bounds, asks `rm-shot` for a bounded PNG, then closes
-   the lasso and restores the primary pen. Only `screenshotComplete` schedules
-   a systemd worker, so a capture-time Xochitl crash cannot strand a worker.
+   the lasso and restores the primary pen. `rm-shot` only acknowledges that its
+   detached capture started, so the worker waits for a stable PNG and aborts if
+   the Xochitl process that accepted the request is replaced.
 3. The worker waits for a complete PNG and sends an allowlisted request to a
    mode-`0600` Unix socket.
 4. A persistent Pi RPC process sees the image and returns a typed result.
