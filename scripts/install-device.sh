@@ -155,10 +155,10 @@ done
 cp "$INCOMING/paper-agent-native-oracle.service" "$UNIT"
 cp "$INCOMING/paper-agent-selection.qmd" "$QMD_FILE"
 if [ ! -f "$CONFIG" ]; then cp "$INCOMING/paper-agent.env.example" "$CONFIG"; fi
-# 0.86 was the short-lived oversized default. Move those installs back to the
-# user-validated 0.78 size while preserving every custom value.
-if grep -qx 'PAPER_AGENT_CJK_SCALE=0.86' "$CONFIG"; then
-  sed -i 's/^PAPER_AGENT_CJK_SCALE=0\.86$/PAPER_AGENT_CJK_SCALE=0.78/' "$CONFIG"
+# Move the two earlier project defaults to the user-validated 0.70 size while
+# preserving every explicitly customized value.
+if grep -Eqx 'PAPER_AGENT_CJK_SCALE=(0\.78|0\.86)' "$CONFIG"; then
+  sed -Ei 's/^PAPER_AGENT_CJK_SCALE=(0\.78|0\.86)$/PAPER_AGENT_CJK_SCALE=0.70/' "$CONFIG"
 fi
 chmod 0755 "$NATIVE/paper-agent-native" "$NATIVE/native-oracle-service.sh" "$NATIVE/native-selection-prepare.sh" "$NATIVE/native-selection-write.sh"
 chmod 0644 "$NATIVE/"*.mjs "$ICONS/"*.svg "$UNIT" "$QMD_FILE" "$CONFIG"

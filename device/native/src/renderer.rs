@@ -417,7 +417,10 @@ pub fn vector_to_job(
                 let text = traditional::for_display(&raw_text);
                 let label_target =
                     map_vector_target(values[0], values[1], values[2], values[3], target)?;
-                let mut label_strokes = render_text_box(&text, label_target, 10, 36, 2, true)?;
+                let label_target =
+                    expand_vector_label_target(label_target, target, text.chars().count());
+                let mut label_strokes = render_text_box(&text, label_target, 16, 44, 3, false)?;
+                center_strokes_in_target(&mut label_strokes, label_target);
                 strokes.append(&mut label_strokes);
             }
             Some(command) => {
@@ -1834,6 +1837,38 @@ fn map_vector_target(
     })
 }
 
+fn expand_vector_label_target(label: Target, container: Target, characters: usize) -> Target {
+    let container_right = container.x + container.width as i32;
+    let container_bottom = container.y + container.height as i32;
+    let maximum_width = (container.width as i32 - 8).max(24);
+    let maximum_height = (container.height as i32 - 8).max(24);
+    let minimum_width = if characters <= 4 {
+        (characters.max(1) as i32 * 28 + 20).clamp(56, 160)
+    } else {
+        (characters as i32 * 20 + 20).clamp(96, 260)
+    }
+    .min(maximum_width);
+    let minimum_height = 52.min(maximum_height);
+    let width = (label.width as i32).max(minimum_width).min(maximum_width);
+    let height = (label.height as i32)
+        .max(minimum_height)
+        .min(maximum_height);
+    let center_x = label.x + label.width as i32 / 2;
+    let center_y = label.y + label.height as i32 / 2;
+    let x = (center_x - width / 2)
+        .max(container.x + 4)
+        .min(container_right - 4 - width);
+    let y = (center_y - height / 2)
+        .max(container.y + 4)
+        .min(container_bottom - 4 - height);
+    Target {
+        x,
+        y,
+        width: width as u32,
+        height: height as u32,
+    }
+}
+
 fn contains(target: Target, point: Point) -> bool {
     point.x >= target.x
         && point.y >= target.y
@@ -2078,6 +2113,25 @@ mod tests {
             .flatten()
             .all(|point| contains(target(), *point)));
         assert!(vector_to_job("<svg><script/></svg>", target(), 954, 1696).is_err());
+    }
+
+    #[test]
+    fn tiny_mind_map_labels_are_expanded_and_readable() {
+        let box_target = target();
+        let vector = "paper-agent-vector 1\ncircle 200 200 80\nlabel 185 185 30 30 1\nrect 400 400 200 140\nlabel 470 450 60 30 ABC";
+        let job = vector_to_job(vector, box_target, 954, 1696).unwrap();
+        let label_target = expand_vector_label_target(
+            map_vector_target(185, 185, 30, 30, box_target).unwrap(),
+            box_target,
+            1,
+        );
+        assert!(label_target.width >= 56);
+        assert!(label_target.height >= 52);
+        assert!(job
+            .strokes
+            .iter()
+            .flatten()
+            .all(|point| contains(box_target, *point)));
     }
 
     #[test]

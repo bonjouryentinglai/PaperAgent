@@ -122,6 +122,67 @@ pub fn smooth_path(path: &[(f32, f32)], window: usize) -> Vec<(f32, f32)> {
         .collect()
 }
 
+/// Remove only residual sub-pixel wobble after smoothing.
+///
+/// Applying this to the already-smoothed skeleton is intentionally gentler
+/// than simplifying the raw eight-connected pixel path: real glyph curves are
+/// retained while short one-pixel zigzags collapse into clean Marker segments.
+pub fn simplify_path(path: &[(f32, f32)], epsilon: f32) -> Vec<(f32, f32)> {
+    if path.len() <= 2 || !epsilon.is_finite() || epsilon <= 0.0 {
+        return path.to_vec();
+    }
+
+    fn distance_squared(point: (f32, f32), start: (f32, f32), end: (f32, f32)) -> f32 {
+        let dx = end.0 - start.0;
+        let dy = end.1 - start.1;
+        let length_squared = dx * dx + dy * dy;
+        if length_squared <= f32::EPSILON {
+            let px = point.0 - start.0;
+            let py = point.1 - start.1;
+            return px * px + py * py;
+        }
+        let projection = (((point.0 - start.0) * dx + (point.1 - start.1) * dy) / length_squared)
+            .clamp(0.0, 1.0);
+        let nearest_x = start.0 + projection * dx;
+        let nearest_y = start.1 + projection * dy;
+        let px = point.0 - nearest_x;
+        let py = point.1 - nearest_y;
+        px * px + py * py
+    }
+
+    let mut keep = vec![false; path.len()];
+    keep[0] = true;
+    keep[path.len() - 1] = true;
+    let mut stack = vec![(0usize, path.len() - 1)];
+    let threshold = epsilon * epsilon;
+    while let Some((start, end)) = stack.pop() {
+        if end <= start + 1 {
+            continue;
+        }
+        let mut farthest = None;
+        let mut farthest_distance = 0.0f32;
+        for index in start + 1..end {
+            let distance = distance_squared(path[index], path[start], path[end]);
+            if distance > farthest_distance {
+                farthest = Some(index);
+                farthest_distance = distance;
+            }
+        }
+        if farthest_distance > threshold {
+            let index = farthest.expect("a non-empty interior has a farthest point");
+            keep[index] = true;
+            stack.push((start, index));
+            stack.push((index, end));
+        }
+    }
+
+    path.iter()
+        .copied()
+        .enumerate()
+        .filter_map(|(index, point)| keep[index].then_some(point))
+        .collect()
+}
+
 /// Trace a thinned skeleton image into a list of (x, y) polylines in pixel space.
 /// Coordinates are (col, row) = (x, y).
 pub fn trace_skeleton(grid: &Vec<Vec<bool>>) -> Vec<Vec<(f32, f32)>> {
@@ -225,4 +286,21 @@ pub fn trace_skeleton(grid: &Vec<Vec<bool>>) -> Vec<Vec<(f32, f32)>> {
     }
 
     paths
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gentle_simplification_removes_residual_wobble() {
+        let path = vec![(0.0, 0.0), (1.0, 0.3), (2.0, -0.2), (3.0, 0.0)];
+        assert_eq!(simplify_path(&path, 0.65), vec![(0.0, 0.0), (3.0, 0.0)]);
+    }
+
+    #[test]
+    fn gentle_simplification_preserves_a_real_corner() {
+        let path = vec![(0.0, 0.0), (3.0, 0.0), (3.0, 3.0)];
+        assert_eq!(simplify_path(&path, 0.65), path);
+    }
 }

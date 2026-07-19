@@ -11,7 +11,8 @@ use std::sync::OnceLock;
 const LATIN_TTF: &[u8] = include_bytes!("../assets/fonts/Kalam-Regular.ttf");
 const CJK_HAND_TTF: &[u8] = include_bytes!("../assets/fonts/ChenYuluoyan-2.0-Thin.ttf");
 const CJK_FALLBACK_TTF: &[u8] = include_bytes!("../assets/fonts/jf-openhuninn-2.1.ttf");
-const DEFAULT_CJK_SCALE: f32 = 0.78;
+const DEFAULT_CJK_SCALE: f32 = 0.70;
+const TRACE_SIMPLIFY_EPSILON: f32 = 0.65;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Face {
@@ -283,6 +284,7 @@ pub fn trace_line(mut line: RasterLine) -> Vec<Vec<(i32, i32)>> {
     let mut paths: Vec<Vec<(i32, i32)>> = skeleton::trace_skeleton(&line.pixels)
         .into_iter()
         .map(|path| skeleton::smooth_path(&path, 3))
+        .map(|path| skeleton::simplify_path(&path, TRACE_SIMPLIFY_EPSILON))
         .map(|path| {
             let mut result = Vec::new();
             for (x, y) in path {
@@ -320,6 +322,7 @@ mod tests {
     fn latin_uses_kalam_and_chinese_uses_chen_yu_luoyan() {
         assert_eq!(face_for('A', 52.0).0, Face::Latin);
         assert_eq!(face_for('你', 52.0).0, Face::CjkHand);
-        assert_eq!(DEFAULT_CJK_SCALE, 0.78);
+        assert_eq!(DEFAULT_CJK_SCALE, 0.70);
+        assert_eq!(TRACE_SIMPLIFY_EPSILON, 0.65);
     }
 }

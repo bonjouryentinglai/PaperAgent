@@ -56,12 +56,20 @@ AFFECT [[11806562588218124596]]
 	property string paperAgentCropMode: "unresolved"
 	property var paperAgentCachedSelectionBounds: null
 	property double paperAgentCachedSelectionAt: 0
-	property var paperAgentPendingImageRequests: ({})
-	property var paperAgentImageResults: ({})
 	property string paperAgentActiveRequest: ""
 
 	XoviMessageBroker {
 		id: paperAgentScreenshotBroker
+		listeningFor: ["paper-agent$request"]
+		function onSignalReceived(signal, message) {
+			if (signal !== "paper-agent$request") return
+			var fields = String(message).split(",")
+			if (fields.length !== 2 || (fields[1] !== "done" && fields[1] !== "error")) return
+			if (paperAgentActiveRequest === fields[0]) {
+				paperAgentActiveRequestTimer.stop()
+				paperAgentActiveRequest = ""
+			}
+		}
 	}
 
 	CommandExecutor {
@@ -262,107 +270,21 @@ AFFECT [[11806562588218124596]]
 	// framebuffer coordinates for virtual-Marker stroke injection.
 	function paperAgentRememberImageRequest(requestId, bounds) {
 		var view = ~&6504254477&~
-		var controller = view ? (view.controller || null) : null
-		if (!controller || !bounds) return false
-		var paper = controller.paperNoteBounds || controller.boundingRect || null
-		var next = paperAgentPendingImageRequests
-		next[String(requestId)] = {
-			controller: controller,
-			pageId: view.pageId !== undefined ? String(view.pageId) : "",
-			bounds: {
-				x: Number(bounds.x), y: Number(bounds.y),
-				width: Number(bounds.width), height: Number(bounds.height)
-			},
-			paper: paper ? {
-				x: Number(paper.x), y: Number(paper.y),
-				width: Number(paper.width), height: Number(paper.height)
-			} : null,
-			newPage: false
-		}
-		paperAgentPendingImageRequests = next
-		console.log("paper-agent remembered native image target", requestId,
-			bounds.x, bounds.y, bounds.width, bounds.height)
-		return true
-	}
-
-	function paperAgentImagePoint(pending, imageWidth, imageHeight) {
-		var bounds = pending.bounds
-		var paper = pending.paper
-		var gap = 32
-		var halfWidth = imageWidth / 2
-		var halfHeight = imageHeight / 2
-		var x = bounds.x + bounds.width / 2
-		var below = bounds.y + bounds.height + gap + halfHeight
-		var above = bounds.y - gap - halfHeight
-		var y = below
-		if (paper && isFinite(paper.x) && isFinite(paper.y)
-				&& isFinite(paper.width) && isFinite(paper.height)) {
-			var left = paper.x + 24 + halfWidth
-			var right = paper.x + paper.width - 24 - halfWidth
-			var top = paper.y + 24 + halfHeight
-			var bottom = paper.y + paper.height - 24 - halfHeight
-			if (pending.newPage) {
-				x = Math.max(left, Math.min(right, paper.x + paper.width / 2))
-				y = top
-			} else {
-				x = Math.max(left, Math.min(right, x))
-				if (below > bottom && above >= top) y = above
-				else y = Math.max(top, Math.min(bottom, below))
-			}
-		}
-		return Qt.point(x, y)
+		if (!view || !view.controller || !bounds) return false
+		var fields = [String(requestId), Number(bounds.x), Number(bounds.y),
+			Number(bounds.width), Number(bounds.height)]
+		if (!isFinite(fields[1]) || !isFinite(fields[2])
+				|| !isFinite(fields[3]) || !isFinite(fields[4])
+				|| fields[3] <= 0 || fields[4] <= 0) return false
+		var result = paperAgentScreenshotBroker.sendSimpleSignal(
+			"paper-agent$image-target", fields.join(","))
+		console.log("paper-agent registered persistent image target", requestId, result)
+		return result === "success"
 	}
 
 	function paperAgentForgetImageRequest(requestId) {
-		var key = String(requestId)
-		var pending = paperAgentPendingImageRequests
-		if (pending[key]) {
-			delete pending[key]
-			paperAgentPendingImageRequests = pending
-		}
-		var results = paperAgentImageResults
-		if (results[key]) {
-			delete results[key]
-			paperAgentImageResults = results
-		}
-	}
-
-	function paperAgentImageAckPath(requestId, failed) {
-		return "/run/paper-agent-image-" + String(requestId)
-			+ (failed ? ".error" : ".ack")
-	}
-
-	function paperAgentTouchImageResult(requestId, failed) {
-		try {
-			paperAgentCommandExecutor.executeCommand("/usr/bin/touch",
-				[paperAgentImageAckPath(requestId, failed)])
-		} catch (error) {
-			console.log("paper-agent image acknowledgement failed", String(error))
-		}
-	}
-
-	function paperAgentSetImageResult(requestId, failed) {
-		var key = String(requestId)
-		var results = paperAgentImageResults
-		results[key] = failed ? "error" : "ack"
-		paperAgentImageResults = results
-		paperAgentTouchImageResult(requestId, failed)
-	}
-
-	function paperAgentRepeatImageResult(requestId) {
-		var result = paperAgentImageResults[String(requestId)]
-		if (result !== "ack" && result !== "error") return false
-		paperAgentTouchImageResult(requestId, result === "error")
-		return true
-	}
-
-	function paperAgentRemoveImageArtifact(requestId) {
-		var filePath = "/home/root/paper-agent/native/artifacts/" + String(requestId) + ".png"
-		try {
-			paperAgentCommandExecutor.executeCommand("/bin/rm", ["-f", filePath])
-		} catch (error) {
-			console.log("paper-agent image artifact cleanup failed", String(error))
-		}
+		paperAgentScreenshotBroker.sendSimpleSignal(
+			"paper-agent$image-target", String(requestId) + ",cancel")
 	}
 
 	function paperAgentCancelNativeCapture(capture, reason) {
@@ -398,111 +320,6 @@ AFFECT [[11806562588218124596]]
 		} catch (error) {
 			paperAgentCancelNativeCapture(capture, String(error))
 			return false
-		}
-	}
-
-	XoviMessageBroker {
-		id: paperAgentNativeImageBroker
-		listeningFor: ["paper-agent$image", "paper-agent$request", "paper-agent$page"]
-		function onSignalReceived(signal, message) {
-			var fields = String(message).split(",")
-			var requestId = fields[0]
-			if (!/^[0-9]{10,20}$/.test(requestId)) return
-			if (signal === "paper-agent$request") {
-				if (fields.length === 2 && (fields[1] === "done" || fields[1] === "error")) {
-					if (paperAgentActiveRequest === requestId) {
-						paperAgentActiveRequestTimer.stop()
-						paperAgentActiveRequest = ""
-					}
-					paperAgentForgetImageRequest(requestId)
-				}
-				return
-			}
-			if (signal === "paper-agent$page") {
-				if (fields.length !== 3 || fields[1] !== "ready"
-						|| !/^[0-9]{1,2}$/.test(fields[2])) return
-				var pagePending = paperAgentPendingImageRequests[requestId]
-				var pageView = ~&6504254477&~
-				if (!pagePending || !pageView || !pageView.controller) return
-				var pagePaper = pageView.controller.paperNoteBounds
-					|| pageView.controller.boundingRect || null
-				pagePending.controller = pageView.controller
-				pagePending.pageId = pageView.pageId !== undefined
-					? String(pageView.pageId) : ""
-				pagePending.paper = pagePaper ? {
-					x: Number(pagePaper.x), y: Number(pagePaper.y),
-					width: Number(pagePaper.width), height: Number(pagePaper.height)
-				} : null
-				pagePending.newPage = true
-				paperAgentPendingImageRequests[requestId] = pagePending
-				console.log("paper-agent moved image target to native page", requestId,
-					pagePending.pageId)
-				return
-			}
-			if (signal !== "paper-agent$image") return
-			if (paperAgentRepeatImageResult(requestId)) return
-			if (fields.length !== 3 || !/^[0-9]{2,4}$/.test(fields[1])
-					|| !/^[0-9]{2,4}$/.test(fields[2])) {
-				console.log("paper-agent rejected malformed image request", requestId)
-				paperAgentSetImageResult(requestId, true)
-				paperAgentRemoveImageArtifact(requestId)
-				paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "error")
-				return
-			}
-			var imageWidth = Number(fields[1])
-			var imageHeight = Number(fields[2])
-			if (imageWidth < 32 || imageHeight < 32 || imageWidth > 800 || imageHeight > 800) {
-				console.log("paper-agent rejected unsafe image dimensions", requestId,
-					imageWidth, imageHeight)
-				paperAgentSetImageResult(requestId, true)
-				paperAgentRemoveImageArtifact(requestId)
-				paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "error")
-				return
-			}
-			var pending = paperAgentPendingImageRequests[requestId]
-			if (!pending || !pending.controller || !pending.bounds) {
-				console.log("paper-agent rejected image for stale page", requestId)
-				paperAgentSetImageResult(requestId, true)
-				paperAgentRemoveImageArtifact(requestId)
-				paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "error")
-				return
-			}
-			var currentView = ~&6504254477&~
-			if (!currentView || currentView.controller !== pending.controller
-					|| (pending.pageId && String(currentView.pageId) !== pending.pageId)) {
-				console.log("paper-agent rejected image after page changed", requestId)
-				paperAgentSetImageResult(requestId, true)
-				paperAgentRemoveImageArtifact(requestId)
-				paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "error")
-				return
-			}
-			var insert = pending.controller["insertImageFileAsSceneItem"]
-			if (typeof insert !== "function") {
-				console.log("paper-agent native image API unavailable")
-				paperAgentSetImageResult(requestId, true)
-				paperAgentRemoveImageArtifact(requestId)
-				paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "error")
-				return
-			}
-			try {
-				var insertionPoint = paperAgentImagePoint(pending, imageWidth, imageHeight)
-				paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "inserting")
-				var filePath = "/home/root/paper-agent/native/artifacts/" + requestId + ".png"
-				var fileUrl = Qt.resolvedUrl("file://" + filePath)
-				pending.controller["insertImageFileAsSceneItem"](fileUrl, insertionPoint)
-				// Xochitl reads the local file synchronously into a QImage before
-				// scheduling its Scene update, so the source artifact is no longer
-				// referenced after this call returns.
-				paperAgentRemoveImageArtifact(requestId)
-				paperAgentSetImageResult(requestId, false)
-				console.log("paper-agent scheduled native image insertion", requestId,
-					insertionPoint.x, insertionPoint.y, imageWidth, imageHeight)
-			} catch (error) {
-				console.log("paper-agent native image insertion failed", String(error))
-				paperAgentSetImageResult(requestId, true)
-				paperAgentRemoveImageArtifact(requestId)
-				paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "error")
-			}
 		}
 	}
 
@@ -572,6 +389,190 @@ AFFECT [[1224665461898798997]]
 		property int paperAgentPageCountBefore: -1
 		property int paperAgentPageBefore: -1
 		property int paperAgentPagePollAttempts: 0
+		property var paperAgentPersistentImageRequests: ({})
+		property var paperAgentPersistentImageResults: ({})
+
+		function paperAgentImageAckPath(requestId, failed) {
+			return "/run/paper-agent-image-" + String(requestId)
+				+ (failed ? ".error" : ".ack")
+		}
+
+		function paperAgentTouchImageResult(requestId, failed) {
+			try {
+				paperAgentPageCommandExecutor.executeCommand("/usr/bin/touch",
+					[paperAgentImageAckPath(requestId, failed)])
+			} catch (error) {
+				console.log("paper-agent image acknowledgement failed", String(error))
+			}
+		}
+
+		function paperAgentSetImageResult(requestId, failed) {
+			var results = paperAgentPersistentImageResults
+			results[String(requestId)] = failed ? "error" : "ack"
+			paperAgentPersistentImageResults = results
+			paperAgentTouchImageResult(requestId, failed)
+		}
+
+		function paperAgentRepeatImageResult(requestId) {
+			var result = paperAgentPersistentImageResults[String(requestId)]
+			if (result !== "ack" && result !== "error") return false
+			paperAgentTouchImageResult(requestId, result === "error")
+			return true
+		}
+
+		function paperAgentForgetPersistentImageRequest(requestId) {
+			var key = String(requestId)
+			var pending = paperAgentPersistentImageRequests
+			if (pending[key]) delete pending[key]
+			paperAgentPersistentImageRequests = pending
+			var results = paperAgentPersistentImageResults
+			if (results[key]) delete results[key]
+			paperAgentPersistentImageResults = results
+		}
+
+		function paperAgentPersistentImagePoint(pending, imageWidth, imageHeight) {
+			var bounds = pending.bounds
+			var paper = pending.paper
+			var gap = 32
+			var halfWidth = imageWidth / 2
+			var halfHeight = imageHeight / 2
+			var x = bounds.x + bounds.width / 2
+			var below = bounds.y + bounds.height + gap + halfHeight
+			var above = bounds.y - gap - halfHeight
+			var y = below
+			if (paper && isFinite(paper.x) && isFinite(paper.y)
+					&& isFinite(paper.width) && isFinite(paper.height)) {
+				var left = paper.x + 24 + halfWidth
+				var right = paper.x + paper.width - 24 - halfWidth
+				var top = paper.y + 24 + halfHeight
+				var bottom = paper.y + paper.height - 24 - halfHeight
+				x = Math.max(left, Math.min(right, pending.newPage
+					? paper.x + paper.width / 2 : x))
+				if (pending.newPage) y = top
+				else if (below > bottom && above >= top) y = above
+				else y = Math.max(top, Math.min(bottom, below))
+			}
+			return Qt.point(x, y)
+		}
+
+		function paperAgentUpdateImageTargetForCurrentPage(requestId, newPage) {
+			var view = ~&6504254477&~
+			var pending = paperAgentPersistentImageRequests[String(requestId)]
+			if (!pending || !view || !view.controller) return false
+			var paper = view.controller.paperNoteBounds || view.controller.boundingRect || null
+			pending.controller = view.controller
+			pending.pageId = view.pageId !== undefined ? String(view.pageId) : ""
+			pending.paper = paper ? {
+				x: Number(paper.x), y: Number(paper.y),
+				width: Number(paper.width), height: Number(paper.height)
+			} : null
+			pending.newPage = !!newPage
+			paperAgentPersistentImageRequests[String(requestId)] = pending
+			return true
+		}
+
+		XoviMessageBroker {
+			id: paperAgentPersistentImageBroker
+			listeningFor: ["paper-agent$image-target", "paper-agent$image",
+				"paper-agent$page", "paper-agent$request"]
+			function onSignalReceived(signal, message) {
+				var fields = String(message).split(",")
+				var requestId = fields[0]
+				if (!/^[0-9]{10,20}$/.test(requestId)) return
+				if (signal === "paper-agent$image-target") {
+					if (fields.length === 2 && fields[1] === "cancel") {
+						paperAgentForgetPersistentImageRequest(requestId)
+						return
+					}
+					if (fields.length !== 5) return
+					var view = ~&6504254477&~
+					var x = Number(fields[1])
+					var y = Number(fields[2])
+					var width = Number(fields[3])
+					var height = Number(fields[4])
+					if (!view || !view.controller || !isFinite(x) || !isFinite(y)
+							|| !isFinite(width) || !isFinite(height)
+							|| width <= 0 || height <= 0) return
+					var paper = view.controller.paperNoteBounds
+						|| view.controller.boundingRect || null
+					var pending = paperAgentPersistentImageRequests
+					pending[requestId] = {
+						controller: view.controller,
+						pageId: view.pageId !== undefined ? String(view.pageId) : "",
+						bounds: {x: x, y: y, width: width, height: height},
+						paper: paper ? {
+							x: Number(paper.x), y: Number(paper.y),
+							width: Number(paper.width), height: Number(paper.height)
+						} : null,
+						newPage: false
+					}
+					paperAgentPersistentImageRequests = pending
+					var results = paperAgentPersistentImageResults
+					if (results[requestId]) delete results[requestId]
+					paperAgentPersistentImageResults = results
+					console.log("paper-agent persistent image target ready", requestId,
+						view.pageId, x, y, width, height)
+					return
+				}
+				if (signal === "paper-agent$request") {
+					if (fields.length === 2 && (fields[1] === "done" || fields[1] === "error"))
+						paperAgentForgetPersistentImageRequest(requestId)
+					return
+				}
+				if (signal === "paper-agent$page") {
+					if (fields.length === 3 && fields[1] === "ready"
+							&& /^[0-9]{1,2}$/.test(fields[2])
+							&& paperAgentUpdateImageTargetForCurrentPage(requestId, true))
+						console.log("paper-agent moved persistent image target to new page", requestId)
+					return
+				}
+				if (signal !== "paper-agent$image") return
+				if (paperAgentRepeatImageResult(requestId)) return
+				if (fields.length !== 3 || !/^[0-9]{2,4}$/.test(fields[1])
+						|| !/^[0-9]{2,4}$/.test(fields[2])) {
+					paperAgentSetImageResult(requestId, true)
+					paperAgentPersistentImageBroker.sendSimpleSignal("paper-agent$status", "error")
+					return
+				}
+				var imageWidth = Number(fields[1])
+				var imageHeight = Number(fields[2])
+				var pending = paperAgentPersistentImageRequests[requestId]
+				if (imageWidth < 32 || imageHeight < 32 || imageWidth > 800 || imageHeight > 800
+						|| !pending || !pending.controller || !pending.bounds) {
+					console.log("paper-agent rejected unavailable persistent image target", requestId)
+					paperAgentSetImageResult(requestId, true)
+					paperAgentPersistentImageBroker.sendSimpleSignal("paper-agent$status", "error")
+					return
+				}
+				var currentView = ~&6504254477&~
+				if (!currentView || currentView.controller !== pending.controller
+						|| (pending.pageId && String(currentView.pageId) !== pending.pageId)) {
+					console.log("paper-agent rejected image after page changed", requestId)
+					paperAgentSetImageResult(requestId, true)
+					paperAgentPersistentImageBroker.sendSimpleSignal("paper-agent$status", "error")
+					return
+				}
+				if (typeof pending.controller["insertImageFileAsSceneItem"] !== "function") {
+					console.log("paper-agent native image API unavailable")
+					paperAgentSetImageResult(requestId, true)
+					paperAgentPersistentImageBroker.sendSimpleSignal("paper-agent$status", "error")
+					return
+				}
+				try {
+					var point = paperAgentPersistentImagePoint(pending, imageWidth, imageHeight)
+					var filePath = "/home/root/paper-agent/native/artifacts/" + requestId + ".png"
+					pending.controller["insertImageFileAsSceneItem"](
+						Qt.resolvedUrl("file://" + filePath), point)
+					paperAgentSetImageResult(requestId, false)
+					console.log("paper-agent scheduled persistent image insertion", requestId,
+						point.x, point.y, imageWidth, imageHeight)
+				} catch (error) {
+					console.log("paper-agent native image insertion failed", String(error))
+					paperAgentSetImageResult(requestId, true)
+					paperAgentPersistentImageBroker.sendSimpleSignal("paper-agent$status", "error")
+				}
+			}
+		}
 
 		function paperAgentPageAckPath(requestId, sequence, failed) {
 			return "/run/paper-agent-page-" + requestId + "-" + sequence
