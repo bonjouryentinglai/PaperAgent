@@ -137,6 +137,9 @@ function selfTest() {
       !== "/run/paper-agent-image-1234567890123.ack") {
     throw new Error("image-insertion acknowledgement path failed");
   }
+  if (streamJobStem("1784451570211-1", 2) !== "stream-1784451570211-1-2") {
+    throw new Error("streaming writer job path contract failed");
+  }
   if (!SYSTEM_PROMPT.includes("geometrically normalize it")
       || !SYSTEM_PROMPT.includes("Make circles rounder")) {
     throw new Error("Beautify geometry-normalization rule is missing");
@@ -215,6 +218,16 @@ function pageAckPathFor(selectionPath, sequence, error = false) {
 
 function imageAckPathFor(selectionPath, error = false) {
   return `/run/paper-agent-image-${artifactIdFor(selectionPath)}.${error ? "error" : "ack"}`;
+}
+
+function streamJobStem(turnId, sequence) {
+  if (!/^\d{10,20}-\d{1,9}$/u.test(String(turnId))
+      || !Number.isSafeInteger(sequence) || sequence < 1 || sequence > 4096) {
+    throw new Error("invalid streaming writer job id");
+  }
+  // The guarded ARM64 writer accepts only stream-*.strokes files from JOBS.
+  // Keep render inputs on that same stem so retries and cleanup stay atomic.
+  return `stream-${turnId}-${sequence}`;
 }
 
 function delay(milliseconds) {
@@ -568,7 +581,7 @@ async function renderJob(turn, text, kind, scalePercent = null) {
   const body = text.trim();
   if (!body) throw new Error("Paper Agent returned an empty reply");
   const renderSequence = ++turn.renderSequence;
-  const stem = `render-${turn.id}-${renderSequence}`;
+  const stem = streamJobStem(turn.id, renderSequence);
   const input = path.join(JOBS, `${stem}.${kind}`);
   const job = path.join(JOBS, `${stem}.strokes`);
   turn.temp.add(input);
