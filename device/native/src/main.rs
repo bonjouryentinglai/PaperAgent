@@ -17,8 +17,12 @@ USAGE:
   paper-agent-native probe
   paper-agent-native dry-run JOB [X_MIN X_MAX Y_MIN Y_MAX]
   paper-agent-native render-text INPUT JOB X Y WIDTH HEIGHT [CANVAS_WIDTH CANVAS_HEIGHT]
+  paper-agent-native render-text-scaled INPUT JOB X Y WIDTH HEIGHT SCALE_PERCENT [CANVAS_WIDTH CANVAS_HEIGHT]
+  paper-agent-native render-beautify-text INPUT JOB X Y WIDTH HEIGHT [CANVAS_WIDTH CANVAS_HEIGHT]
   paper-agent-native render-document INPUT JOB X Y WIDTH HEIGHT [CANVAS_WIDTH CANVAS_HEIGHT]
+  paper-agent-native render-document-scaled INPUT JOB X Y WIDTH HEIGHT SCALE_PERCENT [CANVAS_WIDTH CANVAS_HEIGHT]
   paper-agent-native render-table INPUT JOB X Y WIDTH HEIGHT [CANVAS_WIDTH CANVAS_HEIGHT]
+  paper-agent-native render-table-scaled INPUT JOB X Y WIDTH HEIGHT SCALE_PERCENT [CANVAS_WIDTH CANVAS_HEIGHT]
   paper-agent-native render-vector INPUT JOB X Y WIDTH HEIGHT [CANVAS_WIDTH CANVAS_HEIGHT]
   paper-agent-native prepare-image INPUT OUTPUT MAX_WIDTH MAX_HEIGHT
   paper-agent-native write JOB --confirm PAPER_AGENT_NATIVE_WRITE_V1
@@ -43,8 +47,12 @@ fn dispatch() -> Result<(), String> {
         Some("probe") => probe(),
         Some("dry-run") => dry_run(&args[2..]),
         Some("render-text") => render_text(&args[2..]),
+        Some("render-text-scaled") => render_text_scaled(&args[2..]),
+        Some("render-beautify-text") => render_beautify_text(&args[2..]),
         Some("render-document") => render_structured(&args[2..], "document"),
+        Some("render-document-scaled") => render_structured_scaled(&args[2..], "document"),
         Some("render-table") => render_structured(&args[2..], "table"),
+        Some("render-table-scaled") => render_structured_scaled(&args[2..], "table"),
         Some("render-vector") => render_structured(&args[2..], "vector"),
         Some("prepare-image") => prepare_image(&args[2..]),
         Some("write") => write(&args[2..]),
@@ -76,8 +84,37 @@ fn prepare_image(args: &[String]) -> Result<(), String> {
 }
 
 fn render_text(args: &[String]) -> Result<(), String> {
+    render_text_kind(args, false)
+}
+
+fn render_beautify_text(args: &[String]) -> Result<(), String> {
+    render_text_kind(args, true)
+}
+
+fn render_text_scaled(args: &[String]) -> Result<(), String> {
+    if args.len() != 7 && args.len() != 9 {
+        return Err(format!(
+            "render-text-scaled requires 7 or 9 arguments\n\n{USAGE}"
+        ));
+    }
+    let input =
+        fs::read_to_string(&args[0]).map_err(|e| format!("cannot read {}: {e}", args[0]))?;
+    let target = parse_target(args)?;
+    let scale_percent = parse_scale_percent(&args[6])?;
+    let (canvas_width, canvas_height) = parse_canvas(args, 7)?;
+    let job =
+        renderer::text_to_job_scaled(&input, target, canvas_width, canvas_height, scale_percent)?;
+    write_rendered_job(&args[1], &job, "render-text-scaled", Some(scale_percent))
+}
+
+fn render_text_kind(args: &[String], beautify: bool) -> Result<(), String> {
     if args.len() != 6 && args.len() != 8 {
-        return Err(format!("render-text requires 6 or 8 arguments\n\n{USAGE}"));
+        let command = if beautify {
+            "render-beautify-text"
+        } else {
+            "render-text"
+        };
+        return Err(format!("{command} requires 6 or 8 arguments\n\n{USAGE}"));
     }
     let input =
         fs::read_to_string(&args[0]).map_err(|e| format!("cannot read {}: {e}", args[0]))?;
@@ -95,9 +132,20 @@ fn render_text(args: &[String]) -> Result<(), String> {
     } else {
         (954, 1696)
     };
-    let job = renderer::text_to_job(&input, target, canvas_width, canvas_height)?;
+    let job = if beautify {
+        renderer::beautify_text_to_job(&input, target, canvas_width, canvas_height)?
+    } else {
+        renderer::text_to_job(&input, target, canvas_width, canvas_height)?
+    };
     job.write_to(Path::new(&args[1]))?;
-    println!("mode=render-text");
+    println!(
+        "mode={}",
+        if beautify {
+            "render-beautify-text"
+        } else {
+            "render-text"
+        }
+    );
     println!("writes_performed=0");
     println!("output={}", args[1]);
     println!("canvas={}x{}", job.canvas_width, job.canvas_height);
@@ -144,6 +192,93 @@ fn render_structured(args: &[String], kind: &str) -> Result<(), String> {
     println!("strokes={}", job.strokes.len());
     println!("points={}", job.point_count());
     let (min_x, min_y, max_x, max_y) = job_bounds(&job);
+    println!("pixel_bounds={min_x},{min_y}..{max_x},{max_y}");
+    Ok(())
+}
+
+fn render_structured_scaled(args: &[String], kind: &str) -> Result<(), String> {
+    if args.len() != 7 && args.len() != 9 {
+        return Err(format!(
+            "render-{kind}-scaled requires 7 or 9 arguments\n\n{USAGE}"
+        ));
+    }
+    let input =
+        fs::read_to_string(&args[0]).map_err(|e| format!("cannot read {}: {e}", args[0]))?;
+    let target = parse_target(args)?;
+    let scale_percent = parse_scale_percent(&args[6])?;
+    let (canvas_width, canvas_height) = parse_canvas(args, 7)?;
+    let job = match kind {
+        "document" => renderer::document_to_job_scaled(
+            &input,
+            target,
+            canvas_width,
+            canvas_height,
+            scale_percent,
+        )?,
+        "table" => renderer::table_to_job_scaled(
+            &input,
+            target,
+            canvas_width,
+            canvas_height,
+            scale_percent,
+        )?,
+        _ => return Err(format!("unsupported scaled renderer '{kind}'")),
+    };
+    write_rendered_job(
+        &args[1],
+        &job,
+        &format!("render-{kind}-scaled"),
+        Some(scale_percent),
+    )
+}
+
+fn parse_target(args: &[String]) -> Result<Target, String> {
+    Ok(Target {
+        x: parse_i32(&args[2], "X")?,
+        y: parse_i32(&args[3], "Y")?,
+        width: parse_u32(&args[4], "WIDTH")?,
+        height: parse_u32(&args[5], "HEIGHT")?,
+    })
+}
+
+fn parse_canvas(args: &[String], optional_start: usize) -> Result<(u32, u32), String> {
+    if args.len() == optional_start + 2 {
+        Ok((
+            parse_u32(&args[optional_start], "CANVAS_WIDTH")?,
+            parse_u32(&args[optional_start + 1], "CANVAS_HEIGHT")?,
+        ))
+    } else {
+        Ok((954, 1696))
+    }
+}
+
+fn parse_scale_percent(value: &str) -> Result<u8, String> {
+    let scale = value
+        .parse::<u8>()
+        .map_err(|_| format!("invalid SCALE_PERCENT '{value}'"))?;
+    if !(60..=100).contains(&scale) {
+        return Err("SCALE_PERCENT must be within 60..=100".into());
+    }
+    Ok(scale)
+}
+
+fn write_rendered_job(
+    output: &str,
+    job: &StrokeJob,
+    mode: &str,
+    scale_percent: Option<u8>,
+) -> Result<(), String> {
+    job.write_to(Path::new(output))?;
+    println!("mode={mode}");
+    if let Some(scale) = scale_percent {
+        println!("scale_percent={scale}");
+    }
+    println!("writes_performed=0");
+    println!("output={output}");
+    println!("canvas={}x{}", job.canvas_width, job.canvas_height);
+    println!("strokes={}", job.strokes.len());
+    println!("points={}", job.point_count());
+    let (min_x, min_y, max_x, max_y) = job_bounds(job);
     println!("pixel_bounds={min_x},{min_y}..{max_x},{max_y}");
     Ok(())
 }
@@ -317,7 +452,7 @@ fn parse_u32(value: &str, label: &str) -> Result<u32, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::is_allowed_streaming_job_path;
+    use super::{is_allowed_streaming_job_path, parse_scale_percent};
 
     #[test]
     fn streaming_job_path_accepts_only_stream_jobs() {
@@ -343,5 +478,13 @@ mod tests {
         assert!(!is_allowed_streaming_job_path(
             "/home/root/paper-agent/native/jobs/stream-1784379886992-1.json"
         ));
+    }
+
+    #[test]
+    fn scaled_layout_accepts_only_sixty_through_one_hundred_percent() {
+        assert_eq!(parse_scale_percent("60").unwrap(), 60);
+        assert_eq!(parse_scale_percent("100").unwrap(), 100);
+        assert!(parse_scale_percent("59").is_err());
+        assert!(parse_scale_percent("101").is_err());
     }
 }

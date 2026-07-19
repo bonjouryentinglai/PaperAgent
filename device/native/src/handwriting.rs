@@ -11,7 +11,10 @@ use std::sync::OnceLock;
 const LATIN_TTF: &[u8] = include_bytes!("../assets/fonts/Kalam-Regular.ttf");
 const CJK_HAND_TTF: &[u8] = include_bytes!("../assets/fonts/ChenYuluoyan-2.0-Thin.ttf");
 const CJK_FALLBACK_TTF: &[u8] = include_bytes!("../assets/fonts/jf-openhuninn-2.1.ttf");
-const DEFAULT_CJK_SCALE: f32 = 0.78;
+const DEFAULT_CJK_SCALE: f32 = 0.86;
+// Simplify pixel-scale deviations into straight Marker segments without moving
+// real corners, unlike the previous rolling average which bowed thin glyphs.
+const TRACE_SIMPLIFY_EPSILON: f32 = 1.25;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Face {
@@ -51,18 +54,39 @@ pub fn supports_cjk_char(ch: char) -> bool {
 }
 
 fn face_for(ch: char, px: f32) -> (Face, GlyphId, f32) {
+    let is_cjk = is_cjk(ch);
+    if !is_cjk {
+        let latin_id = latin().glyph_id(ch);
+        if latin_id.0 != 0 {
+            return (Face::Latin, latin_id, px);
+        }
+    }
+
+    let hand_px = if is_cjk {
+        (px * cjk_scale()).max(1.0)
+    } else {
+        px
+    };
+    let hand_id = cjk_hand().glyph_id(ch);
+    if hand_id.0 != 0 {
+        return (Face::CjkHand, hand_id, hand_px);
+    }
+
+    if is_cjk {
+        let fallback_id = cjk_fallback().glyph_id(ch);
+        if fallback_id.0 != 0 {
+            return (Face::CjkFallback, fallback_id, hand_px);
+        }
+    }
+
     let latin_id = latin().glyph_id(ch);
     if latin_id.0 != 0 {
         return (Face::Latin, latin_id, px);
     }
-    let cjk_px = (px * cjk_scale()).max(1.0);
-    let hand_id = cjk_hand().glyph_id(ch);
-    if hand_id.0 != 0 {
-        return (Face::CjkHand, hand_id, cjk_px);
-    }
+
     let fallback_id = cjk_fallback().glyph_id(ch);
     if fallback_id.0 != 0 {
-        return (Face::CjkFallback, fallback_id, cjk_px);
+        return (Face::CjkFallback, fallback_id, hand_px);
     }
     (Face::Latin, latin().glyph_id('?'), px)
 }
@@ -261,7 +285,7 @@ pub fn trace_line(mut line: RasterLine) -> Vec<Vec<(i32, i32)>> {
     skeleton::thin_zhang_suen(&mut line.pixels);
     let mut paths: Vec<Vec<(i32, i32)>> = skeleton::trace_skeleton(&line.pixels)
         .into_iter()
-        .map(|path| skeleton::smooth_path(&path, 3))
+        .map(|path| skeleton::simplify_path(&path, TRACE_SIMPLIFY_EPSILON))
         .map(|path| {
             let mut result = Vec::new();
             for (x, y) in path {
@@ -293,5 +317,12 @@ mod tests {
         let line = rasterize_line("你好, Paper Agent", 52.0);
         assert!(line.pixels.iter().flatten().any(|pixel| *pixel));
         assert!(!trace_line(line).is_empty());
+    }
+
+    #[test]
+    fn latin_uses_kalam_and_chinese_uses_chen_yu_luoyan() {
+        assert_eq!(face_for('A', 52.0).0, Face::Latin);
+        assert_eq!(face_for('你', 52.0).0, Face::CjkHand);
+        assert_eq!(TRACE_SIMPLIFY_EPSILON, 1.25);
     }
 }

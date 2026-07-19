@@ -14,6 +14,8 @@ node --check device/runtime/native-oracle-client.mjs
 node --check device/runtime/rich-document.mjs
 node --test device/runtime/rich-document.test.mjs
 node --test device/runtime/image-generate.test.mjs
+node --check device/runtime/layout-policy.mjs
+node --test device/runtime/layout-policy.test.mjs
 
 sh -n device/runtime/native-oracle-service.sh
 sh -n device/runtime/native-selection-prepare.sh
@@ -45,15 +47,18 @@ After an install, verify separately:
 
 1. AI text in English, Traditional Chinese and mixed text.
 2. A calculation with a short result.
-3. A two- and four-column table at several selection positions.
+3. A two- and four-column table at several selection positions; confirm every
+   cell is horizontally and vertically centered.
 4. Lines, arrows, open/closed polylines, quadratic/cubic curves, rounded
    rectangles, arcs, dots and hatch-filled polygon/ellipse/pie shapes.
 5. One mixed answer containing a heading, list, bold and inline code, fenced
    code, a table and a vector block in the expected order.
 6. Beautify text does not answer a question embedded in the selection; it
-   preserves the selected source and writes the transcription below it.
-7. Beautify drawing preserves the selected sketch and writes a faithful movable
-   vector reconstruction below it.
+   preserves the selected source and writes the transcription below it at
+   approximately the lasso's original width, height and visual scale.
+7. Beautify a deliberately rough circle/box/arrow mind map. Confirm the result
+   preserves labels and connections while making circles round, boxes level,
+   connectors straight and repeated nodes consistent.
 8. Test an offline or forced-error Beautify request and confirm the source
    remains unchanged.
 9. Test Undo/Redo after both Beautify routes.
@@ -62,7 +67,12 @@ After an install, verify separately:
    and resize it, then test Undo/Redo, close/reopen, reboot, export and sync.
 12. Start a GPT image request and change pages before it finishes; Paper Agent
     must reject the stale insertion and remove its temporary artifact.
-13. Undo, move, resize, page save, reopen and sync behavior for native ink.
+13. AI adaptive layout: verify a short answer remains at 100%, a longer answer
+    fits between 60% and 99%, and a result that cannot fit at 60% creates a new
+    native page and returns to 100% there.
+14. Beautify a lasso near the page bottom whose same-size result cannot fit;
+    confirm Xochitl creates a new page and preserves the lasso-based visual size.
+15. Undo, move, resize, page save, reopen and sync behavior for native ink.
 
 Vector acceptance should also confirm that hatch density remains readable at
 small and large placements. Paper Agent deliberately keeps the active Xochitl

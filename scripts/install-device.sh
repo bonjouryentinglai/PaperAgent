@@ -41,6 +41,8 @@ file "$BIN" | grep -Eq 'ARM aarch64|ARM64' || {
 "$NODE_CHECK" --test "$ROOT/device/runtime/rich-document.test.mjs"
 "$NODE_CHECK" --check "$ROOT/device/runtime/image-generate.mjs"
 "$NODE_CHECK" --test "$ROOT/device/runtime/image-generate.test.mjs"
+"$NODE_CHECK" --check "$ROOT/device/runtime/layout-policy.mjs"
+"$NODE_CHECK" --test "$ROOT/device/runtime/layout-policy.test.mjs"
 sh -n "$ROOT/device/runtime/native-oracle-service.sh"
 sh -n "$ROOT/device/runtime/native-selection-prepare.sh"
 sh -n "$ROOT/device/runtime/native-selection-write.sh"
@@ -70,7 +72,7 @@ STATE_ROOT="$BASE/backups"
 STAMP=$(date +%Y%m%d-%H%M%S)
 BACKUP="$STATE_ROOT/install-$STAMP"
 INCOMING="$BASE/.install-incoming.$$"
-FILES='paper-agent-native native-oracle-client.mjs native-oracle-server.mjs native-oracle-service.sh native-selection-prepare.sh native-selection-write.sh rich-document.mjs rich-document.test.mjs image-generate.mjs image-generate.test.mjs'
+FILES='paper-agent-native native-oracle-client.mjs native-oracle-server.mjs native-oracle-service.sh native-selection-prepare.sh native-selection-write.sh rich-document.mjs rich-document.test.mjs image-generate.mjs image-generate.test.mjs layout-policy.mjs layout-policy.test.mjs'
 
 test -x /home/root/node/bin/node
 test -x /home/root/node/bin/pi
@@ -145,12 +147,17 @@ cp "$INCOMING/assets/icons/paper-agent-ai.svg" "$ICONS/paper-agent-ai.svg"
 cp "$INCOMING/assets/icons/paper-agent-beautify.svg" "$ICONS/paper-agent-beautify.svg"
 grep -q '<svg' "$ICONS/paper-agent-ai.svg"
 grep -q '<svg' "$ICONS/paper-agent-beautify.svg"
-for name in native-oracle-client.mjs native-oracle-server.mjs native-oracle-service.sh native-selection-prepare.sh native-selection-write.sh rich-document.mjs rich-document.test.mjs image-generate.mjs image-generate.test.mjs; do
+for name in native-oracle-client.mjs native-oracle-server.mjs native-oracle-service.sh native-selection-prepare.sh native-selection-write.sh rich-document.mjs rich-document.test.mjs image-generate.mjs image-generate.test.mjs layout-policy.mjs layout-policy.test.mjs; do
   cp "$INCOMING/runtime/$name" "$NATIVE/$name"
 done
 cp "$INCOMING/paper-agent-native-oracle.service" "$UNIT"
 cp "$INCOMING/paper-agent-selection.qmd" "$QMD_FILE"
 if [ ! -f "$CONFIG" ]; then cp "$INCOMING/paper-agent.env.example" "$CONFIG"; fi
+# 0.78 was Paper Agent's previous bundled default. Move existing installs to
+# the new readable CJK size while preserving every user-selected custom value.
+if grep -qx 'PAPER_AGENT_CJK_SCALE=0.78' "$CONFIG"; then
+  sed -i 's/^PAPER_AGENT_CJK_SCALE=0\.78$/PAPER_AGENT_CJK_SCALE=0.86/' "$CONFIG"
+fi
 chmod 0755 "$NATIVE/paper-agent-native" "$NATIVE/native-oracle-service.sh" "$NATIVE/native-selection-prepare.sh" "$NATIVE/native-selection-write.sh"
 chmod 0644 "$NATIVE/"*.mjs "$ICONS/"*.svg "$UNIT" "$QMD_FILE" "$CONFIG"
 chmod 0600 "$CONFIG"
@@ -190,7 +197,7 @@ sleep 12
 LOG=$(journalctl -u xochitl --since "@$START" --no-pager -o cat)
 if ! systemctl is-active --quiet xochitl \
   || printf '%s\n' "$LOG" | grep -Eq 'paperAgentSelection\.qmd.*Error|Cannot assign to non-existent property "onPaperAgent|Application is quitting' \
-  || printf '%s\n' "$LOG" | grep -Eq 'QML Image: Cannot open: file:///home/root/paper-agent/assets/icons/paper-agent-(ai|beautify)\.svg|Error decoding.*paper-agent-(ai|beautify)\.svg' \
+  || printf '%s\n' "$LOG" | grep -Eq 'Could not find "?(file:///)?/home/root/paper-agent/assets/icons/paper-agent-(ai|beautify)\.svg|QML Image: Cannot open:.*paper-agent-(ai|beautify)\.svg|Error decoding.*paper-agent-(ai|beautify)\.svg' \
   || ! printf '%s\n' "$LOG" | grep -q '\[qmldiff\].*Loading file paperAgentSelection\.qmd'; then
   rollback
   echo "Paper Agent install rolled back: QMD validation failed" >&2

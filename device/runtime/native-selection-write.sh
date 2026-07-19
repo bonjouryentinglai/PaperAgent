@@ -9,11 +9,17 @@ set -eu
 if [ "$#" -eq 5 ]; then
   # Compatibility during a runtime-first upgrade from the one-button QMD.
   ACTION=ai
+  NEW_PAGE_REQUIRED=0
 elif [ "$#" -eq 6 ]; then
   ACTION=$1
   shift
+  NEW_PAGE_REQUIRED=0
+elif [ "$#" -eq 7 ]; then
+  ACTION=$1
+  NEW_PAGE_REQUIRED=$7
+  set -- "$2" "$3" "$4" "$5" "$6"
 else
-  echo "usage: $0 ACTION SELECTION.png X Y WIDTH HEIGHT" >&2
+  echo "usage: $0 ACTION SELECTION.png X Y WIDTH HEIGHT NEW_PAGE_REQUIRED" >&2
   exit 2
 fi
 
@@ -34,6 +40,10 @@ FINAL_STATUS=error
 case "$ACTION" in
   ai|beautify) ;;
   *) echo "unsupported Paper Agent action: $ACTION" >&2; exit 2 ;;
+esac
+case "$NEW_PAGE_REQUIRED" in
+  0|1) ;;
+  *) echo "new-page policy must be 0 or 1" >&2; exit 2 ;;
 esac
 
 send_status() {
@@ -148,7 +158,7 @@ test "$magic" = "89504e470d0a1a0a" || { echo "selection screenshot is not PNG" >
 # The oracle repeats this acknowledged guard immediately before every job.
 ensure_primary_pen 0
 if [ -x "$NODE" ] && [ -f "$STREAM_CLIENT" ]; then
-  if "$NODE" "$STREAM_CLIENT" "$ACTION" "$PNG" "$X" "$Y" "$WIDTH" "$HEIGHT"; then
+  if "$NODE" "$STREAM_CLIENT" "$ACTION" "$PNG" "$X" "$Y" "$WIDTH" "$HEIGHT" "$NEW_PAGE_REQUIRED"; then
     FINAL_STATUS=done
     echo "native_writeback=streaming-complete"
     exit 0
@@ -160,6 +170,11 @@ if [ -x "$NODE" ] && [ -f "$STREAM_CLIENT" ]; then
     fi
     echo "resident native oracle unavailable; using one-shot fallback" >&2
   fi
+fi
+
+if [ "$NEW_PAGE_REQUIRED" -eq 1 ]; then
+  echo "resident native oracle is required for safe new-page placement" >&2
+  exit 1
 fi
 
 "$PREPARE" "$ACTION" "$PNG" "$X" "$Y" "$WIDTH" "$HEIGHT" "$JOB"

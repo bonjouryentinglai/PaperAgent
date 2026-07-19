@@ -25,12 +25,12 @@ ordinary strokes. Raster output uses Xochitl's native notebook-image path.
 | Capability | Status |
 |---|---|
 | Native selection actions | Original AI-sparkle and Beautify-wand SVG icons packaged with the QMD integration |
-| AI answers and calculations | Implemented; streams sentence-sized native ink |
+| AI answers and calculations | Implemented; complete answers are preflighted at 100%, may shrink only to 60%, then use a new native page at 100% |
 | Rich and mixed answers | Implemented locally; headings, paragraphs, lists, bold, inline/fenced code, tables and vectors; device acceptance pending |
-| Handwriting fonts | Kalam Regular for Latin; ChenYuLuoyan 2.0 Thin for Chinese, with jf open 粉圓 2.1 fallback |
-| Native tables | Implemented in the bounded local renderer; device acceptance pending |
+| Handwriting fonts | Kalam Regular for Latin; ChenYuLuoyan 2.0 Thin for Chinese, with jf open 粉圓 2.1 fallback and straight-segment skeleton simplification |
+| Native tables | Implemented with centered cell text and the shared AI body-size policy; device acceptance pending |
 | Native vector figures | Bounded non-executable DSL with lines, polygons, sampled curves, rounded shapes, arcs and sparse hatch fills; device acceptance pending |
-| Beautify text or sketch | Preserves the source and writes a complete validated text/vector result below it; physical acceptance pending |
+| Beautify text or sketch | Preserves the source, normalizes rough geometry, and writes into a lasso-sized box below or on a new native page; physical acceptance pending |
 | GPT raster images | Implemented locally: ChatGPT OAuth, `gpt-image-2`, bounded PNG normalization and Xochitl 3.27 native image insertion; physical acceptance pending |
 | One-click install and settings UI | Planned |
 
@@ -89,8 +89,13 @@ to be measured before choosing a faster default.
 - The local oracle socket is owner-only and accepts only bounded selection PNGs
   under Paper Agent's runtime directory.
 - Model output is parsed into non-executable result formats before rendering.
+- AI text, rich documents and tables share one visual body size. Layout starts
+  at 100%, may shrink only as far as 60%, and otherwise requests a real native
+  notebook page before rendering again at 100%.
 - Beautify never deletes or edits the lassoed source; it accepts only complete,
-  validated text/vector output and uses the same guarded write-below path as AI.
+  validated text/vector output and keeps the lasso-sized destination. If that
+  box does not fit below, it is placed on a newly created native page without
+  shrinking merely because the old page ran out of room.
 - Generated images are decoded, dimension- and memory-bounded, normalized to
   RGBA PNG and inserted only into the page that originated the request.
 - The native writer requires the Move hardware identity, active Xochitl, a

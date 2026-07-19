@@ -7,8 +7,8 @@ const SOCKET = process.env.PAPER_AGENT_NATIVE_SOCKET || "/run/paper-agent-native
 const args = process.argv.slice(2);
 const health = args.length === 1 && args[0] === "--health";
 
-if (!health && args.length !== 6) {
-  console.error("usage: native-oracle-client.mjs ACTION PNG X Y WIDTH HEIGHT | --health");
+if (!health && args.length !== 7) {
+  console.error("usage: native-oracle-client.mjs ACTION PNG X Y WIDTH HEIGHT NEW_PAGE_REQUIRED | --health");
   process.exit(2);
 }
 
@@ -23,6 +23,7 @@ const request = health
       y: Number(args[3]),
       width: Number(args[4]),
       height: Number(args[5]),
+      newPageRequired: args[6] === "1",
     };
 
 let accepted = false;

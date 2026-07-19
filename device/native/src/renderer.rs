@@ -10,8 +10,16 @@ use crate::traditional;
 use std::f32::consts::PI;
 
 const TEXT_MIN_PX: i32 = 26;
-const TEXT_MAX_PX: i32 = 92;
+const AI_DEFAULT_BODY_PX: i32 = 112;
+const TEXT_MAX_PX: i32 = AI_DEFAULT_BODY_PX;
 const TEXT_MARGIN: i32 = 12;
+const BEAUTIFY_TEXT_MIN_PX: i32 = 16;
+const BEAUTIFY_TEXT_MAX_PX: i32 = 360;
+const BEAUTIFY_TEXT_MARGIN: i32 = 6;
+const DOCUMENT_BASE_MIN_PX: i32 = 22;
+const DOCUMENT_BASE_MAX_PX: i32 = AI_DEFAULT_BODY_PX;
+const AI_MIN_SCALE_PERCENT: u8 = 60;
+const AI_MAX_SCALE_PERCENT: u8 = 100;
 const MAX_INPUT_CHARS: usize = 16_000;
 const MAX_OUTPUT_STROKES: usize = 4096;
 const BOLD_OFFSET: (i32, i32) = (1, 1);
@@ -111,11 +119,66 @@ pub fn text_to_job(
     build_job(strokes, canvas_width, canvas_height)
 }
 
+pub fn text_to_job_scaled(
+    text: &str,
+    target: Target,
+    canvas_width: u32,
+    canvas_height: u32,
+    scale_percent: u8,
+) -> Result<StrokeJob, String> {
+    validate_target(target, canvas_width, canvas_height)?;
+    let display = normalized_input(text)?;
+    let px = scaled_ai_body_px(scale_percent)?;
+    let strokes = render_text_box(&display, target, px, px, TEXT_MARGIN, false)?;
+    build_job(strokes, canvas_width, canvas_height)
+}
+
+/// Fit a complete Beautify transcription to the lasso-sized destination box.
+/// This deliberately has a wider size range and smaller margin than ordinary
+/// streamed answers, which use the remaining page as a flow layout.
+pub fn beautify_text_to_job(
+    text: &str,
+    target: Target,
+    canvas_width: u32,
+    canvas_height: u32,
+) -> Result<StrokeJob, String> {
+    validate_target(target, canvas_width, canvas_height)?;
+    let display = normalized_input(text)?;
+    let strokes = render_beautify_text_box(&display, target)?;
+    build_job(strokes, canvas_width, canvas_height)
+}
+
 pub fn table_to_job(
     text: &str,
     target: Target,
     canvas_width: u32,
     canvas_height: u32,
+) -> Result<StrokeJob, String> {
+    table_to_job_with_px(text, target, canvas_width, canvas_height, None)
+}
+
+pub fn table_to_job_scaled(
+    text: &str,
+    target: Target,
+    canvas_width: u32,
+    canvas_height: u32,
+    scale_percent: u8,
+) -> Result<StrokeJob, String> {
+    table_to_job_with_px(
+        text,
+        target,
+        canvas_width,
+        canvas_height,
+        Some(scaled_ai_body_px(scale_percent)?),
+    )
+}
+
+fn table_to_job_with_px(
+    text: &str,
+    target: Target,
+    canvas_width: u32,
+    canvas_height: u32,
+    fixed_px: Option<i32>,
 ) -> Result<StrokeJob, String> {
     validate_target(target, canvas_width, canvas_height)?;
     let rows = parse_table(&normalized_input(text)?)?;
@@ -127,21 +190,46 @@ pub fn table_to_job(
         return Err("table does not fit the requested placement box".into());
     }
 
+    let row_heights = if let Some(px) = fixed_px {
+        fixed_table_row_heights(&rows, columns, target.width as i32, px)?
+    } else {
+        let mut heights = Vec::with_capacity(rows.len());
+        for row in 0..rows.len() {
+            let y0 = target.height as i32 * row as i32 / rows.len() as i32;
+            let y1 = target.height as i32 * (row + 1) as i32 / rows.len() as i32;
+            heights.push(y1 - y0);
+        }
+        heights
+    };
+    let table_height = row_heights.iter().sum::<i32>();
+    if table_height > target.height as i32 {
+        return Err("table does not fit the requested placement box".into());
+    }
+
     let right = target.x + target.width as i32 - 1;
-    let bottom = target.y + target.height as i32 - 1;
+    let bottom = target.y + table_height - 1;
     let mut strokes = Vec::new();
     for column in 0..=columns {
         let x = target.x + (target.width as i32 - 1) * column as i32 / columns as i32;
         strokes.push(vec![Point { x, y: target.y }, Point { x, y: bottom }]);
     }
-    for row in 0..=rows.len() {
-        let y = target.y + (target.height as i32 - 1) * row as i32 / rows.len() as i32;
+    let mut row_edges = Vec::with_capacity(rows.len() + 1);
+    row_edges.push(target.y);
+    for height in &row_heights {
+        row_edges.push(row_edges.last().copied().unwrap_or(target.y) + *height);
+    }
+    for (index, edge) in row_edges.iter().enumerate() {
+        let y = if index == row_edges.len() - 1 {
+            bottom
+        } else {
+            *edge
+        };
         strokes.push(vec![Point { x: target.x, y }, Point { x: right, y }]);
     }
 
     for (row_index, row) in rows.iter().enumerate() {
-        let y0 = target.y + target.height as i32 * row_index as i32 / rows.len() as i32;
-        let y1 = target.y + target.height as i32 * (row_index + 1) as i32 / rows.len() as i32;
+        let y0 = row_edges[row_index];
+        let y1 = row_edges[row_index + 1];
         for column_index in 0..columns {
             let Some(cell) = row.get(column_index).filter(|cell| !cell.is_empty()) else {
                 continue;
@@ -155,7 +243,10 @@ pub fn table_to_job(
                 width: (x1 - x0 - inset * 2).max(48) as u32,
                 height: (y1 - y0 - inset * 2).max(48) as u32,
             };
-            let mut cell_strokes = render_text_box(cell, cell_target, 14, 42, 3, row_index == 0)?;
+            let (min_px, max_px) = fixed_px.map_or((14, 42), |px| (px, px));
+            let mut cell_strokes =
+                render_text_box(cell, cell_target, min_px, max_px, 3, row_index == 0)?;
+            center_strokes_in_target(&mut cell_strokes, cell_target);
             strokes.append(&mut cell_strokes);
         }
     }
@@ -350,10 +441,41 @@ pub fn document_to_job(
     canvas_width: u32,
     canvas_height: u32,
 ) -> Result<StrokeJob, String> {
+    document_to_job_with_base(text, target, canvas_width, canvas_height, None)
+}
+
+pub fn document_to_job_scaled(
+    text: &str,
+    target: Target,
+    canvas_width: u32,
+    canvas_height: u32,
+    scale_percent: u8,
+) -> Result<StrokeJob, String> {
+    document_to_job_with_base(
+        text,
+        target,
+        canvas_width,
+        canvas_height,
+        Some(scaled_ai_body_px(scale_percent)?),
+    )
+}
+
+fn document_to_job_with_base(
+    text: &str,
+    target: Target,
+    canvas_width: u32,
+    canvas_height: u32,
+    fixed_base_px: Option<i32>,
+) -> Result<StrokeJob, String> {
     validate_target(target, canvas_width, canvas_height)?;
     let blocks = parse_document_manifest(text)?;
     let mut chosen = None;
-    for base_px in (22..=42).rev() {
+    let candidates: Box<dyn Iterator<Item = i32>> = if let Some(px) = fixed_base_px {
+        Box::new(std::iter::once(px))
+    } else {
+        Box::new((DOCUMENT_BASE_MIN_PX..=DOCUMENT_BASE_MAX_PX).rev())
+    };
+    for base_px in candidates {
         let heights = document_block_heights(&blocks, target, base_px)?;
         let gap = (base_px / 2).max(10);
         let total: i32 = heights.iter().sum::<i32>() + gap * (heights.len() as i32 - 1).max(0);
@@ -381,8 +503,13 @@ pub fn document_to_job(
                 strokes.append(&mut block_strokes);
             }
             DocumentBlockKind::Table => {
-                let block_job =
-                    table_to_job(&block.body, block_target, canvas_width, canvas_height)?;
+                let block_job = table_to_job_with_px(
+                    &block.body,
+                    block_target,
+                    canvas_width,
+                    canvas_height,
+                    Some(base_px),
+                )?;
                 strokes.extend(block_job.strokes);
             }
             DocumentBlockKind::Vector => {
@@ -487,7 +614,9 @@ fn document_block_heights(
                 if target.width < columns as u32 * 72 {
                     return Err("table is too wide for the document placement box".into());
                 }
-                rows.len() as i32 * (base_px * 3 / 2).max(52)
+                fixed_table_row_heights(&rows, columns, target.width as i32, base_px)?
+                    .iter()
+                    .sum()
             }
             DocumentBlockKind::Vector => {
                 let scaled = target.width as i32 * 3 / 5 * base_px / 38;
@@ -669,7 +798,7 @@ fn rich_line_px(kind: RichLineKind, base_px: i32) -> i32 {
         RichLineKind::Code => (base_px * 4 / 5).max(18),
         _ => base_px,
     }
-    .clamp(18, 72)
+    .clamp(18, 180)
 }
 
 fn parse_rich_lines(markdown: &str) -> Vec<RichLine> {
@@ -1015,6 +1144,145 @@ fn render_text_box(
     Ok(strokes)
 }
 
+/// Beautify uses the lasso itself as a visual-size target.  The ordinary text
+/// renderer estimates each line as `font_px * 1.25`, which is intentionally
+/// conservative for streamed answers but makes a scaled CJK face look much
+/// smaller than the selected handwriting.  Here we fit the rasterized glyph
+/// bounds instead, then vertically centre those real bounds in the lasso-sized
+/// destination.
+fn render_beautify_text_box(text: &str, target: Target) -> Result<Vec<Vec<Point>>, String> {
+    let available_width = target.width as i32 - BEAUTIFY_TEXT_MARGIN * 2;
+    let available_height = target.height as i32 - BEAUTIFY_TEXT_MARGIN * 2;
+    if available_width <= 0 || available_height <= 0 {
+        return Err("text placement has no usable area".into());
+    }
+    let layout = choose_beautify_layout(
+        text,
+        BEAUTIFY_TEXT_MIN_PX,
+        BEAUTIFY_TEXT_MAX_PX,
+        available_width,
+        available_height,
+    )?;
+    let mut y = target.y + BEAUTIFY_TEXT_MARGIN + ((available_height - layout.height) / 2).max(0);
+    let mut strokes = Vec::new();
+
+    for line in layout.lines {
+        let ink_height = line.ink_height;
+        for stroke in handwriting::trace_line(line.raster) {
+            let mapped: Vec<Point> = stroke
+                .into_iter()
+                .map(|(x, line_y)| Point {
+                    x: target.x + BEAUTIFY_TEXT_MARGIN + x - line.ink_min_x,
+                    y: y + line_y - line.ink_min_y,
+                })
+                .filter(|point| contains(target, *point))
+                .collect();
+            add_stroke(&mut strokes, mapped, target, false);
+        }
+        y += ink_height + layout.line_gap;
+    }
+    if strokes.is_empty() {
+        return Err("content produced no drawable strokes".into());
+    }
+    Ok(strokes)
+}
+
+struct BeautifyLayout {
+    lines: Vec<BeautifyRasterLine>,
+    height: i32,
+    line_gap: i32,
+}
+
+struct BeautifyRasterLine {
+    raster: handwriting::RasterLine,
+    ink_min_x: i32,
+    ink_min_y: i32,
+    ink_height: i32,
+}
+
+fn choose_beautify_layout(
+    text: &str,
+    min_px: i32,
+    max_px: i32,
+    available_width: i32,
+    available_height: i32,
+) -> Result<BeautifyLayout, String> {
+    let mut low = min_px;
+    let mut high = max_px;
+    let mut best = None;
+    while low <= high {
+        let px = low + (high - low) / 2;
+        match beautify_layout_at_px(text, px, available_width, available_height) {
+            Some(layout) => {
+                best = Some(layout);
+                low = px + 1;
+            }
+            None => high = px - 1,
+        }
+    }
+    best.ok_or_else(|| "content does not fit the requested placement box".into())
+}
+
+fn beautify_layout_at_px(
+    text: &str,
+    px: i32,
+    available_width: i32,
+    available_height: i32,
+) -> Option<BeautifyLayout> {
+    let wrap_width = available_width.max(1) as f32;
+    let mut lines = Vec::new();
+    for paragraph in text.lines() {
+        if paragraph.trim().is_empty() {
+            continue;
+        }
+        for line in handwriting::wrap(paragraph, px as f32, wrap_width) {
+            let raster = handwriting::rasterize_line(&line, px as f32);
+            let (ink_min_x, ink_min_y, ink_width, ink_height) = raster_ink_bounds(&raster)?;
+            if ink_width > available_width {
+                return None;
+            }
+            lines.push(BeautifyRasterLine {
+                raster,
+                ink_min_x,
+                ink_min_y,
+                ink_height,
+            });
+        }
+    }
+    if lines.is_empty() {
+        return None;
+    }
+    let tallest_ink = lines.iter().map(|line| line.ink_height).max()?;
+    let line_gap = (tallest_ink / 10).clamp(2, 18);
+    let height = lines
+        .iter()
+        .try_fold(0i32, |sum, line| sum.checked_add(line.ink_height))?
+        .checked_add(line_gap.checked_mul(lines.len().saturating_sub(1) as i32)?)?;
+    (height <= available_height).then_some(BeautifyLayout {
+        lines,
+        height,
+        line_gap,
+    })
+}
+
+fn raster_ink_bounds(raster: &handwriting::RasterLine) -> Option<(i32, i32, i32, i32)> {
+    let mut min_x = i32::MAX;
+    let mut min_y = i32::MAX;
+    let mut max_x = i32::MIN;
+    let mut max_y = i32::MIN;
+    for (y, row) in raster.pixels.iter().enumerate() {
+        for (x, pixel) in row.iter().enumerate() {
+            if *pixel {
+                min_x = min_x.min(x as i32);
+                min_y = min_y.min(y as i32);
+                max_x = max_x.max(x as i32);
+                max_y = max_y.max(y as i32);
+            }
+        }
+    }
+    (min_x != i32::MAX).then_some((min_x, min_y, max_x - min_x + 1, max_y - min_y + 1))
+}
+
 fn choose_layout(
     text: &str,
     min_px: i32,
@@ -1058,6 +1326,73 @@ fn add_stroke(strokes: &mut Vec<Vec<Point>>, mapped: Vec<Point>, target: Target,
         }
     }
     strokes.push(mapped);
+}
+
+fn scaled_ai_body_px(scale_percent: u8) -> Result<i32, String> {
+    if !(AI_MIN_SCALE_PERCENT..=AI_MAX_SCALE_PERCENT).contains(&scale_percent) {
+        return Err(format!(
+            "AI layout scale must be within {AI_MIN_SCALE_PERCENT}..={AI_MAX_SCALE_PERCENT} percent"
+        ));
+    }
+    Ok((AI_DEFAULT_BODY_PX * scale_percent as i32 + 50) / 100)
+}
+
+fn fixed_table_row_heights(
+    rows: &[Vec<String>],
+    columns: usize,
+    target_width: i32,
+    px: i32,
+) -> Result<Vec<i32>, String> {
+    let column_width = target_width / columns as i32;
+    let usable_width = column_width - 14;
+    if usable_width <= 0 {
+        return Err("table cell has no usable text width".into());
+    }
+    let line_height = (px * 5 / 4).max(1);
+    let mut heights = Vec::with_capacity(rows.len());
+    for row in rows {
+        let line_count = row
+            .iter()
+            .filter(|cell| !cell.is_empty())
+            .map(|cell| handwriting::wrap(cell, px as f32, usable_width as f32).len())
+            .max()
+            .unwrap_or(1)
+            .max(1);
+        heights.push((line_height * line_count as i32 + 14).max(52));
+    }
+    Ok(heights)
+}
+
+fn center_strokes_in_target(strokes: &mut [Vec<Point>], target: Target) {
+    let Some((min_x, min_y, max_x, max_y)) = stroke_bounds(strokes) else {
+        return;
+    };
+    let ink_width = max_x - min_x + 1;
+    let ink_height = max_y - min_y + 1;
+    let desired_x = target.x + (target.width as i32 - ink_width).max(0) / 2;
+    let desired_y = target.y + (target.height as i32 - ink_height).max(0) / 2;
+    let dx = desired_x - min_x;
+    let dy = desired_y - min_y;
+    for point in strokes.iter_mut().flatten() {
+        point.x += dx;
+        point.y += dy;
+    }
+}
+
+fn stroke_bounds(strokes: &[Vec<Point>]) -> Option<(i32, i32, i32, i32)> {
+    let mut points = strokes.iter().flatten();
+    let first = *points.next()?;
+    let mut min_x = first.x;
+    let mut min_y = first.y;
+    let mut max_x = first.x;
+    let mut max_y = first.y;
+    for point in points {
+        min_x = min_x.min(point.x);
+        min_y = min_y.min(point.y);
+        max_x = max_x.max(point.x);
+        max_y = max_y.max(point.y);
+    }
+    Some((min_x, min_y, max_x, max_y))
 }
 
 fn parse_table(text: &str) -> Result<Vec<Vec<String>>, String> {
@@ -1595,6 +1930,129 @@ mod tests {
         let job = text_to_job("Paper", box_target, 954, 1696).unwrap();
         assert_eq!(job.strokes.len(), light.len());
         assert!(weighted.len() > light.len());
+    }
+
+    #[test]
+    fn beautify_text_can_scale_past_the_streaming_answer_limit() {
+        let box_target = Target {
+            x: 100,
+            y: 300,
+            width: 400,
+            height: 200,
+        };
+        let (px, lines) = choose_layout(
+            "你好",
+            BEAUTIFY_TEXT_MIN_PX,
+            BEAUTIFY_TEXT_MAX_PX,
+            box_target.width as i32 - BEAUTIFY_TEXT_MARGIN * 2,
+            box_target.height as i32 - BEAUTIFY_TEXT_MARGIN * 2,
+        )
+        .unwrap();
+        assert!(px > TEXT_MAX_PX);
+        assert_eq!(lines, vec!["你好"]);
+        let job = beautify_text_to_job("你好", box_target, 954, 1696).unwrap();
+        assert!(job
+            .strokes
+            .iter()
+            .flatten()
+            .all(|point| contains(box_target, *point)));
+
+        let min_y = job
+            .strokes
+            .iter()
+            .flatten()
+            .map(|point| point.y)
+            .min()
+            .unwrap();
+        let max_y = job
+            .strokes
+            .iter()
+            .flatten()
+            .map(|point| point.y)
+            .max()
+            .unwrap();
+        assert!(max_y - min_y > box_target.height as i32 * 3 / 5);
+    }
+
+    #[test]
+    fn short_ai_text_and_documents_use_the_readable_size_ceiling() {
+        let (px, lines) = choose_layout("床前明月光", TEXT_MIN_PX, TEXT_MAX_PX, 780, 520).unwrap();
+        assert_eq!(px, TEXT_MAX_PX);
+        assert_eq!(lines, vec!["床前明月光"]);
+
+        let blocks = vec![DocumentBlock {
+            kind: DocumentBlockKind::Rich,
+            body: "# 靜夜思\n床前明月光\n疑是地上霜".into(),
+        }];
+        let heights = document_block_heights(&blocks, target(), DOCUMENT_BASE_MAX_PX).unwrap();
+        assert!(heights[0] <= target().height as i32);
+    }
+
+    #[test]
+    fn scaled_ai_text_uses_one_shared_visual_body_size() {
+        let box_target = target();
+        let full = text_to_job_scaled("你好", box_target, 954, 1696, 100).unwrap();
+        let sixty = text_to_job_scaled("你好", box_target, 954, 1696, 60).unwrap();
+        let height = |job: &StrokeJob| {
+            let min = job
+                .strokes
+                .iter()
+                .flatten()
+                .map(|point| point.y)
+                .min()
+                .unwrap();
+            let max = job
+                .strokes
+                .iter()
+                .flatten()
+                .map(|point| point.y)
+                .max()
+                .unwrap();
+            max - min + 1
+        };
+        assert!(height(&full) > height(&sixty));
+        assert!(height(&sixty) * 100 >= height(&full) * 50);
+        assert!(text_to_job_scaled("你好", box_target, 954, 1696, 59).is_err());
+    }
+
+    #[test]
+    fn table_centres_text_and_uses_natural_scaled_height() {
+        let box_target = target();
+        let job = table_to_job_scaled(
+            "| 名稱 | 數值 |\n| --- | --- |\n| A | 10 |",
+            box_target,
+            954,
+            1696,
+            60,
+        )
+        .unwrap();
+        let grid_bottom = box_target.y
+            + fixed_table_row_heights(
+                &parse_table("| 名稱 | 數值 |\n| A | 10 |").unwrap(),
+                2,
+                box_target.width as i32,
+                scaled_ai_body_px(60).unwrap(),
+            )
+            .unwrap()
+            .iter()
+            .sum::<i32>()
+            - 1;
+        assert!(grid_bottom < box_target.y + box_target.height as i32 - 1);
+        assert!(job
+            .strokes
+            .iter()
+            .flatten()
+            .all(|point| contains(box_target, *point)));
+
+        let cell = Target {
+            x: 100,
+            y: 200,
+            width: 200,
+            height: 100,
+        };
+        let mut ink = vec![vec![Point { x: 110, y: 210 }, Point { x: 130, y: 230 }]];
+        center_strokes_in_target(&mut ink, cell);
+        assert_eq!(stroke_bounds(&ink), Some((189, 239, 209, 259)));
     }
 
     #[test]

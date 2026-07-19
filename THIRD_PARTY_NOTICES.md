@@ -16,6 +16,11 @@ Paper Agent's original code is MIT licensed unless a file says otherwise.
   `device/qmd/paper-agent-selection.qmd` is adapted from this project; that QMD
   file is therefore GPL-3.0-only. The full license is in
   `third_party/GPL-3.0.txt`.
+- **StarNumber12046/xovi-qmd-extensions** `autoNewPage.qmd`, pinned
+  `c5d0972f9a7f77dc0c1479d5b1a4d32fbb1901c4`, MIT, copyright 2025.
+  Paper Agent adapts its native `documentView.addPage(document, undefined)`
+  invocation. The upstream notice is preserved in
+  `third_party/STARNUMBER-XOVI-QMD-EXTENSIONS-MIT.txt`.
 - **Pi**, MIT, copyright 2025 Mario Zechner. Pi is installed as an external
   runtime and owns ChatGPT OAuth and RPC transport.
 - **OpenClaw**, MIT, copyright 2026 OpenClaw Foundation, pinned reference

@@ -10,6 +10,10 @@
 ; The primary-pen restoration block is adapted from the GPL-3.0-only
 ; alefaraci/xovi-qmd-extensions project. See THIRD_PARTY_NOTICES.md.
 ;
+; Native new-page invocation is adapted from the MIT-licensed autoNewPage.qmd
+; in StarNumber12046/xovi-qmd-extensions, pinned commit
+; c5d0972f9a7f77dc0c1479d5b1a4d32fbb1901c4. See THIRD_PARTY_NOTICES.md.
+;
 ; Requires xovi-message-broker, framebuffer-spy, rm-shot and
 ; qt-command-executor.
 AFFECT [[3197972396468700595]]
@@ -27,14 +31,14 @@ AFFECT [[3197972396468700595]]
 				~&5972374&~: paperAgentAiSelectionButton
 				~&481641799955318521&~: ~&5971598&~.~&233696851602406&~
 				~&6504337259&~: ~&214642769434&~.~&6504337259&~
-				~&8399601734642709923&~: "file:///home/root/paper-agent/assets/icons/paper-agent-ai.svg"
+				~&8399601734642709923&~: "/home/root/paper-agent/assets/icons/paper-agent-ai.svg"
 				~&254542236275632405&~: ~&10742505294233322867&~.paperAgentAiSelection()
 			}
 			~&425121728314878811&~.~&16765000136167945189&~.~&7081261925573&~ {
 				~&5972374&~: paperAgentBeautifySelectionButton
 				~&481641799955318521&~: ~&5971598&~.~&233696851602406&~
 				~&6504337259&~: ~&214642769434&~.~&6504337259&~
-				~&8399601734642709923&~: "file:///home/root/paper-agent/assets/icons/paper-agent-beautify.svg"
+				~&8399601734642709923&~: "/home/root/paper-agent/assets/icons/paper-agent-beautify.svg"
 				~&254542236275632405&~: ~&10742505294233322867&~.paperAgentBeautifySelection()
 			}
 		}
@@ -181,16 +185,16 @@ AFFECT [[11806562588218124596]]
 		return [left, top, right, bottom]
 	}
 
-	function paperAgentNativePlacement(bounds) {
+	function paperAgentNativePlacement(bounds, action) {
 		var view = ~&6504254477&~
 		var shotW = 954
 		var shotH = 1696
 		if (!bounds || !view || !isFinite(view.width) || Number(view.width) <= 0)
 			return null
 
-		// smart_remarkable places answers below the lasso and uses the space
-		// above only when necessary. Scale that policy to Chiappa's Xochitl
-		// surface and keep clear of the top toolbar and screen edges.
+		// AI uses only the remaining space below the lasso. Beautify preserves the
+		// lasso's dimensions exactly; if that same-size box does not fit below, the
+		// resident oracle creates a new native notebook page before writing.
 		var xOrigin = Number(view.width) / 2 + Number(view.x || 0)
 		var selX = xOrigin + Number(bounds.x)
 		var selY = Number(bounds.y)
@@ -204,24 +208,48 @@ AFFECT [[11806562588218124596]]
 		var topMargin = 150
 		var bottomMargin = 50
 		var gap = 32
-		var minHeight = 260
+		if (action === "beautify") {
+			var minBox = 64
+			var width = Math.round(Math.max(minBox,
+				Math.min(shotW - sideMargin * 2, selW)))
+			var x = Math.round(Math.max(sideMargin,
+				Math.min(shotW - sideMargin - width, selX)))
+			var desiredHeight = Math.round(Math.max(minBox,
+				Math.min(shotH - topMargin - bottomMargin, selH)))
+			var belowY = Math.round(selY + selH + gap)
+			var belowAvailable = Math.round(shotH - bottomMargin - belowY)
+			var y = belowY
+			var newPageRequired = false
+			if (belowAvailable >= desiredHeight) {
+				y = belowY
+			} else {
+				y = topMargin
+				newPageRequired = true
+			}
+			var beautifyPlacement = {
+				x: x, y: Math.round(y), width: width, height: desiredHeight,
+				newPageRequired: newPageRequired
+			}
+			console.log("paper-agent beautify placement",
+				"selection=" + [selX, selY, selW, selH].join(","),
+				"placement=" + [beautifyPlacement.x, beautifyPlacement.y,
+					beautifyPlacement.width, beautifyPlacement.height].join(","))
+			return beautifyPlacement
+		}
+
 		var width = Math.round(Math.max(480, Math.min(shotW - sideMargin * 2, selW * 1.5)))
 		var x = Math.round(Math.max(sideMargin, Math.min(shotW - sideMargin - width, selX)))
 		var belowY = Math.round(selY + selH + gap)
 		var belowHeight = shotH - bottomMargin - belowY
-		var aboveHeight = Math.round(selY - gap - topMargin)
-		var y
-		var height
-		if (belowHeight >= minHeight || belowHeight >= aboveHeight) {
-			y = Math.max(topMargin, belowY)
-			height = shotH - bottomMargin - y
-		} else {
-			y = topMargin
-			height = aboveHeight
+		var newPageRequired = belowHeight < 96
+		var y = newPageRequired ? topMargin : Math.max(topMargin, belowY)
+		var height = newPageRequired
+			? shotH - topMargin - bottomMargin
+			: shotH - bottomMargin - y
+		var placement = {
+			x: x, y: Math.round(y), width: width, height: Math.round(height),
+			newPageRequired: newPageRequired
 		}
-		if (height < 96) return null
-		height = Math.round(height)
-		var placement = { x: x, y: Math.round(y), width: width, height: height }
 		console.log("paper-agent native placement",
 			"selection=" + [selX, selY, selW, selH].join(","),
 			"placement=" + [placement.x, placement.y, placement.width, placement.height].join(","))
@@ -247,7 +275,8 @@ AFFECT [[11806562588218124596]]
 			paper: paper ? {
 				x: Number(paper.x), y: Number(paper.y),
 				width: Number(paper.width), height: Number(paper.height)
-			} : null
+			} : null,
+			newPage: false
 		}
 		paperAgentPendingImageRequests = next
 		console.log("paper-agent remembered native image target", requestId,
@@ -271,9 +300,14 @@ AFFECT [[11806562588218124596]]
 			var right = paper.x + paper.width - 24 - halfWidth
 			var top = paper.y + 24 + halfHeight
 			var bottom = paper.y + paper.height - 24 - halfHeight
-			x = Math.max(left, Math.min(right, x))
-			if (below > bottom && above >= top) y = above
-			else y = Math.max(top, Math.min(bottom, below))
+			if (pending.newPage) {
+				x = Math.max(left, Math.min(right, paper.x + paper.width / 2))
+				y = top
+			} else {
+				x = Math.max(left, Math.min(right, x))
+				if (below > bottom && above >= top) y = above
+				else y = Math.max(top, Math.min(bottom, below))
+			}
 		}
 		return Qt.point(x, y)
 	}
@@ -297,7 +331,7 @@ AFFECT [[11806562588218124596]]
 
 	XoviMessageBroker {
 		id: paperAgentNativeImageBroker
-		listeningFor: ["paper-agent$image", "paper-agent$request"]
+		listeningFor: ["paper-agent$image", "paper-agent$request", "paper-agent$page"]
 		function onSignalReceived(signal, message) {
 			var fields = String(message).split(",")
 			var requestId = fields[0]
@@ -310,6 +344,27 @@ AFFECT [[11806562588218124596]]
 					}
 					paperAgentForgetImageRequest(requestId)
 				}
+				return
+			}
+			if (signal === "paper-agent$page") {
+				if (fields.length !== 3 || fields[1] !== "ready"
+						|| !/^[0-9]{1,2}$/.test(fields[2])) return
+				var pagePending = paperAgentPendingImageRequests[requestId]
+				var pageView = ~&6504254477&~
+				if (!pagePending || !pageView || !pageView.controller) return
+				var pagePaper = pageView.controller.paperNoteBounds
+					|| pageView.controller.boundingRect || null
+				pagePending.controller = pageView.controller
+				pagePending.pageId = pageView.pageId !== undefined
+					? String(pageView.pageId) : ""
+				pagePending.paper = pagePaper ? {
+					x: Number(pagePaper.x), y: Number(pagePaper.y),
+					width: Number(pagePaper.width), height: Number(pagePaper.height)
+				} : null
+				pagePending.newPage = true
+				paperAgentPendingImageRequests[requestId] = pagePending
+				console.log("paper-agent moved image target to native page", requestId,
+					pagePending.pageId)
 				return
 			}
 			if (signal !== "paper-agent$image" || fields.length !== 3
@@ -394,10 +449,11 @@ AFFECT [[11806562588218124596]]
 			var unit = "paper-agent-native-selection-" + stamp
 			var output = paperAgentCommandExecutor.executeCommand(
 				"/bin/systemd-run",
-				["--unit=" + unit, "--collect", "--property=RuntimeMaxSec=320",
-				 "/home/root/paper-agent/native/native-selection-write.sh",
-				 action, shotPath, String(placement.x), String(placement.y),
-				 String(placement.width), String(placement.height)])
+				 ["--unit=" + unit, "--collect", "--property=RuntimeMaxSec=320",
+				  "/home/root/paper-agent/native/native-selection-write.sh",
+				  action, shotPath, String(placement.x), String(placement.y),
+				  String(placement.width), String(placement.height),
+				  placement.newPageRequired ? "1" : "0"])
 			console.log("paper-agent native write scheduled", unit, output)
 			return true
 		} catch (error) {
@@ -419,7 +475,7 @@ AFFECT [[11806562588218124596]]
 		}
 		var bounds = paperAgentBestSelectionBounds()
 		var crop = paperAgentCropForSelection(bounds)
-		var placement = paperAgentNativePlacement(bounds)
+		var placement = paperAgentNativePlacement(bounds, action)
 		~&6504254477&~.~&7282468819357443632&~(function () {
 			paperAgentOpenNativeSelection(action, crop, placement, bounds)
 			~&6504254477&~.~&12148339614529610933&~()
@@ -430,6 +486,127 @@ AFFECT [[11806562588218124596]]
 	onPaperAgentAiSelection: paperAgentRunSelection("ai")
 	onPaperAgentBeautifySelection: paperAgentRunSelection("beautify")
 	}
+	END TRAVERSE
+END AFFECT
+
+; Add a real Xochitl notebook page and acknowledge it to the owner-only native
+; oracle. The addPage(document, undefined) call follows autoNewPage.qmd; the
+; acknowledgement makes sure no Marker writer opens against the old page.
+AFFECT [[1224665461898798997]]
+	IMPORT net.asivery.XoviMessageBroker [[180923.180921]]
+	IMPORT net.asivery.CommandExecutor [[180922.180921]]
+	TRAVERSE [[8397993708429497603]]#[[15793094956877902211]]
+		LOCATE AFTER ALL
+		INSERT {
+		property string paperAgentPendingPageRequest: ""
+		property string paperAgentPendingPageSequence: ""
+		property string paperAgentLastPageRequest: ""
+		property int paperAgentPageCountBefore: -1
+		property int paperAgentPageBefore: -1
+		property int paperAgentPagePollAttempts: 0
+
+		function paperAgentPageAckPath(requestId, sequence, failed) {
+			return "/run/paper-agent-page-" + requestId + "-" + sequence
+				+ (failed ? ".error" : ".ack")
+		}
+
+		function paperAgentTouchPageResult(requestId, sequence, failed) {
+			try {
+				paperAgentPageCommandExecutor.executeCommand("/usr/bin/touch",
+					[paperAgentPageAckPath(requestId, sequence, failed)])
+			} catch (error) {
+				console.log("paper-agent page acknowledgement failed", String(error))
+			}
+		}
+
+		function paperAgentFailPageRequest(reason) {
+			console.log("paper-agent new page failed", reason)
+			paperAgentPagePollTimer.stop()
+			if (paperAgentPendingPageRequest !== "")
+				paperAgentTouchPageResult(paperAgentPendingPageRequest,
+					paperAgentPendingPageSequence, true)
+			paperAgentPendingPageRequest = ""
+			paperAgentPendingPageSequence = ""
+			paperAgentPageBroker.sendSimpleSignal("paper-agent$status", "error")
+		}
+
+		XoviMessageBroker {
+			id: paperAgentPageBroker
+			listeningFor: ["paper-agent$page"]
+			function onSignalReceived(signal, message) {
+				if (signal !== "paper-agent$page") return
+				var fields = String(message).split(",")
+				if (fields.length !== 3 || !/^[0-9]{10,20}$/.test(fields[0])
+						|| fields[1] !== "new" || !/^[0-9]{1,2}$/.test(fields[2])) return
+				var key = fields[0] + "," + fields[2]
+				if (paperAgentLastPageRequest === key) {
+					paperAgentTouchPageResult(fields[0], fields[2], false)
+					paperAgentPageBroker.sendSimpleSignal("paper-agent$page",
+						fields[0] + ",ready," + fields[2])
+					return
+				}
+				if (paperAgentPendingPageRequest !== "") return
+				if (!~&15793094956877902211&~.~&7712934851008712&~) {
+					paperAgentPendingPageRequest = fields[0]
+					paperAgentPendingPageSequence = fields[2]
+					paperAgentFailPageRequest("document unavailable")
+					return
+				}
+				if (!~&13732534870631740246&~.~&2084538863006705521&~) {
+					paperAgentPendingPageRequest = fields[0]
+					paperAgentPendingPageSequence = fields[2]
+					paperAgentFailPageRequest("insufficient free space")
+					return
+				}
+				paperAgentPendingPageRequest = fields[0]
+				paperAgentPendingPageSequence = fields[2]
+				paperAgentPageCountBefore = Number(
+					~&15793094956877902211&~.~&7712934851008712&~.~&254543134818768527&~)
+				paperAgentPageBefore = Number(~&15793094956877902211&~.~&477346483278306569&~)
+				paperAgentPagePollAttempts = 0
+				try {
+					~&15857697271686765101&~()
+					~&15793094956877902211&~.~&233720993465423&~(
+						~&15793094956877902211&~.~&7712934851008712&~,
+						~&254550717068498203&~)
+					paperAgentPagePollTimer.restart()
+				} catch (error) {
+					paperAgentFailPageRequest(String(error))
+				}
+			}
+		}
+
+		Timer {
+			id: paperAgentPagePollTimer
+			interval: 80
+			repeat: true
+			onTriggered: {
+				paperAgentPagePollAttempts += 1
+				var count = Number(
+					~&15793094956877902211&~.~&7712934851008712&~.~&254543134818768527&~)
+				var current = Number(~&15793094956877902211&~.~&477346483278306569&~)
+				if (count > paperAgentPageCountBefore && current !== paperAgentPageBefore) {
+					var requestId = paperAgentPendingPageRequest
+					var sequence = paperAgentPendingPageSequence
+					paperAgentPagePollTimer.stop()
+					paperAgentLastPageRequest = requestId + "," + sequence
+					paperAgentPendingPageRequest = ""
+					paperAgentPendingPageSequence = ""
+					paperAgentTouchPageResult(requestId, sequence, false)
+					paperAgentPageBroker.sendSimpleSignal("paper-agent$page",
+						requestId + ",ready," + sequence)
+					console.log("paper-agent created native page", requestId, sequence,
+						"pageCount=" + count, "currentPage=" + current)
+				} else if (paperAgentPagePollAttempts >= 50) {
+					paperAgentFailPageRequest("page switch timed out")
+				}
+			}
+		}
+
+		CommandExecutor {
+			id: paperAgentPageCommandExecutor
+		}
+		}
 	END TRAVERSE
 END AFFECT
 
@@ -517,7 +694,8 @@ AFFECT [[2328484894988065446]]
 				// the worker's later transport-level `done` cannot hide it.
 				if (paperAgentState === "error" && nextState === "done") return
 				paperAgentState = nextState
-				if (nextState === "thinking" || nextState === "generating_image"
+				if (nextState === "thinking" || nextState === "new_page"
+						|| nextState === "generating_image"
 						|| nextState === "inserting") {
 					paperAgentDeadline.restart()
 					paperAgentResultTimer.stop()
@@ -533,7 +711,8 @@ AFFECT [[2328484894988065446]]
 				listeningFor: ["paper-agent$status"]
 				function onSignalReceived(signal, message) {
 					if (signal !== "paper-agent$status") return
-					if (message === "thinking" || message === "generating_image"
+					if (message === "thinking" || message === "new_page"
+							|| message === "generating_image"
 							|| message === "inserting"
 							|| message === "done" || message === "error")
 						paperAgentStatusBar.paperAgentShowState(message)
@@ -553,6 +732,8 @@ AFFECT [[2328484894988065446]]
 			~&425121728314878811&~.~&11119534664549952261&~.~&233695222288046&~ {
 				~&6504315758&~: paperAgentStatusBar.paperAgentState === "thinking"
 					? "Paper Agent is thinking..."
+					: paperAgentStatusBar.paperAgentState === "new_page"
+						? "Paper Agent is adding a page..."
 					: paperAgentStatusBar.paperAgentState === "generating_image"
 						? "Paper Agent is creating an image..."
 						: paperAgentStatusBar.paperAgentState === "inserting"
