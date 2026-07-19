@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 340" role="img" aria-labelledby="title desc">
+  <title id="title">Paper Agent selection menu icon preview</title>
+  <desc id="desc">A grayscale electronic-paper preview of the AI and Beautify action icons.</desc>
+  <rect width="720" height="340" fill="#e9e9e5"/>
+  <rect x="56" y="44" width="608" height="252" rx="24" fill="#f8f8f5" stroke="#4a4a48" stroke-width="3"/>
+  <path d="M56 112h608" stroke="#b5b5b0" stroke-width="2"/>
+  <text x="88" y="87" fill="#2b2b2a" font-family="Arial, sans-serif" font-size="24">Selection</text>
+  <g transform="translate(140 142)">
+    <circle cx="72" cy="58" r="58" fill="#fff" stroke="#777" stroke-width="2.5"/>
+    <svg x="40" y="26" width="64" height="64" viewBox="0 0 64 64">
+      <g fill="none" stroke="#171717" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8.5 49 19.2 21l10.7 28M12.6 38.5h13.2" stroke-width="4.2"/>
+        <path d="M36 27v22" stroke-width="4.2"/>
+      </g>
+      <path d="M48 5.5c1.1 6.4 4.1 9.4 10.5 10.5C52.1 17.1 49.1 20.1 48 26.5 46.9 20.1 43.9 17.1 37.5 16 43.9 14.9 46.9 11.9 48 5.5Z" fill="#171717"/>
+      <path d="M57 29.5c.4 2.3 1.7 3.6 4 4-2.3.4-3.6 1.7-4 4-.4-2.3-1.7-3.6-4-4 2.3-.4 3.6-1.7 4-4Z" fill="#171717"/>
+    </svg>
+    <text x="72" y="143" text-anchor="middle" fill="#242424" font-family="Arial, sans-serif" font-size="22">AI</text>
+  </g>
+  <g transform="translate(430 142)">
+    <circle cx="72" cy="58" r="58" fill="#fff" stroke="#777" stroke-width="2.5"/>
+    <svg x="40" y="26" width="64" height="64" viewBox="0 0 64 64">
+      <g fill="none" stroke="#171717" stroke-linecap="round" stroke-linejoin="round">
+        <path d="m12 52 30-30 7 7-30 30Z" stroke-width="3.6"/>
+        <path d="m36.5 27.5 7 7" stroke-width="3.6"/>
+      </g>
+      <path d="M47 4.5c1 5.9 3.6 8.5 9.5 9.5-5.9 1-8.5 3.6-9.5 9.5-1-5.9-3.6-8.5-9.5-9.5 5.9-1 8.5-3.6 9.5-9.5Z" fill="#171717"/>
+      <path d="M28.5 8c.5 3 2 4.5 5 5-3 .5-4.5 2-5 5-.5-3-2-4.5-5-5 3-.5 4.5-2 5-5Z" fill="#171717"/>
+      <path d="M55 38c.4 2.4 1.6 3.6 4 4-2.4.4-3.6 1.6-4 4-.4-2.4-1.6-3.6-4-4 2.4-.4 3.6-1.6 4-4Z" fill="#171717"/>
+    </svg>
+    <text x="72" y="143" text-anchor="middle" fill="#242424" font-family="Arial, sans-serif" font-size="22">Beautify</text>
+  </g>
+</svg>

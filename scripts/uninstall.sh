@@ -24,8 +24,9 @@ systemctl disable paper-agent-native-oracle.service >/dev/null 2>&1 || true
 [ -f "$QMD" ] && cp -p "$QMD" "$BACKUP/paperAgentSelection.qmd"
 [ -f "$UNIT" ] && cp -p "$UNIT" "$BACKUP/paper-agent-native-oracle.service"
 [ -d "$NATIVE" ] && cp -a "$NATIVE" "$BACKUP/native"
+[ -d "$BASE/assets" ] && cp -a "$BASE/assets" "$BACKUP/assets"
 rm -f "$QMD" "$UNIT"
-rm -rf "$NATIVE"
+rm -rf "$NATIVE" "$BASE/assets"
 systemctl daemon-reload
 /home/root/xovi/start
 echo "paper_agent=removed"

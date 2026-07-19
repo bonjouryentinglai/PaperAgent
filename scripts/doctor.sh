@@ -14,6 +14,7 @@ echo "os=$(cat /etc/os-release 2>/dev/null | sed -n "s/^VERSION_ID=//p" | tr -d 
 echo "xochitl=$(systemctl is-active xochitl 2>/dev/null || true)"
 echo "oracle=$(systemctl is-active paper-agent-native-oracle.service 2>/dev/null || true)"
 echo "qmd=$([ -f /home/root/xovi/exthome/qt-resource-rebuilder/paperAgentSelection.qmd ] && echo present || echo missing)"
+echo "icons=$([ -f /home/root/paper-agent/assets/icons/paper-agent-ai.svg ] && [ -f /home/root/paper-agent/assets/icons/paper-agent-beautify.svg ] && echo present || echo missing)"
 echo "credential=$([ -f /home/root/.pi/agent/auth.json ] && echo present || echo missing)"
 echo "socket_mode=$(stat -c %a /run/paper-agent-native-oracle.sock 2>/dev/null || echo missing)"
 if [ -f /home/root/paper-agent/config.env ]; then

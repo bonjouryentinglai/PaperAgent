@@ -24,6 +24,7 @@ ordinary strokes. Raster output uses Xochitl's native notebook-image path.
 
 | Capability | Status |
 |---|---|
+| Native selection actions | Original AI-sparkle and Beautify-wand SVG icons packaged with the QMD integration |
 | AI answers and calculations | Implemented; streams sentence-sized native ink |
 | Rich and mixed answers | Implemented locally; headings, paragraphs, lists, bold, inline/fenced code, tables and vectors; device acceptance pending |
 | Handwriting fonts | Kalam Regular for Latin; ChenYuLuoyan 2.0 Thin for Chinese, with jf open 粉圓 2.1 fallback |
@@ -75,7 +76,11 @@ This route is not a public reMarkable or ChatGPT API and may change upstream.
 See [Development](docs/DEVELOPMENT.md) for prerequisites and build details,
 [Architecture](docs/ARCHITECTURE.md) for trust boundaries,
 [Features](docs/FEATURES.md) for the exact capability matrix, and
-[Roadmap](docs/ROADMAP.md) for the user-facing installer/settings plan.
+[Roadmap](docs/ROADMAP.md) for the user-facing installer/settings plan. The
+[project structure](docs/PROJECT_STRUCTURE.md) documents the public repository
+boundary and files that must never be committed; the
+[performance plan](docs/PERFORMANCE.md) defines how model and device latency are
+to be measured before choosing a faster default.
 
 ## Safety
 

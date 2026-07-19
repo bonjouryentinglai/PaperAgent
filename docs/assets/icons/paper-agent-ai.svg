@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">Paper Agent AI</title>
+  <desc id="desc">The letters AI with a four-point sparkle at the upper right.</desc>
+  <g fill="none" stroke="#171717" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M8.5 49 19.2 21l10.7 28M12.6 38.5h13.2" stroke-width="4.2"/>
+    <path d="M36 27v22" stroke-width="4.2"/>
+  </g>
+  <path d="M48 5.5c1.1 6.4 4.1 9.4 10.5 10.5C52.1 17.1 49.1 20.1 48 26.5 46.9 20.1 43.9 17.1 37.5 16 43.9 14.9 46.9 11.9 48 5.5Z" fill="#171717"/>
+  <path d="M57 29.5c.4 2.3 1.7 3.6 4 4-2.3.4-3.6 1.7-4 4-.4-2.3-1.7-3.6-4-4 2.3-.4 3.6-1.7 4-4Z" fill="#171717"/>
+</svg>

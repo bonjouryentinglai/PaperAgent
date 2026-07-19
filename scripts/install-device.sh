@@ -45,9 +45,11 @@ sh -n "$ROOT/device/runtime/native-oracle-service.sh"
 sh -n "$ROOT/device/runtime/native-selection-prepare.sh"
 sh -n "$ROOT/device/runtime/native-selection-write.sh"
 
-mkdir -p "$STAGE/payload/runtime"
+mkdir -p "$STAGE/payload/runtime" "$STAGE/payload/assets/icons"
 cp "$BIN" "$STAGE/payload/paper-agent-native"
 cp "$ROOT/device/runtime/"* "$STAGE/payload/runtime/"
+cp "$ROOT/docs/assets/icons/paper-agent-ai.svg" "$STAGE/payload/assets/icons/"
+cp "$ROOT/docs/assets/icons/paper-agent-beautify.svg" "$STAGE/payload/assets/icons/"
 cp "$ROOT/device/systemd/paper-agent-native-oracle.service" "$STAGE/payload/"
 cp "$ROOT/device/qmd/paper-agent-selection.qmd" "$STAGE/payload/"
 cp "$ROOT/config/paper-agent.env.example" "$STAGE/payload/"
@@ -59,6 +61,7 @@ set -eu
 
 BASE=/home/root/paper-agent
 NATIVE="$BASE/native"
+ICONS="$BASE/assets/icons"
 QMD_HOME=/home/root/xovi/exthome/qt-resource-rebuilder
 QMD_FILE="$QMD_HOME/paperAgentSelection.qmd"
 UNIT=/etc/systemd/system/paper-agent-native-oracle.service
@@ -82,7 +85,7 @@ cleanup() {
   rm -f /tmp/paper-agent-payload.tar.gz /tmp/paper-agent-health.log
 }
 trap cleanup EXIT
-mkdir -p "$INCOMING" "$STATE_ROOT" "$BACKUP" "$NATIVE" "$BASE/selection"
+mkdir -p "$INCOMING" "$STATE_ROOT" "$BACKUP" "$NATIVE" "$ICONS" "$BASE/selection"
 tar -xzf /tmp/paper-agent-payload.tar.gz -C "$INCOMING"
 rm -f /tmp/paper-agent-payload.tar.gz
 
@@ -107,6 +110,8 @@ restore_file() {
 }
 
 for name in $FILES; do backup_file "$name" "$NATIVE/$name"; done
+backup_file paper-agent-ai.svg "$ICONS/paper-agent-ai.svg"
+backup_file paper-agent-beautify.svg "$ICONS/paper-agent-beautify.svg"
 backup_file paper-agent-native-oracle.service "$UNIT"
 backup_file paperAgentSelection.qmd "$QMD_FILE"
 backup_file config.env "$CONFIG"
@@ -118,6 +123,8 @@ printf '%s\n' "$OLD_ACTIVE" > "$BACKUP/service.active"
 rollback() {
   systemctl stop paper-agent-native-oracle.service 2>/dev/null || true
   for name in $FILES; do restore_file "$name" "$NATIVE/$name"; done
+  restore_file paper-agent-ai.svg "$ICONS/paper-agent-ai.svg"
+  restore_file paper-agent-beautify.svg "$ICONS/paper-agent-beautify.svg"
   restore_file paper-agent-native-oracle.service "$UNIT"
   restore_file paperAgentSelection.qmd "$QMD_FILE"
   restore_file config.env "$CONFIG"
@@ -134,6 +141,10 @@ rollback() {
 }
 
 cp "$INCOMING/paper-agent-native" "$NATIVE/paper-agent-native"
+cp "$INCOMING/assets/icons/paper-agent-ai.svg" "$ICONS/paper-agent-ai.svg"
+cp "$INCOMING/assets/icons/paper-agent-beautify.svg" "$ICONS/paper-agent-beautify.svg"
+grep -q '<svg' "$ICONS/paper-agent-ai.svg"
+grep -q '<svg' "$ICONS/paper-agent-beautify.svg"
 for name in native-oracle-client.mjs native-oracle-server.mjs native-oracle-service.sh native-selection-prepare.sh native-selection-write.sh rich-document.mjs rich-document.test.mjs image-generate.mjs image-generate.test.mjs; do
   cp "$INCOMING/runtime/$name" "$NATIVE/$name"
 done
@@ -141,7 +152,7 @@ cp "$INCOMING/paper-agent-native-oracle.service" "$UNIT"
 cp "$INCOMING/paper-agent-selection.qmd" "$QMD_FILE"
 if [ ! -f "$CONFIG" ]; then cp "$INCOMING/paper-agent.env.example" "$CONFIG"; fi
 chmod 0755 "$NATIVE/paper-agent-native" "$NATIVE/native-oracle-service.sh" "$NATIVE/native-selection-prepare.sh" "$NATIVE/native-selection-write.sh"
-chmod 0644 "$NATIVE/"*.mjs "$UNIT" "$QMD_FILE" "$CONFIG"
+chmod 0644 "$NATIVE/"*.mjs "$ICONS/"*.svg "$UNIT" "$QMD_FILE" "$CONFIG"
 chmod 0600 "$CONFIG"
 mkdir -p "$NATIVE/jobs" "$NATIVE/oracle-data" "$NATIVE/artifacts"
 chmod 0700 "$NATIVE/jobs" "$NATIVE/oracle-data" "$NATIVE/artifacts" "$BASE/selection"
@@ -179,6 +190,7 @@ sleep 12
 LOG=$(journalctl -u xochitl --since "@$START" --no-pager -o cat)
 if ! systemctl is-active --quiet xochitl \
   || printf '%s\n' "$LOG" | grep -Eq 'paperAgentSelection\.qmd.*Error|Cannot assign to non-existent property "onPaperAgent|Application is quitting' \
+  || printf '%s\n' "$LOG" | grep -Eq 'QML Image: Cannot open: file:///home/root/paper-agent/assets/icons/paper-agent-(ai|beautify)\.svg|Error decoding.*paper-agent-(ai|beautify)\.svg' \
   || ! printf '%s\n' "$LOG" | grep -q '\[qmldiff\].*Loading file paperAgentSelection\.qmd'; then
   rollback
   echo "Paper Agent install rolled back: QMD validation failed" >&2
