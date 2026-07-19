@@ -38,6 +38,8 @@ const TOOL_SIGNAL_RETRY_MS = 120;
 const TOOL_WRITE_SETTLE_MS = 100;
 const PAGE_ACK_TIMEOUT_MS = 8_000;
 const PAGE_SETTLE_MS = 350;
+const IMAGE_ACK_TIMEOUT_MS = 10_000;
+const IMAGE_SIGNAL_RETRY_MS = 180;
 const IMAGE_MAX_WIDTH = boundedEnvironmentInteger("PAPER_AGENT_IMAGE_MAX_WIDTH", 620, 128, 800);
 const IMAGE_MAX_HEIGHT = boundedEnvironmentInteger("PAPER_AGENT_IMAGE_MAX_HEIGHT", 620, 128, 800);
 const LINE_GAP = 24;
@@ -131,6 +133,10 @@ function selfTest() {
       !== "/run/paper-agent-page-1234567890123-2.ack") {
     throw new Error("new-page acknowledgement path failed");
   }
+  if (imageAckPathFor("/home/root/paper-agent/selection/native-selection-1234567890123.png")
+      !== "/run/paper-agent-image-1234567890123.ack") {
+    throw new Error("image-insertion acknowledgement path failed");
+  }
   if (!SYSTEM_PROMPT.includes("geometrically normalize it")
       || !SYSTEM_PROMPT.includes("Make circles rounder")) {
     throw new Error("Beautify geometry-normalization rule is missing");
@@ -207,6 +213,10 @@ function pageAckPathFor(selectionPath, sequence, error = false) {
   return `/run/paper-agent-page-${artifactIdFor(selectionPath)}-${sequence}.${error ? "error" : "ack"}`;
 }
 
+function imageAckPathFor(selectionPath, error = false) {
+  return `/run/paper-agent-image-${artifactIdFor(selectionPath)}.${error ? "error" : "ack"}`;
+}
+
 function delay(milliseconds) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
@@ -241,6 +251,42 @@ function reportStage(turn, stage) {
   sendBroker("paper-agent$status", stage);
 }
 
+async function deliverImageArtifact(turn, artifactId, width, height) {
+  const ack = imageAckPathFor(turn.request.png);
+  const errorPath = imageAckPathFor(turn.request.png, true);
+  turn.imageAckPath = ack;
+  turn.imageErrorPath = errorPath;
+  fs.rmSync(ack, { force: true });
+  fs.rmSync(errorPath, { force: true });
+  const deadline = Date.now() + IMAGE_ACK_TIMEOUT_MS;
+  let nextSignalAt = 0;
+  while (Date.now() < deadline) {
+    if (turn.failed) throw new Error("image insertion was cancelled");
+    for (const [file, failed] of [[errorPath, true], [ack, false]]) {
+      try {
+        const info = fs.lstatSync(file);
+        if (!info.isFile() || info.isSymbolicLink()) {
+          throw new Error("image acknowledgement is not a regular file");
+        }
+        fs.rmSync(file, { force: true });
+        turn.imageAckPath = null;
+        turn.imageErrorPath = null;
+        if (failed) throw new Error("Xochitl rejected the generated image");
+        return;
+      } catch (error) {
+        if (error?.code !== "ENOENT") throw error;
+      }
+    }
+    const now = Date.now();
+    if (now >= nextSignalAt) {
+      sendBroker("paper-agent$image", `${artifactId},${width},${height}`, true);
+      nextSignalAt = now + IMAGE_SIGNAL_RETRY_MS;
+    }
+    await delay(40);
+  }
+  throw new Error("Xochitl did not confirm generated-image insertion");
+}
+
 function generateImageArtifact(turn, prompt) {
   if (turn.request.action !== "ai") {
     return Promise.reject(new Error("Beautify cannot generate images"));
@@ -263,7 +309,6 @@ function generateImageArtifact(turn, prompt) {
   return new Promise((resolve, reject) => {
     let settled = false;
     let stderr = "";
-    let signalSent = false;
     const child = spawn(path.join(PI_BIN_DIR, "node"), [IMAGE_HELPER, "--output", output], {
       cwd: BASE,
       env: { ...process.env, HOME: "/home/root", PATH: `${PI_BIN_DIR}:${process.env.PATH || ""}` },
@@ -289,7 +334,7 @@ function generateImageArtifact(turn, prompt) {
       if (turn.imageChild === child) turn.imageChild = null;
       fs.rmSync(prepared, { force: true });
       if (error) {
-        if (!signalSent) fs.rmSync(output, { force: true });
+        fs.rmSync(output, { force: true });
         reject(error);
       } else {
         resolve();
@@ -327,8 +372,7 @@ function generateImageArtifact(turn, prompt) {
         fs.renameSync(prepared, output);
         if (turn.request.newPageRequired) await requestNewPage(turn);
         reportStage(turn, "inserting");
-        sendBroker("paper-agent$image", `${artifactId},${width},${height}`, true);
-        signalSent = true;
+        await deliverImageArtifact(turn, artifactId, width, height);
         turn.chunkCount += 1;
         send(turn.socket, {
           type: "chunk",
@@ -614,6 +658,8 @@ async function requestNewPage(turn) {
         turn.pageErrorPath = null;
         if (failed) throw new Error("Xochitl could not create a new notebook page");
         await delay(PAGE_SETTLE_MS);
+        sendBroker("paper-agent$page", `${artifactId},ready,${sequence}`);
+        await delay(TOOL_SIGNAL_RETRY_MS);
         const placement = safePagePlacement(turn.request.action, turn.request);
         Object.assign(turn.request, placement, { newPageRequired: false });
         turn.nextY = placement.y;
@@ -764,8 +810,12 @@ function cleanupTurn(turn) {
   turn.toolAckPath = null;
   if (turn.pageAckPath) fs.rmSync(turn.pageAckPath, { force: true });
   if (turn.pageErrorPath) fs.rmSync(turn.pageErrorPath, { force: true });
+  if (turn.imageAckPath) fs.rmSync(turn.imageAckPath, { force: true });
+  if (turn.imageErrorPath) fs.rmSync(turn.imageErrorPath, { force: true });
   turn.pageAckPath = null;
   turn.pageErrorPath = null;
+  turn.imageAckPath = null;
+  turn.imageErrorPath = null;
 }
 
 function failTurn(turn, error) {
@@ -902,6 +952,8 @@ const server = net.createServer((socket) => {
         toolAckPath: null,
         pageAckPath: null,
         pageErrorPath: null,
+        imageAckPath: null,
+        imageErrorPath: null,
       };
       turn.timeout = setTimeout(() => failTurn(turn, new Error("native oracle timed out")), REQUEST_TIMEOUT_MS);
       active = turn;

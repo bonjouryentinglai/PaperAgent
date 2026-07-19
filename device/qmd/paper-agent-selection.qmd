@@ -57,6 +57,7 @@ AFFECT [[11806562588218124596]]
 	property var paperAgentCachedSelectionBounds: null
 	property double paperAgentCachedSelectionAt: 0
 	property var paperAgentPendingImageRequests: ({})
+	property var paperAgentImageResults: ({})
 	property string paperAgentActiveRequest: ""
 
 	XoviMessageBroker {
@@ -314,10 +315,45 @@ AFFECT [[11806562588218124596]]
 
 	function paperAgentForgetImageRequest(requestId) {
 		var key = String(requestId)
-		if (!paperAgentPendingImageRequests[key]) return
-		var next = paperAgentPendingImageRequests
-		delete next[key]
-		paperAgentPendingImageRequests = next
+		var pending = paperAgentPendingImageRequests
+		if (pending[key]) {
+			delete pending[key]
+			paperAgentPendingImageRequests = pending
+		}
+		var results = paperAgentImageResults
+		if (results[key]) {
+			delete results[key]
+			paperAgentImageResults = results
+		}
+	}
+
+	function paperAgentImageAckPath(requestId, failed) {
+		return "/run/paper-agent-image-" + String(requestId)
+			+ (failed ? ".error" : ".ack")
+	}
+
+	function paperAgentTouchImageResult(requestId, failed) {
+		try {
+			paperAgentCommandExecutor.executeCommand("/usr/bin/touch",
+				[paperAgentImageAckPath(requestId, failed)])
+		} catch (error) {
+			console.log("paper-agent image acknowledgement failed", String(error))
+		}
+	}
+
+	function paperAgentSetImageResult(requestId, failed) {
+		var key = String(requestId)
+		var results = paperAgentImageResults
+		results[key] = failed ? "error" : "ack"
+		paperAgentImageResults = results
+		paperAgentTouchImageResult(requestId, failed)
+	}
+
+	function paperAgentRepeatImageResult(requestId) {
+		var result = paperAgentImageResults[String(requestId)]
+		if (result !== "ack" && result !== "error") return false
+		paperAgentTouchImageResult(requestId, result === "error")
+		return true
 	}
 
 	function paperAgentRemoveImageArtifact(requestId) {
@@ -367,13 +403,22 @@ AFFECT [[11806562588218124596]]
 					pagePending.pageId)
 				return
 			}
-			if (signal !== "paper-agent$image" || fields.length !== 3
-					|| !/^[0-9]{2,4}$/.test(fields[1]) || !/^[0-9]{2,4}$/.test(fields[2])) return
+			if (signal !== "paper-agent$image") return
+			if (paperAgentRepeatImageResult(requestId)) return
+			if (fields.length !== 3 || !/^[0-9]{2,4}$/.test(fields[1])
+					|| !/^[0-9]{2,4}$/.test(fields[2])) {
+				console.log("paper-agent rejected malformed image request", requestId)
+				paperAgentSetImageResult(requestId, true)
+				paperAgentRemoveImageArtifact(requestId)
+				paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "error")
+				return
+			}
 			var imageWidth = Number(fields[1])
 			var imageHeight = Number(fields[2])
 			if (imageWidth < 32 || imageHeight < 32 || imageWidth > 800 || imageHeight > 800) {
 				console.log("paper-agent rejected unsafe image dimensions", requestId,
 					imageWidth, imageHeight)
+				paperAgentSetImageResult(requestId, true)
 				paperAgentRemoveImageArtifact(requestId)
 				paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "error")
 				return
@@ -381,6 +426,7 @@ AFFECT [[11806562588218124596]]
 			var pending = paperAgentPendingImageRequests[requestId]
 			if (!pending || !pending.controller || !pending.bounds) {
 				console.log("paper-agent rejected image for stale page", requestId)
+				paperAgentSetImageResult(requestId, true)
 				paperAgentRemoveImageArtifact(requestId)
 				paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "error")
 				return
@@ -389,6 +435,7 @@ AFFECT [[11806562588218124596]]
 			if (!currentView || currentView.controller !== pending.controller
 					|| (pending.pageId && String(currentView.pageId) !== pending.pageId)) {
 				console.log("paper-agent rejected image after page changed", requestId)
+				paperAgentSetImageResult(requestId, true)
 				paperAgentRemoveImageArtifact(requestId)
 				paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "error")
 				return
@@ -396,6 +443,7 @@ AFFECT [[11806562588218124596]]
 			var insert = pending.controller["insertImageFileAsSceneItem"]
 			if (typeof insert !== "function") {
 				console.log("paper-agent native image API unavailable")
+				paperAgentSetImageResult(requestId, true)
 				paperAgentRemoveImageArtifact(requestId)
 				paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "error")
 				return
@@ -410,10 +458,12 @@ AFFECT [[11806562588218124596]]
 				// scheduling its Scene update, so the source artifact is no longer
 				// referenced after this call returns.
 				paperAgentRemoveImageArtifact(requestId)
+				paperAgentSetImageResult(requestId, false)
 				console.log("paper-agent scheduled native image insertion", requestId,
 					insertionPoint.x, insertionPoint.y, imageWidth, imageHeight)
 			} catch (error) {
 				console.log("paper-agent native image insertion failed", String(error))
+				paperAgentSetImageResult(requestId, true)
 				paperAgentRemoveImageArtifact(requestId)
 				paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "error")
 			}
@@ -495,7 +545,7 @@ END AFFECT
 AFFECT [[1224665461898798997]]
 	IMPORT net.asivery.XoviMessageBroker [[180923.180921]]
 	IMPORT net.asivery.CommandExecutor [[180922.180921]]
-	TRAVERSE [[8397993708429497603]]#[[15793094956877902211]]
+	TRAVERSE [[8397993708429497603]]#[[6504254477]]
 		LOCATE AFTER ALL
 		INSERT {
 		property string paperAgentPendingPageRequest: ""
@@ -546,7 +596,7 @@ AFFECT [[1224665461898798997]]
 					return
 				}
 				if (paperAgentPendingPageRequest !== "") return
-				if (!~&15793094956877902211&~.~&7712934851008712&~) {
+				if (!~&6504254477&~.~&7712934851008712&~) {
 					paperAgentPendingPageRequest = fields[0]
 					paperAgentPendingPageSequence = fields[2]
 					paperAgentFailPageRequest("document unavailable")
@@ -561,13 +611,13 @@ AFFECT [[1224665461898798997]]
 				paperAgentPendingPageRequest = fields[0]
 				paperAgentPendingPageSequence = fields[2]
 				paperAgentPageCountBefore = Number(
-					~&15793094956877902211&~.~&7712934851008712&~.~&254543134818768527&~)
-				paperAgentPageBefore = Number(~&15793094956877902211&~.~&477346483278306569&~)
+					~&6504254477&~.~&7712934851008712&~.~&254543134818768527&~)
+				paperAgentPageBefore = Number(~&6504254477&~.~&477346483278306569&~)
 				paperAgentPagePollAttempts = 0
 				try {
 					~&15857697271686765101&~()
-					~&15793094956877902211&~.~&233720993465423&~(
-						~&15793094956877902211&~.~&7712934851008712&~,
+					~&6504254477&~.~&233720993465423&~(
+						~&6504254477&~.~&7712934851008712&~,
 						~&254550717068498203&~)
 					paperAgentPagePollTimer.restart()
 				} catch (error) {
@@ -583,8 +633,8 @@ AFFECT [[1224665461898798997]]
 			onTriggered: {
 				paperAgentPagePollAttempts += 1
 				var count = Number(
-					~&15793094956877902211&~.~&7712934851008712&~.~&254543134818768527&~)
-				var current = Number(~&15793094956877902211&~.~&477346483278306569&~)
+					~&6504254477&~.~&7712934851008712&~.~&254543134818768527&~)
+				var current = Number(~&6504254477&~.~&477346483278306569&~)
 				if (count > paperAgentPageCountBefore && current !== paperAgentPageBefore) {
 					var requestId = paperAgentPendingPageRequest
 					var sequence = paperAgentPendingPageSequence

@@ -17,6 +17,20 @@ echo "qmd=$([ -f /home/root/xovi/exthome/qt-resource-rebuilder/paperAgentSelecti
 echo "icons=$([ -f /home/root/paper-agent/assets/icons/paper-agent-ai.svg ] && [ -f /home/root/paper-agent/assets/icons/paper-agent-beautify.svg ] && echo present || echo missing)"
 echo "credential=$([ -f /home/root/.pi/agent/auth.json ] && echo present || echo missing)"
 echo "socket_mode=$(stat -c %a /run/paper-agent-native-oracle.sock 2>/dev/null || echo missing)"
+X_PID=$(systemctl show xochitl -p MainPID --value 2>/dev/null || true)
+if [ -n "$X_PID" ] && [ "$X_PID" != 0 ]; then
+  QMD_LOG=$(journalctl "_PID=$X_PID" -n 1000 --no-pager -o cat 2>/dev/null || true)
+  if printf '%s\n' "$QMD_LOG" | grep -Eq 'Error while processing file tree:.*paperAgentSelection\.qmd|paperAgentSelection\.qmd.*(Cannot locate element in tree|Error|failed)|Cannot assign to non-existent property "onPaperAgent'; then
+    echo "qmd_runtime=error"
+    printf '%s\n' "$QMD_LOG" | grep -E 'paperAgentSelection\.qmd|Cannot assign to non-existent property "onPaperAgent' | tail -n 5
+  elif printf '%s\n' "$QMD_LOG" | grep -q '\[qmldiff\].*Loading file paperAgentSelection\.qmd'; then
+    echo "qmd_runtime=healthy"
+  else
+    echo "qmd_runtime=unverified"
+  fi
+else
+  echo "qmd_runtime=unavailable"
+fi
 if [ -f /home/root/paper-agent/config.env ]; then
   grep -E '^PAPER_AGENT_(PROVIDER|MODEL|THINKING|CJK_SCALE|IMAGE_(RESPONSES_MODEL|MODEL|SIZE|QUALITY|MAX_WIDTH|MAX_HEIGHT))=' /home/root/paper-agent/config.env || true
 fi

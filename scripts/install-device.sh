@@ -196,7 +196,7 @@ fi
 sleep 12
 LOG=$(journalctl -u xochitl --since "@$START" --no-pager -o cat)
 if ! systemctl is-active --quiet xochitl \
-  || printf '%s\n' "$LOG" | grep -Eq 'paperAgentSelection\.qmd.*Error|Cannot assign to non-existent property "onPaperAgent|Application is quitting' \
+  || printf '%s\n' "$LOG" | grep -Eq 'Error while processing file tree:.*paperAgentSelection\.qmd|paperAgentSelection\.qmd.*(Cannot locate element in tree|Error|failed)|Cannot assign to non-existent property "onPaperAgent|Application is quitting' \
   || printf '%s\n' "$LOG" | grep -Eq 'Could not find "?(file:///)?/home/root/paper-agent/assets/icons/paper-agent-(ai|beautify)\.svg|QML Image: Cannot open:.*paper-agent-(ai|beautify)\.svg|Error decoding.*paper-agent-(ai|beautify)\.svg' \
   || ! printf '%s\n' "$LOG" | grep -q '\[qmldiff\].*Loading file paperAgentSelection\.qmd'; then
   rollback

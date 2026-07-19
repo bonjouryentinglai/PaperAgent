@@ -108,6 +108,9 @@ cleanup() {
   fi
   rmdir "$LOCK" 2>/dev/null || true
   send_status "$FINAL_STATUS"
+  # XOVI's FIFO broker consumes only the first line from each read. Keep the
+  # request lifecycle signal out of the same read as the final status.
+  sleep 0.12
   send_request_state "$FINAL_STATUS"
 }
 trap cleanup EXIT INT TERM
