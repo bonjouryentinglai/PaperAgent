@@ -12,7 +12,7 @@ const LATIN_TTF: &[u8] = include_bytes!("../assets/fonts/Kalam-Regular.ttf");
 const CJK_HAND_TTF: &[u8] = include_bytes!("../assets/fonts/ChenYuluoyan-2.0-Thin.ttf");
 const CJK_FALLBACK_TTF: &[u8] = include_bytes!("../assets/fonts/jf-openhuninn-2.1.ttf");
 const DEFAULT_CJK_SCALE: f32 = 0.70;
-const TRACE_SIMPLIFY_EPSILON: f32 = 0.65;
+const RASTER_PAD: f32 = 6.0;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Face {
@@ -216,8 +216,7 @@ pub struct RasterLine {
 }
 
 pub fn rasterize_line(text: &str, px: f32) -> RasterLine {
-    const PAD: f32 = 6.0;
-    let mut caret = PAD;
+    let mut caret = RASTER_PAD;
     let mut ascent: f32 = 0.0;
     let mut descent: f32 = 0.0;
     let mut specifications = Vec::new();
@@ -238,11 +237,18 @@ pub fn rasterize_line(text: &str, px: f32) -> RasterLine {
         previous = Some((face, id, glyph_px));
     }
 
-    let baseline = PAD + ascent;
-    let width = (caret.ceil() + PAD) as usize;
-    let height = ((ascent - descent).ceil() + PAD * 2.0) as usize;
+    // Font advances are fractional. If an outline is drawn at that fractional
+    // x position, identical glyphs acquire different thresholded bitmaps based
+    // on the width of the preceding text. That difference is amplified by the
+    // skeleton tracer and is especially visible in repeated CJK characters.
+    // Quantizing only the raster origin keeps spacing measurements intact while
+    // making a glyph's generated Marker paths deterministic.
+    let baseline = (RASTER_PAD + ascent).round();
+    let width = (caret.ceil() + RASTER_PAD) as usize;
+    let height = ((ascent - descent).ceil() + RASTER_PAD * 2.0) as usize;
     let mut glyphs = Vec::with_capacity(specifications.len());
     for (face, id, glyph_px, x) in specifications {
+        let x = x.round();
         let mut glyph =
             id.with_scale_and_position(PxScale::from(glyph_px), ab_glyph::point(x, baseline));
         glyph.position.y = baseline;
@@ -261,7 +267,7 @@ pub fn rasterize_line(text: &str, px: f32) -> RasterLine {
             outline.draw(|x, y, coverage| {
                 let px_x = bounds.min.x as i32 + x as i32;
                 let px_y = bounds.min.y as i32 + y as i32;
-                if coverage >= 0.45
+                if coverage > 0.5
                     && px_x >= 0
                     && px_y >= 0
                     && (px_x as usize) < width
@@ -283,8 +289,6 @@ pub fn trace_line(mut line: RasterLine) -> Vec<Vec<(i32, i32)>> {
     skeleton::thin_zhang_suen(&mut line.pixels);
     let mut paths: Vec<Vec<(i32, i32)>> = skeleton::trace_skeleton(&line.pixels)
         .into_iter()
-        .map(|path| skeleton::smooth_path(&path, 3))
-        .map(|path| skeleton::simplify_path(&path, TRACE_SIMPLIFY_EPSILON))
         .map(|path| {
             let mut result = Vec::new();
             for (x, y) in path {
@@ -323,6 +327,18 @@ mod tests {
         assert_eq!(face_for('A', 52.0).0, Face::Latin);
         assert_eq!(face_for('你', 52.0).0, Face::CjkHand);
         assert_eq!(DEFAULT_CJK_SCALE, 0.70);
-        assert_eq!(TRACE_SIMPLIFY_EPSILON, 0.65);
+    }
+
+    #[test]
+    fn raster_origins_are_quantized_for_repeatable_glyph_shapes() {
+        let (_, id, px) = face_for('月', 112.0);
+        let first = RASTER_PAD;
+        let second = first + advance(Face::CjkHand, id, px);
+        assert_eq!(first.round().fract(), 0.0);
+        assert_eq!(second.round().fract(), 0.0);
+
+        let line = rasterize_line("月月", 112.0);
+        assert!(line.pixels.iter().flatten().any(|pixel| *pixel));
+        assert!(!trace_line(line).is_empty());
     }
 }

@@ -40,6 +40,7 @@ const MAX_HATCH_STROKES_PER_SHAPE: usize = 32;
 const DOT_RADIUS: i32 = 9;
 const DOCUMENT_HEADER: &str = "paper-agent-document 1";
 const MAX_DOCUMENT_BLOCKS: usize = 48;
+const TEXT_SUPERSAMPLE: i32 = 2;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Target {
@@ -108,12 +109,14 @@ pub fn text_to_job(
 ) -> Result<StrokeJob, String> {
     validate_target(target, canvas_width, canvas_height)?;
     let display = normalized_input(text)?;
+    let target = supersampled_target(target)?;
+    let (canvas_width, canvas_height) = supersampled_canvas(canvas_width, canvas_height)?;
     let strokes = render_text_box(
         &display,
         target,
-        TEXT_MIN_PX,
-        TEXT_MAX_PX,
-        TEXT_MARGIN,
+        TEXT_MIN_PX * TEXT_SUPERSAMPLE,
+        TEXT_MAX_PX * TEXT_SUPERSAMPLE,
+        TEXT_MARGIN * TEXT_SUPERSAMPLE,
         false,
     )?;
     build_job(strokes, canvas_width, canvas_height)
@@ -128,8 +131,17 @@ pub fn text_to_job_scaled(
 ) -> Result<StrokeJob, String> {
     validate_target(target, canvas_width, canvas_height)?;
     let display = normalized_input(text)?;
-    let px = scaled_ai_body_px(scale_percent)?;
-    let strokes = render_text_box(&display, target, px, px, TEXT_MARGIN, false)?;
+    let target = supersampled_target(target)?;
+    let (canvas_width, canvas_height) = supersampled_canvas(canvas_width, canvas_height)?;
+    let px = scaled_ai_body_px(scale_percent)? * TEXT_SUPERSAMPLE;
+    let strokes = render_text_box(
+        &display,
+        target,
+        px,
+        px,
+        TEXT_MARGIN * TEXT_SUPERSAMPLE,
+        false,
+    )?;
     build_job(strokes, canvas_width, canvas_height)
 }
 
@@ -144,7 +156,9 @@ pub fn beautify_text_to_job(
 ) -> Result<StrokeJob, String> {
     validate_target(target, canvas_width, canvas_height)?;
     let display = normalized_input(text)?;
-    let strokes = render_beautify_text_box(&display, target)?;
+    let target = supersampled_target(target)?;
+    let (canvas_width, canvas_height) = supersampled_canvas(canvas_width, canvas_height)?;
+    let strokes = render_beautify_text_box(&display, target, TEXT_SUPERSAMPLE)?;
     build_job(strokes, canvas_width, canvas_height)
 }
 
@@ -419,7 +433,7 @@ pub fn vector_to_job(
                     map_vector_target(values[0], values[1], values[2], values[3], target)?;
                 let label_target =
                     expand_vector_label_target(label_target, target, text.chars().count());
-                let mut label_strokes = render_text_box(&text, label_target, 16, 44, 3, false)?;
+                let mut label_strokes = render_text_box(&text, label_target, 26, 72, 3, false)?;
                 center_strokes_in_target(&mut label_strokes, label_target);
                 strokes.append(&mut label_strokes);
             }
@@ -1153,20 +1167,25 @@ fn render_text_box(
 /// smaller than the selected handwriting.  Here we fit the rasterized glyph
 /// bounds instead, then vertically centre those real bounds in the lasso-sized
 /// destination.
-fn render_beautify_text_box(text: &str, target: Target) -> Result<Vec<Vec<Point>>, String> {
-    let available_width = target.width as i32 - BEAUTIFY_TEXT_MARGIN * 2;
-    let available_height = target.height as i32 - BEAUTIFY_TEXT_MARGIN * 2;
+fn render_beautify_text_box(
+    text: &str,
+    target: Target,
+    render_scale: i32,
+) -> Result<Vec<Vec<Point>>, String> {
+    let margin = BEAUTIFY_TEXT_MARGIN * render_scale;
+    let available_width = target.width as i32 - margin * 2;
+    let available_height = target.height as i32 - margin * 2;
     if available_width <= 0 || available_height <= 0 {
         return Err("text placement has no usable area".into());
     }
     let layout = choose_beautify_layout(
         text,
-        BEAUTIFY_TEXT_MIN_PX,
-        BEAUTIFY_TEXT_MAX_PX,
+        BEAUTIFY_TEXT_MIN_PX * render_scale,
+        BEAUTIFY_TEXT_MAX_PX * render_scale,
         available_width,
         available_height,
     )?;
-    let mut y = target.y + BEAUTIFY_TEXT_MARGIN + ((available_height - layout.height) / 2).max(0);
+    let mut y = target.y + margin + ((available_height - layout.height) / 2).max(0);
     let mut strokes = Vec::new();
 
     for line in layout.lines {
@@ -1175,7 +1194,7 @@ fn render_beautify_text_box(text: &str, target: Target) -> Result<Vec<Vec<Point>
             let mapped: Vec<Point> = stroke
                 .into_iter()
                 .map(|(x, line_y)| Point {
-                    x: target.x + BEAUTIFY_TEXT_MARGIN + x - line.ink_min_x,
+                    x: target.x + margin + x - line.ink_min_x,
                     y: y + line_y - line.ink_min_y,
                 })
                 .filter(|point| contains(target, *point))
@@ -1188,6 +1207,41 @@ fn render_beautify_text_box(text: &str, target: Target) -> Result<Vec<Vec<Point>
         return Err("content produced no drawable strokes".into());
     }
     Ok(strokes)
+}
+
+fn supersampled_target(target: Target) -> Result<Target, String> {
+    Ok(Target {
+        x: target
+            .x
+            .checked_mul(TEXT_SUPERSAMPLE)
+            .ok_or("text target x overflow")?,
+        y: target
+            .y
+            .checked_mul(TEXT_SUPERSAMPLE)
+            .ok_or("text target y overflow")?,
+        width: supersampled_extent(target.width).ok_or("text target width overflow")?,
+        height: supersampled_extent(target.height).ok_or("text target height overflow")?,
+    })
+}
+
+fn supersampled_canvas(width: u32, height: u32) -> Result<(u32, u32), String> {
+    let width = supersampled_extent(width).ok_or("text canvas width overflow")?;
+    let height = supersampled_extent(height).ok_or("text canvas height overflow")?;
+    if width > 4096 || height > 4096 {
+        return Err("supersampled text canvas exceeds the supported size".into());
+    }
+    Ok((width, height))
+}
+
+/// Pixel coordinates describe inclusive sample positions (`0..width - 1`).
+/// Doubling that span therefore produces `2 * (width - 1) + 1` samples, not
+/// `2 * width`. This keeps every original pixel on an exact even coordinate
+/// while adding one half-pixel position between adjacent screen pixels.
+fn supersampled_extent(value: u32) -> Option<u32> {
+    value
+        .checked_sub(1)?
+        .checked_mul(TEXT_SUPERSAMPLE as u32)?
+        .checked_add(1)
 }
 
 struct BeautifyLayout {
@@ -1232,25 +1286,27 @@ fn beautify_layout_at_px(
     available_width: i32,
     available_height: i32,
 ) -> Option<BeautifyLayout> {
-    let wrap_width = available_width.max(1) as f32;
     let mut lines = Vec::new();
-    for paragraph in text.lines() {
-        if paragraph.trim().is_empty() {
+    for original_line in text.lines() {
+        let original_line = original_line.trim_end();
+        if original_line.trim().is_empty() {
             continue;
         }
-        for line in handwriting::wrap(paragraph, px as f32, wrap_width) {
-            let raster = handwriting::rasterize_line(&line, px as f32);
-            let (ink_min_x, ink_min_y, ink_width, ink_height) = raster_ink_bounds(&raster)?;
-            if ink_width > available_width {
-                return None;
-            }
-            lines.push(BeautifyRasterLine {
-                raster,
-                ink_min_x,
-                ink_min_y,
-                ink_height,
-            });
+        // Beautify is a faithful transcription rather than a flowing answer.
+        // An explicit source line must stay one output line; if it is too wide,
+        // choose_beautify_layout() reduces the shared font size instead of
+        // inventing an additional wrap point.
+        let raster = handwriting::rasterize_line(original_line, px as f32);
+        let (ink_min_x, ink_min_y, ink_width, ink_height) = raster_ink_bounds(&raster)?;
+        if ink_width > available_width {
+            return None;
         }
+        lines.push(BeautifyRasterLine {
+            raster,
+            ink_min_x,
+            ink_min_y,
+            ink_height,
+        });
     }
     if lines.is_empty() {
         return None;
@@ -1843,12 +1899,12 @@ fn expand_vector_label_target(label: Target, container: Target, characters: usiz
     let maximum_width = (container.width as i32 - 8).max(24);
     let maximum_height = (container.height as i32 - 8).max(24);
     let minimum_width = if characters <= 4 {
-        (characters.max(1) as i32 * 28 + 20).clamp(56, 160)
+        (characters.max(1) as i32 * 40 + 28).clamp(84, 244)
     } else {
-        (characters as i32 * 20 + 20).clamp(96, 260)
+        (characters as i32 * 29 + 28).clamp(136, 372)
     }
     .min(maximum_width);
-    let minimum_height = 52.min(maximum_height);
+    let minimum_height = 82.min(maximum_height);
     let width = (label.width as i32).max(minimum_width).min(maximum_width);
     let height = (label.height as i32)
         .max(minimum_height)
@@ -1933,32 +1989,35 @@ mod tests {
     fn renders_mixed_traditional_chinese_inside_target() {
         let box_target = target();
         let job = text_to_job("你好，Paper Agent。", box_target, 954, 1696).unwrap();
+        let rendered_target = supersampled_target(box_target).unwrap();
+        assert_eq!((job.canvas_width, job.canvas_height), (1907, 3391));
         assert!(!job.strokes.is_empty());
         assert!(job
             .strokes
             .iter()
             .flatten()
-            .all(|point| contains(box_target, *point)));
+            .all(|point| contains(rendered_target, *point)));
     }
 
     #[test]
     fn plain_text_uses_single_trace_weight() {
         let box_target = target();
+        let rendered_target = supersampled_target(box_target).unwrap();
         let light = render_text_box(
             "Paper",
-            box_target,
-            TEXT_MIN_PX,
-            TEXT_MAX_PX,
-            TEXT_MARGIN,
+            rendered_target,
+            TEXT_MIN_PX * TEXT_SUPERSAMPLE,
+            TEXT_MAX_PX * TEXT_SUPERSAMPLE,
+            TEXT_MARGIN * TEXT_SUPERSAMPLE,
             false,
         )
         .unwrap();
         let weighted = render_text_box(
             "Paper",
-            box_target,
-            TEXT_MIN_PX,
-            TEXT_MAX_PX,
-            TEXT_MARGIN,
+            rendered_target,
+            TEXT_MIN_PX * TEXT_SUPERSAMPLE,
+            TEXT_MAX_PX * TEXT_SUPERSAMPLE,
+            TEXT_MARGIN * TEXT_SUPERSAMPLE,
             true,
         )
         .unwrap();
@@ -1986,11 +2045,12 @@ mod tests {
         assert!(px > TEXT_MAX_PX);
         assert_eq!(lines, vec!["你好"]);
         let job = beautify_text_to_job("你好", box_target, 954, 1696).unwrap();
+        let rendered_target = supersampled_target(box_target).unwrap();
         assert!(job
             .strokes
             .iter()
             .flatten()
-            .all(|point| contains(box_target, *point)));
+            .all(|point| contains(rendered_target, *point)));
 
         let min_y = job
             .strokes
@@ -2006,7 +2066,15 @@ mod tests {
             .map(|point| point.y)
             .max()
             .unwrap();
-        assert!(max_y - min_y > box_target.height as i32 * 3 / 5);
+        assert!(max_y - min_y > rendered_target.height as i32 * 3 / 5);
+    }
+
+    #[test]
+    fn beautify_preserves_explicit_lines_instead_of_wrapping() {
+        let text = "第一行保持原樣\nSecond line remains one line\n第三行";
+        assert!(beautify_layout_at_px(text, 100, 260, 800).is_none());
+        let layout = choose_beautify_layout(text, 16, 100, 260, 800).unwrap();
+        assert_eq!(layout.lines.len(), 3);
     }
 
     #[test]
@@ -2125,8 +2193,8 @@ mod tests {
             box_target,
             1,
         );
-        assert!(label_target.width >= 56);
-        assert!(label_target.height >= 52);
+        assert!(label_target.width >= 84);
+        assert!(label_target.height >= 82);
         assert!(job
             .strokes
             .iter()

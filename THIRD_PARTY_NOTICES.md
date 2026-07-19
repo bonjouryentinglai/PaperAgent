@@ -21,6 +21,13 @@ Paper Agent's original code is MIT licensed unless a file says otherwise.
   Paper Agent adapts its native `documentView.addPage(document, undefined)`
   invocation. The upstream notice is preserved in
   `third_party/STARNUMBER-XOVI-QMD-EXTENSIONS-MIT.txt`.
+- **remarkable-doc-links** `remarkable-xovi-native`, pinned
+  `23e41858818ae2c1f836043852118a323cb1e77d`, GPL-3.0, copyright Martin
+  Weber. The separate `device/xovi-image` plugin adapts its active
+  DocumentView, Qt clipboard and `SceneClipboardText` image-paste sequence.
+  Paper Agent removes the upstream inspection, notebook-link and desktop
+  clipboard features. The GPL-3.0 license is preserved in
+  `third_party/GPL-3.0.txt`.
 - **Pi**, MIT, copyright 2025 Mario Zechner. Pi is installed as an external
   runtime and owns ChatGPT OAuth and RPC transport.
 - **OpenClaw**, MIT, copyright 2026 OpenClaw Foundation, pinned reference
@@ -50,5 +57,6 @@ Installation uses but does not redistribute the following binaries:
 - qt-resource-rebuilder (GPL-3.0)
 - rm-shot (GPL-3.0)
 
-Paper Agent does not include smart_remarkable's GPL-2.0 prebuilt kernel modules
-or the experimental GPL-3.0 clipboard/image probe from remarkable-doc-links.
+Paper Agent does not include smart_remarkable's GPL-2.0 prebuilt kernel
+modules. Its minimal native image plugin is GPL-3.0-only and kept in a separate
+source and binary boundary from the MIT Rust and JavaScript components.

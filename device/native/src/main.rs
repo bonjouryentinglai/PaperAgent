@@ -104,7 +104,14 @@ fn render_text_scaled(args: &[String]) -> Result<(), String> {
     let (canvas_width, canvas_height) = parse_canvas(args, 7)?;
     let job =
         renderer::text_to_job_scaled(&input, target, canvas_width, canvas_height, scale_percent)?;
-    write_rendered_job(&args[1], &job, "render-text-scaled", Some(scale_percent))
+    write_rendered_job(
+        &args[1],
+        &job,
+        "render-text-scaled",
+        Some(scale_percent),
+        canvas_width,
+        canvas_height,
+    )
 }
 
 fn render_text_kind(args: &[String], beautify: bool) -> Result<(), String> {
@@ -151,7 +158,7 @@ fn render_text_kind(args: &[String], beautify: bool) -> Result<(), String> {
     println!("canvas={}x{}", job.canvas_width, job.canvas_height);
     println!("strokes={}", job.strokes.len());
     println!("points={}", job.point_count());
-    let (min_x, min_y, max_x, max_y) = job_bounds(&job);
+    let (min_x, min_y, max_x, max_y) = physical_job_bounds(&job, canvas_width, canvas_height);
     println!("pixel_bounds={min_x},{min_y}..{max_x},{max_y}");
     Ok(())
 }
@@ -229,6 +236,8 @@ fn render_structured_scaled(args: &[String], kind: &str) -> Result<(), String> {
         &job,
         &format!("render-{kind}-scaled"),
         Some(scale_percent),
+        canvas_width,
+        canvas_height,
     )
 }
 
@@ -267,6 +276,8 @@ fn write_rendered_job(
     job: &StrokeJob,
     mode: &str,
     scale_percent: Option<u8>,
+    physical_canvas_width: u32,
+    physical_canvas_height: u32,
 ) -> Result<(), String> {
     job.write_to(Path::new(output))?;
     println!("mode={mode}");
@@ -278,9 +289,33 @@ fn write_rendered_job(
     println!("canvas={}x{}", job.canvas_width, job.canvas_height);
     println!("strokes={}", job.strokes.len());
     println!("points={}", job.point_count());
-    let (min_x, min_y, max_x, max_y) = job_bounds(job);
+    let (min_x, min_y, max_x, max_y) =
+        physical_job_bounds(job, physical_canvas_width, physical_canvas_height);
     println!("pixel_bounds={min_x},{min_y}..{max_x},{max_y}");
     Ok(())
+}
+
+fn physical_job_bounds(
+    job: &StrokeJob,
+    physical_canvas_width: u32,
+    physical_canvas_height: u32,
+) -> (i32, i32, i32, i32) {
+    let (min_x, min_y, max_x, max_y) = job_bounds(job);
+    let physical = |point: i32, job_extent: u32, physical_extent: u32, ceil: bool| {
+        let numerator = i64::from(point) * i64::from(physical_extent.saturating_sub(1));
+        let denominator = i64::from(job_extent.saturating_sub(1).max(1));
+        if ceil {
+            ((numerator + denominator - 1) / denominator) as i32
+        } else {
+            (numerator / denominator) as i32
+        }
+    };
+    (
+        physical(min_x, job.canvas_width, physical_canvas_width, false),
+        physical(min_y, job.canvas_height, physical_canvas_height, false),
+        physical(max_x, job.canvas_width, physical_canvas_width, true),
+        physical(max_y, job.canvas_height, physical_canvas_height, true),
+    )
 }
 
 fn job_bounds(job: &StrokeJob) -> (i32, i32, i32, i32) {
@@ -452,7 +487,8 @@ fn parse_u32(value: &str, label: &str) -> Result<u32, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_allowed_streaming_job_path, parse_scale_percent};
+    use super::{is_allowed_streaming_job_path, parse_scale_percent, physical_job_bounds};
+    use paper_agent_native::job::{Point, StrokeJob};
 
     #[test]
     fn streaming_job_path_accepts_only_stream_jobs() {
@@ -486,5 +522,15 @@ mod tests {
         assert_eq!(parse_scale_percent("100").unwrap(), 100);
         assert!(parse_scale_percent("59").is_err());
         assert!(parse_scale_percent("101").is_err());
+    }
+
+    #[test]
+    fn supersampled_jobs_report_physical_pixel_bounds() {
+        let job = StrokeJob {
+            canvas_width: 1907,
+            canvas_height: 3391,
+            strokes: vec![vec![Point { x: 200, y: 401 }, Point { x: 603, y: 804 }]],
+        };
+        assert_eq!(physical_job_bounds(&job, 954, 1696), (100, 200, 302, 402));
     }
 }

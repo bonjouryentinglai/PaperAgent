@@ -209,8 +209,10 @@ pub fn trace_skeleton(grid: &Vec<Vec<bool>>) -> Vec<Vec<(f32, f32)>> {
         }
     }
 
-    // Trace a path starting from (start_r, start_c), following unvisited neighbors.
-    // At junctions, prefer the neighbor most aligned with current direction of travel.
+    // Trace a path starting from (start_r, start_c), following the first
+    // unvisited 8-connected neighbour. This deliberately matches Muse's
+    // glyph tracer: Xochitl applies its own Marker smoothing later, so
+    // pre-smoothing here bends corners and distorts the source font twice.
     let trace_from =
         |start_r: usize, start_c: usize, visited: &mut Vec<Vec<bool>>| -> Vec<(f32, f32)> {
             let mut path = vec![(start_c as f32, start_r as f32)];
@@ -227,32 +229,7 @@ pub fn trace_skeleton(grid: &Vec<Vec<bool>>) -> Vec<Vec<(f32, f32)>> {
                     break;
                 }
 
-                // Direction of travel (x, y)
-                let travel = if path.len() >= 2 {
-                    let (ax, ay) = path[path.len() - 2];
-                    let (bx, by) = path[path.len() - 1];
-                    (bx - ax, by - ay)
-                } else {
-                    (0.0f32, 0.0f32)
-                };
-
-                // Pick next pixel most aligned with direction of travel
-                let next = if travel.0 == 0.0 && travel.1 == 0.0 {
-                    unvisited[0]
-                } else {
-                    *unvisited
-                        .iter()
-                        .max_by(|&&(r1, c1), &&(r2, c2)| {
-                            let dx1 = c1 as f32 - curr.1 as f32;
-                            let dy1 = r1 as f32 - curr.0 as f32;
-                            let dx2 = c2 as f32 - curr.1 as f32;
-                            let dy2 = r2 as f32 - curr.0 as f32;
-                            let dot1 = dx1 * travel.0 + dy1 * travel.1;
-                            let dot2 = dx2 * travel.0 + dy2 * travel.1;
-                            dot1.partial_cmp(&dot2).unwrap()
-                        })
-                        .unwrap()
-                };
+                let next = unvisited[0];
 
                 let (nr, nc) = next;
                 visited[nr][nc] = true;

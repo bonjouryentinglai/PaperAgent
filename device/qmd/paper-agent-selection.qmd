@@ -270,21 +270,30 @@ AFFECT [[11806562588218124596]]
 	// framebuffer coordinates for virtual-Marker stroke injection.
 	function paperAgentRememberImageRequest(requestId, bounds) {
 		var view = ~&6504254477&~
-		if (!view || !view.controller || !bounds) return false
-		var fields = [String(requestId), Number(bounds.x), Number(bounds.y),
-			Number(bounds.width), Number(bounds.height)]
-		if (!isFinite(fields[1]) || !isFinite(fields[2])
-				|| !isFinite(fields[3]) || !isFinite(fields[4])
-				|| fields[3] <= 0 || fields[4] <= 0) return false
-		var result = paperAgentScreenshotBroker.sendSimpleSignal(
-			"paper-agent$image-target", fields.join(","))
-		console.log("paper-agent registered persistent image target", requestId, result)
-		return result === "success"
+		if (!view || !view.controller || !bounds
+				|| typeof view["paperAgentRegisterImageTarget"] !== "function") return false
+		try {
+			var result = view["paperAgentRegisterImageTarget"](
+				String(requestId), view.controller,
+				view.pageId !== undefined ? String(view.pageId) : "",
+				Number(bounds.x), Number(bounds.y),
+				Number(bounds.width), Number(bounds.height))
+			console.log("paper-agent registered persistent image target", requestId, result)
+			return result === true
+		} catch (error) {
+			console.log("paper-agent image target registration failed", requestId, String(error))
+			return false
+		}
 	}
 
 	function paperAgentForgetImageRequest(requestId) {
-		paperAgentScreenshotBroker.sendSimpleSignal(
-			"paper-agent$image-target", String(requestId) + ",cancel")
+		try {
+			var view = ~&6504254477&~
+			if (view && typeof view["paperAgentForgetPersistentImageRequest"] === "function")
+				view["paperAgentForgetPersistentImageRequest"](String(requestId))
+		} catch (error) {
+			console.log("paper-agent image target cancel failed", requestId, String(error))
+		}
 	}
 
 	function paperAgentCancelNativeCapture(capture, reason) {
@@ -304,7 +313,7 @@ AFFECT [[11806562588218124596]]
 	}
 
 	function paperAgentScheduleNativeWrite(capture) {
-		if (!capture) return false
+		if (!capture || !capture.sceneBounds || !capture.paperBounds) return false
 		try {
 			var unit = "paper-agent-native-selection-" + capture.requestId
 			var placement = capture.placement
@@ -314,7 +323,11 @@ AFFECT [[11806562588218124596]]
 				  "/home/root/paper-agent/native/native-selection-write.sh",
 				  capture.action, capture.shotPath, String(placement.x), String(placement.y),
 				  String(placement.width), String(placement.height),
-				  placement.newPageRequired ? "1" : "0"])
+				  placement.newPageRequired ? "1" : "0",
+				  String(capture.sceneBounds.x), String(capture.sceneBounds.y),
+				  String(capture.sceneBounds.width), String(capture.sceneBounds.height),
+				  String(capture.paperBounds.x), String(capture.paperBounds.y),
+				  String(capture.paperBounds.width), String(capture.paperBounds.height)])
 			console.log("paper-agent native write scheduled", unit, output)
 			return true
 		} catch (error) {
@@ -333,11 +346,20 @@ AFFECT [[11806562588218124596]]
 		var requestId = (new Date()).getTime()
 		var shotPath = "/home/root/paper-agent/selection/native-selection-" + requestId + ".png"
 		var stamp = String(requestId)
+		var view = ~&6504254477&~
+		var controller = view ? view.controller : null
+		var paper = controller ? (controller.paperNoteBounds || controller.boundingRect || null) : null
+		var sceneBounds = paperAgentCopyBounds(bounds)
+		var paperBounds = paperAgentCopyBounds(paper)
+		if (!sceneBounds || !paperBounds) {
+			paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "error")
+			console.log("paper-agent scene target unavailable", requestId)
+			return false
+		}
 		var capture = {
 			requestId: stamp, action: action, shotPath: shotPath,
-			placement: placement
+			placement: placement, sceneBounds: sceneBounds, paperBounds: paperBounds
 		}
-		if (action === "ai") paperAgentRememberImageRequest(stamp, bounds)
 		paperAgentActiveRequest = stamp
 		paperAgentActiveRequestTimer.restart()
 		// rm-shot captures on a detached thread and only acknowledges that capture
@@ -430,6 +452,39 @@ AFFECT [[1224665461898798997]]
 			paperAgentPersistentImageResults = results
 		}
 
+		function paperAgentRegisterImageTarget(
+				requestId, sourceController, sourcePageId, x, y, width, height) {
+			var key = String(requestId)
+			x = Number(x)
+			y = Number(y)
+			width = Number(width)
+			height = Number(height)
+			if (!/^[0-9]{10,20}$/.test(key) || !sourceController
+					|| !isFinite(x) || !isFinite(y)
+					|| !isFinite(width) || !isFinite(height)
+					|| width <= 0 || height <= 0) return false
+			var paper = sourceController.paperNoteBounds
+				|| sourceController.boundingRect || null
+			var pending = paperAgentPersistentImageRequests
+			pending[key] = {
+				controller: sourceController,
+				pageId: String(sourcePageId || ""),
+				bounds: {x: x, y: y, width: width, height: height},
+				paper: paper ? {
+					x: Number(paper.x), y: Number(paper.y),
+					width: Number(paper.width), height: Number(paper.height)
+				} : null,
+				newPage: false
+			}
+			paperAgentPersistentImageRequests = pending
+			var results = paperAgentPersistentImageResults
+			if (results[key]) delete results[key]
+			paperAgentPersistentImageResults = results
+			console.log("paper-agent persistent image target ready", key,
+				sourcePageId, x, y, width, height)
+			return true
+		}
+
 		function paperAgentPersistentImagePoint(pending, imageWidth, imageHeight) {
 			var bounds = pending.bounds
 			var paper = pending.paper
@@ -471,6 +526,38 @@ AFFECT [[1224665461898798997]]
 			return true
 		}
 
+		function paperAgentFallbackImageRequest(requestId) {
+			var view = ~&6504254477&~
+			if (!view || !view.controller) return null
+			var paper = view.controller.paperNoteBounds
+				|| view.controller.boundingRect || null
+			var paperCopy = paper ? {
+				x: Number(paper.x), y: Number(paper.y),
+				width: Number(paper.width), height: Number(paper.height)
+			} : null
+			var bounds = paperCopy && isFinite(paperCopy.x) && isFinite(paperCopy.y)
+					&& isFinite(paperCopy.width) && isFinite(paperCopy.height)
+				? {
+					x: paperCopy.x + paperCopy.width * 0.25,
+					y: paperCopy.y + paperCopy.height * 0.2,
+					width: paperCopy.width * 0.5,
+					height: 64
+				} : {x: 0, y: 300, width: 480, height: 64}
+			var pending = {
+				controller: view.controller,
+				pageId: view.pageId !== undefined ? String(view.pageId) : "",
+				bounds: bounds,
+				paper: paperCopy,
+				newPage: false
+			}
+			var requests = paperAgentPersistentImageRequests
+			requests[String(requestId)] = pending
+			paperAgentPersistentImageRequests = requests
+			console.log("paper-agent recovered image target on current page", requestId,
+				view.pageId, bounds.x, bounds.y, bounds.width, bounds.height)
+			return pending
+		}
+
 		XoviMessageBroker {
 			id: paperAgentPersistentImageBroker
 			listeningFor: ["paper-agent$image-target", "paper-agent$image",
@@ -485,33 +572,15 @@ AFFECT [[1224665461898798997]]
 						return
 					}
 					if (fields.length !== 5) return
-					var view = ~&6504254477&~
 					var x = Number(fields[1])
 					var y = Number(fields[2])
 					var width = Number(fields[3])
 					var height = Number(fields[4])
-					if (!view || !view.controller || !isFinite(x) || !isFinite(y)
-							|| !isFinite(width) || !isFinite(height)
-							|| width <= 0 || height <= 0) return
-					var paper = view.controller.paperNoteBounds
-						|| view.controller.boundingRect || null
-					var pending = paperAgentPersistentImageRequests
-					pending[requestId] = {
-						controller: view.controller,
-						pageId: view.pageId !== undefined ? String(view.pageId) : "",
-						bounds: {x: x, y: y, width: width, height: height},
-						paper: paper ? {
-							x: Number(paper.x), y: Number(paper.y),
-							width: Number(paper.width), height: Number(paper.height)
-						} : null,
-						newPage: false
-					}
-					paperAgentPersistentImageRequests = pending
-					var results = paperAgentPersistentImageResults
-					if (results[requestId]) delete results[requestId]
-					paperAgentPersistentImageResults = results
-					console.log("paper-agent persistent image target ready", requestId,
-						view.pageId, x, y, width, height)
+					var view = ~&6504254477&~
+					if (view && view.controller)
+						paperAgentRegisterImageTarget(requestId, view.controller,
+							view.pageId !== undefined ? String(view.pageId) : "",
+							x, y, width, height)
 					return
 				}
 				if (signal === "paper-agent$request") {
@@ -537,6 +606,7 @@ AFFECT [[1224665461898798997]]
 				var imageWidth = Number(fields[1])
 				var imageHeight = Number(fields[2])
 				var pending = paperAgentPersistentImageRequests[requestId]
+				if (!pending) pending = paperAgentFallbackImageRequest(requestId)
 				if (imageWidth < 32 || imageHeight < 32 || imageWidth > 800 || imageHeight > 800
 						|| !pending || !pending.controller || !pending.bounds) {
 					console.log("paper-agent rejected unavailable persistent image target", requestId)
@@ -552,19 +622,13 @@ AFFECT [[1224665461898798997]]
 					paperAgentPersistentImageBroker.sendSimpleSignal("paper-agent$status", "error")
 					return
 				}
-				if (typeof pending.controller["insertImageFileAsSceneItem"] !== "function") {
-					console.log("paper-agent native image API unavailable")
-					paperAgentSetImageResult(requestId, true)
-					paperAgentPersistentImageBroker.sendSimpleSignal("paper-agent$status", "error")
-					return
-				}
 				try {
 					var point = paperAgentPersistentImagePoint(pending, imageWidth, imageHeight)
-					var filePath = "/home/root/paper-agent/native/artifacts/" + requestId + ".png"
-					pending.controller["insertImageFileAsSceneItem"](
-						Qt.resolvedUrl("file://" + filePath), point)
-					paperAgentSetImageResult(requestId, false)
-					console.log("paper-agent scheduled persistent image insertion", requestId,
+					var result = paperAgentPersistentImageBroker.sendSimpleSignal(
+						"paperAgentInsertImage",
+						[requestId, point.x, point.y].join(","))
+					if (result !== "success") throw new Error("native image bridge unavailable")
+					console.log("paper-agent forwarded persistent image insertion", requestId,
 						point.x, point.y, imageWidth, imageHeight)
 				} catch (error) {
 					console.log("paper-agent native image insertion failed", String(error))

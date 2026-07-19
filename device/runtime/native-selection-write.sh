@@ -6,6 +6,7 @@ set -eu
 # This wrapper is intentionally separate from native-selection-prepare.sh so
 # the renderer/coordinator remains testable without opening the Marker device.
 
+HAS_SCENE_TARGET=0
 if [ "$#" -eq 5 ]; then
   # Compatibility during a runtime-first upgrade from the one-button QMD.
   ACTION=ai
@@ -18,8 +19,21 @@ elif [ "$#" -eq 7 ]; then
   ACTION=$1
   NEW_PAGE_REQUIRED=$7
   set -- "$2" "$3" "$4" "$5" "$6"
+elif [ "$#" -eq 15 ]; then
+  ACTION=$1
+  NEW_PAGE_REQUIRED=$7
+  SCENE_X=$8
+  SCENE_Y=$9
+  SCENE_WIDTH=${10}
+  SCENE_HEIGHT=${11}
+  PAPER_X=${12}
+  PAPER_Y=${13}
+  PAPER_WIDTH=${14}
+  PAPER_HEIGHT=${15}
+  HAS_SCENE_TARGET=1
+  set -- "$2" "$3" "$4" "$5" "$6"
 else
-  echo "usage: $0 ACTION SELECTION.png X Y WIDTH HEIGHT NEW_PAGE_REQUIRED" >&2
+  echo "usage: $0 ACTION SELECTION.png X Y WIDTH HEIGHT NEW_PAGE_REQUIRED [SCENE_X SCENE_Y SCENE_WIDTH SCENE_HEIGHT PAPER_X PAPER_Y PAPER_WIDTH PAPER_HEIGHT]" >&2
   exit 2
 fi
 
@@ -184,13 +198,28 @@ fi
 # The oracle repeats this acknowledged guard immediately before every job.
 ensure_primary_pen 0
 if [ -x "$NODE" ] && [ -f "$STREAM_CLIENT" ]; then
-  if PAPER_AGENT_XOCHITL_PID="$XOCHITL_PID" \
-      "$NODE" "$STREAM_CLIENT" "$ACTION" "$PNG" "$X" "$Y" "$WIDTH" "$HEIGHT" "$NEW_PAGE_REQUIRED"; then
+  if [ "$HAS_SCENE_TARGET" -eq 1 ]; then
+    if PAPER_AGENT_XOCHITL_PID="$XOCHITL_PID" \
+        "$NODE" "$STREAM_CLIENT" "$ACTION" "$PNG" "$X" "$Y" "$WIDTH" "$HEIGHT" \
+        "$NEW_PAGE_REQUIRED" "$SCENE_X" "$SCENE_Y" "$SCENE_WIDTH" "$SCENE_HEIGHT" \
+        "$PAPER_X" "$PAPER_Y" "$PAPER_WIDTH" "$PAPER_HEIGHT"; then
+      stream_rc=0
+    else
+      stream_rc=$?
+    fi
+  else
+    if PAPER_AGENT_XOCHITL_PID="$XOCHITL_PID" \
+        "$NODE" "$STREAM_CLIENT" "$ACTION" "$PNG" "$X" "$Y" "$WIDTH" "$HEIGHT" "$NEW_PAGE_REQUIRED"; then
+      stream_rc=0
+    else
+      stream_rc=$?
+    fi
+  fi
+  if [ "$stream_rc" -eq 0 ]; then
     FINAL_STATUS=done
     echo "native_writeback=streaming-complete"
     exit 0
   else
-    stream_rc=$?
     if [ "$stream_rc" -ne 75 ]; then
       echo "resident native oracle failed after accepting the request" >&2
       exit "$stream_rc"

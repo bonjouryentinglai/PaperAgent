@@ -7,8 +7,8 @@ const SOCKET = process.env.PAPER_AGENT_NATIVE_SOCKET || "/run/paper-agent-native
 const args = process.argv.slice(2);
 const health = args.length === 1 && args[0] === "--health";
 
-if (!health && args.length !== 7) {
-  console.error("usage: native-oracle-client.mjs ACTION PNG X Y WIDTH HEIGHT NEW_PAGE_REQUIRED | --health");
+if (!health && args.length !== 7 && args.length !== 15) {
+  console.error("usage: native-oracle-client.mjs ACTION PNG X Y WIDTH HEIGHT NEW_PAGE_REQUIRED [SCENE_X SCENE_Y SCENE_WIDTH SCENE_HEIGHT PAPER_X PAPER_Y PAPER_WIDTH PAPER_HEIGHT] | --health");
   process.exit(2);
 }
 
@@ -26,6 +26,19 @@ const request = health
       newPageRequired: args[6] === "1",
       xochitlPid: Number(process.env.PAPER_AGENT_XOCHITL_PID),
     };
+
+if (!health && args.length === 15) {
+  request.sceneTarget = {
+    bounds: {
+      x: Number(args[7]), y: Number(args[8]),
+      width: Number(args[9]), height: Number(args[10]),
+    },
+    paper: {
+      x: Number(args[11]), y: Number(args[12]),
+      width: Number(args[13]), height: Number(args[14]),
+    },
+  };
+}
 
 let accepted = false;
 let finished = false;

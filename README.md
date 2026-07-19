@@ -31,7 +31,7 @@ ordinary strokes. Raster output uses Xochitl's native notebook-image path.
 | Native tables | Implemented with centered cell text and the shared AI body-size policy; device acceptance pending |
 | Native vector figures | Bounded non-executable DSL with lines, polygons, sampled curves, rounded shapes, arcs and sparse hatch fills; device acceptance pending |
 | Beautify text or sketch | Preserves the source, normalizes rough geometry, and writes into a lasso-sized box below or on a new native page; physical acceptance pending |
-| GPT raster images | Implemented locally: ChatGPT OAuth, `gpt-image-2`, bounded PNG normalization and Xochitl 3.27 native image insertion; physical acceptance pending |
+| GPT raster images | Implemented locally: ChatGPT OAuth, `gpt-image-2`, bounded PNG normalization and a GPL XOVI native clipboard-paste bridge; physical acceptance pending |
 | One-click install and settings UI | Planned |
 
 Paper Agent is intentionally independent from any standalone notebook app. It
@@ -65,6 +65,7 @@ scripts/bootstrap-runtime.sh
 scripts/login.sh
 scripts/install-xovi-deps.sh
 scripts/build-on-move.sh
+scripts/build-image-plugin.sh
 scripts/install-device.sh dist/paper-agent-native
 scripts/doctor.sh
 ```
@@ -110,9 +111,10 @@ vulnerability.
 
 ## License
 
-Paper Agent's original Rust and JavaScript code is MIT licensed. The QMD file
-is GPL-3.0-only because it contains code adapted from GPL-3.0 Xochitl
-extensions. Fonts and dictionaries retain their own licenses. See
+Paper Agent's original Rust and JavaScript code is MIT licensed. The QMD and
+the separate native XOVI image plugin are GPL-3.0-only because they contain
+code adapted from GPL-3.0 Xochitl extensions. Fonts and dictionaries retain
+their own licenses. See
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the complete boundary.
 
 Paper Agent is an independent community project and is not affiliated with or

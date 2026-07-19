@@ -1,0 +1,13 @@
+version 0.1.0
+
+export paperAgentImagePing
+with
+    xovi-message-broker$simpleSignal = "paperAgentImagePing"
+    xovi-message-broker$version = 1
+end
+
+export paperAgentInsertImage
+with
+    xovi-message-broker$simpleSignal = "paperAgentInsertImage"
+    xovi-message-broker$version = 1
+end
