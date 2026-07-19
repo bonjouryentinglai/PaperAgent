@@ -27,7 +27,7 @@ const PI = path.join(PI_BIN_DIR, "pi");
 const PROVIDER = process.env.PAPER_AGENT_PROVIDER || "openai-codex";
 const MODEL = process.env.PAPER_AGENT_MODEL || "gpt-5.6-sol";
 const THINKING = process.env.PAPER_AGENT_THINKING || "off";
-const CJK_SCALE = process.env.PAPER_AGENT_CJK_SCALE || "0.86";
+const CJK_SCALE = process.env.PAPER_AGENT_CJK_SCALE || "0.78";
 const MAX_IMAGE = 4 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 300_000;
 const IMAGE_HELPER_TIMEOUT_MS = 220_000;
@@ -140,6 +140,10 @@ function selfTest() {
   if (streamJobStem("1784451570211-1", 2) !== "stream-1784451570211-1-2") {
     throw new Error("streaming writer job path contract failed");
   }
+  if (!isValidXochitlPid(32_213) || isValidXochitlPid(0)
+      || isValidXochitlPid(Number.NaN)) {
+    throw new Error("Xochitl PID validation failed");
+  }
   if (!SYSTEM_PROMPT.includes("geometrically normalize it")
       || !SYSTEM_PROMPT.includes("Make circles rounder")) {
     throw new Error("Beautify geometry-normalization rule is missing");
@@ -220,6 +224,25 @@ function imageAckPathFor(selectionPath, error = false) {
   return `/run/paper-agent-image-${artifactIdFor(selectionPath)}.${error ? "error" : "ack"}`;
 }
 
+function isValidXochitlPid(pid) {
+  return Number.isSafeInteger(pid) && pid > 1 && pid <= 4_194_304;
+}
+
+function xochitlSessionAlive(pid) {
+  if (!isValidXochitlPid(pid)) return false;
+  try {
+    return fs.readFileSync(`/proc/${pid}/comm`, "utf8").trim() === "xochitl";
+  } catch {
+    return false;
+  }
+}
+
+function assertXochitlSession(turn) {
+  if (!xochitlSessionAlive(turn.request.xochitlPid)) {
+    throw new Error("Xochitl restarted during the native request");
+  }
+}
+
 function streamJobStem(turnId, sequence) {
   if (!/^\d{10,20}-\d{1,9}$/u.test(String(turnId))
       || !Number.isSafeInteger(sequence) || sequence < 1 || sequence > 4096) {
@@ -275,6 +298,7 @@ async function deliverImageArtifact(turn, artifactId, width, height) {
   let nextSignalAt = 0;
   while (Date.now() < deadline) {
     if (turn.failed) throw new Error("image insertion was cancelled");
+    assertXochitlSession(turn);
     for (const [file, failed] of [[errorPath, true], [ack, false]]) {
       try {
         const info = fs.lstatSync(file);
@@ -444,6 +468,9 @@ function validateRequest(request) {
   if (typeof request.newPageRequired !== "boolean") {
     throw new Error("invalid new-page policy");
   }
+  if (!isValidXochitlPid(request.xochitlPid) || !xochitlSessionAlive(request.xochitlPid)) {
+    throw new Error("request does not belong to the active Xochitl process");
+  }
 }
 
 function execFileText(file, args, options = {}) {
@@ -456,11 +483,12 @@ function execFileText(file, args, options = {}) {
 }
 
 class WriterPipe {
-  constructor() {
+  constructor(xochitlPid) {
     this.pending = [];
     this.buffer = "";
     this.exited = false;
     this.child = spawn(BIN, ["write-stream", "--confirm", "PAPER_AGENT_NATIVE_WRITE_V1"], {
+      env: { ...process.env, PAPER_AGENT_XOCHITL_PID: String(xochitlPid) },
       stdio: ["pipe", "pipe", "pipe"],
     });
     this.ready = new Promise((resolve, reject) => {
@@ -620,9 +648,11 @@ async function renderJob(turn, text, kind, scalePercent = null) {
 
 async function writeRenderedJob(turn, rendered, kind) {
   const sequence = turn.chunkCount + 1;
-  if (!turn.writer) turn.writer = new WriterPipe();
+  assertXochitlSession(turn);
+  if (!turn.writer) turn.writer = new WriterPipe(turn.request.xochitlPid);
   await turn.writer.ready;
   await ensurePrimaryPen(turn, sequence);
+  assertXochitlSession(turn);
   await turn.writer.write(rendered.job);
   turn.chunkCount = sequence;
   turn.nextY = rendered.bounds.maxY + LINE_GAP;
@@ -643,6 +673,7 @@ async function writeRenderedJob(turn, rendered, kind) {
 }
 
 async function requestNewPage(turn) {
+  assertXochitlSession(turn);
   if (turn.writer) {
     await turn.writer.close();
     turn.writer = null;
@@ -660,6 +691,7 @@ async function requestNewPage(turn) {
   let nextSignalAt = 0;
   while (Date.now() < deadline) {
     if (turn.failed) throw new Error("new-page request was cancelled");
+    assertXochitlSession(turn);
     for (const [file, failed] of [[errorPath, true], [ack, false]]) {
       try {
         const info = fs.lstatSync(file);
@@ -757,6 +789,7 @@ async function ensurePrimaryPen(turn, sequence) {
   let nextSignalAt = 0;
   while (Date.now() < deadline) {
     if (turn.failed) throw new Error("primary-pen confirmation was cancelled");
+    assertXochitlSession(turn);
     try {
       const info = fs.lstatSync(ack);
       if (!info.isFile() || info.isSymbolicLink()) {

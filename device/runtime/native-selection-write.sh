@@ -34,6 +34,7 @@ PREPARE="$BASE/native-selection-prepare.sh"
 BIN="$BASE/paper-agent-native"
 NODE=/home/root/node/bin/node
 STREAM_CLIENT="$BASE/native-oracle-client.mjs"
+BROKER_SIGNAL="$BASE/broker-signal.mjs"
 LOCK=/run/paper-agent-native-coordinator.lock
 FINAL_STATUS=error
 
@@ -46,16 +47,28 @@ case "$NEW_PAGE_REQUIRED" in
   *) echo "new-page policy must be 0 or 1" >&2; exit 2 ;;
 esac
 
-send_status() {
-  if [ -p /run/xovi-mb ]; then
-    printf 'upaper-agent$status:%s\n' "$1" > /run/xovi-mb || true
+send_broker() {
+  if [ -x "$NODE" ] && [ -f "$BROKER_SIGNAL" ]; then
+    "$NODE" "$BROKER_SIGNAL" "$1" "$2" >/dev/null 2>&1 || true
   fi
 }
 
+send_status() {
+  send_broker 'paper-agent$status' "$1"
+}
+
 send_request_state() {
-  if [ -p /run/xovi-mb ]; then
-    printf 'upaper-agent$request:%s,%s\n' "$REQUEST_ID" "$1" > /run/xovi-mb || true
-  fi
+  send_broker 'paper-agent$request' "$REQUEST_ID,$1"
+}
+
+current_xochitl_pid() {
+  systemctl show xochitl -p MainPID --value 2>/dev/null || true
+}
+
+xochitl_session_alive() {
+  current=$(current_xochitl_pid)
+  [ "$current" = "$XOCHITL_PID" ] && [ -r "/proc/$XOCHITL_PID/comm" ] \
+    && [ "$(cat "/proc/$XOCHITL_PID/comm" 2>/dev/null || true)" = xochitl ]
 }
 
 ensure_primary_pen() {
@@ -64,9 +77,11 @@ ensure_primary_pen() {
   rm -f "$ack"
   attempt=0
   while [ "$attempt" -lt 34 ]; do
-    if [ -p /run/xovi-mb ]; then
-      printf 'upaper-agent$tool:primary,%s,%s\n' "$REQUEST_ID" "$sequence" > /run/xovi-mb || true
+    if ! xochitl_session_alive; then
+      echo "Xochitl restarted during the native request" >&2
+      return 1
     fi
+    send_broker 'paper-agent$tool' "primary,$REQUEST_ID,$sequence"
     sleep 0.08
     if [ -f "$ack" ] && [ ! -L "$ack" ]; then
       rm -f "$ack"
@@ -94,6 +109,10 @@ esac
 
 umask 077
 mkdir -p "$JOBS"
+XOCHITL_PID=$(current_xochitl_pid)
+case "$XOCHITL_PID" in
+  ''|0|*[!0-9]*) echo "Xochitl has no stable main process" >&2; exit 1 ;;
+esac
 if ! mkdir "$LOCK" 2>/dev/null; then
   echo "another native selection request is already active" >&2
   send_status error
@@ -152,6 +171,10 @@ test "$stable_count" -ge 2 || { echo "selection screenshot did not settle" >&2; 
 # length bound and an explicit byte format, producing the same stable value.
 magic=$(hexdump -n 8 -v -e '1/1 "%02x"' "$PNG")
 test "$magic" = "89504e470d0a1a0a" || { echo "selection screenshot is not PNG" >&2; exit 1; }
+if ! xochitl_session_alive; then
+  echo "Xochitl restarted while the selection screenshot was captured" >&2
+  exit 1
+fi
 
 # Prefer the resident Pi RPC service. Exit 75 means the service was unavailable
 # before accepting this request, so the proven one-shot path remains a safe
@@ -161,7 +184,8 @@ test "$magic" = "89504e470d0a1a0a" || { echo "selection screenshot is not PNG" >
 # The oracle repeats this acknowledged guard immediately before every job.
 ensure_primary_pen 0
 if [ -x "$NODE" ] && [ -f "$STREAM_CLIENT" ]; then
-  if "$NODE" "$STREAM_CLIENT" "$ACTION" "$PNG" "$X" "$Y" "$WIDTH" "$HEIGHT" "$NEW_PAGE_REQUIRED"; then
+  if PAPER_AGENT_XOCHITL_PID="$XOCHITL_PID" \
+      "$NODE" "$STREAM_CLIENT" "$ACTION" "$PNG" "$X" "$Y" "$WIDTH" "$HEIGHT" "$NEW_PAGE_REQUIRED"; then
     FINAL_STATUS=done
     echo "native_writeback=streaming-complete"
     exit 0
@@ -184,6 +208,7 @@ fi
 # The one-shot fallback has no resident oracle, so repeat the same acknowledged
 # guard immediately before its direct Marker write.
 ensure_primary_pen 4096
-"$BIN" write "$JOB" --confirm PAPER_AGENT_NATIVE_WRITE_V1
+PAPER_AGENT_XOCHITL_PID="$XOCHITL_PID" \
+  "$BIN" write "$JOB" --confirm PAPER_AGENT_NATIVE_WRITE_V1
 FINAL_STATUS=done
 echo "native_writeback=complete"

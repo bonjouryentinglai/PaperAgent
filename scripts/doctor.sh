@@ -17,6 +17,7 @@ echo "qmd=$([ -f /home/root/xovi/exthome/qt-resource-rebuilder/paperAgentSelecti
 echo "icons=$([ -f /home/root/paper-agent/assets/icons/paper-agent-ai.svg ] && [ -f /home/root/paper-agent/assets/icons/paper-agent-beautify.svg ] && echo present || echo missing)"
 echo "credential=$([ -f /home/root/.pi/agent/auth.json ] && echo present || echo missing)"
 echo "socket_mode=$(stat -c %a /run/paper-agent-native-oracle.sock 2>/dev/null || echo missing)"
+echo "coordinator_lock=$([ -d /run/paper-agent-native-coordinator.lock ] && echo active || echo clear)"
 X_PID=$(systemctl show xochitl -p MainPID --value 2>/dev/null || true)
 if [ -n "$X_PID" ] && [ "$X_PID" != 0 ]; then
   QMD_LOG=$(journalctl "_PID=$X_PID" -n 1000 --no-pager -o cat 2>/dev/null || true)

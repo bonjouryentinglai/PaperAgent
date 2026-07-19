@@ -36,6 +36,8 @@ file "$BIN" | grep -Eq 'ARM aarch64|ARM64' || {
 
 "$NODE_CHECK" --check "$ROOT/device/runtime/native-oracle-server.mjs"
 "$NODE_CHECK" "$ROOT/device/runtime/native-oracle-server.mjs" --self-test
+"$NODE_CHECK" --check "$ROOT/device/runtime/broker-signal.mjs"
+"$NODE_CHECK" "$ROOT/device/runtime/broker-signal.mjs" --self-test
 "$NODE_CHECK" --check "$ROOT/device/runtime/native-oracle-client.mjs"
 "$NODE_CHECK" --check "$ROOT/device/runtime/rich-document.mjs"
 "$NODE_CHECK" --test "$ROOT/device/runtime/rich-document.test.mjs"
@@ -72,7 +74,7 @@ STATE_ROOT="$BASE/backups"
 STAMP=$(date +%Y%m%d-%H%M%S)
 BACKUP="$STATE_ROOT/install-$STAMP"
 INCOMING="$BASE/.install-incoming.$$"
-FILES='paper-agent-native native-oracle-client.mjs native-oracle-server.mjs native-oracle-service.sh native-selection-prepare.sh native-selection-write.sh rich-document.mjs rich-document.test.mjs image-generate.mjs image-generate.test.mjs layout-policy.mjs layout-policy.test.mjs'
+FILES='paper-agent-native broker-signal.mjs native-oracle-client.mjs native-oracle-server.mjs native-oracle-service.sh native-selection-prepare.sh native-selection-write.sh rich-document.mjs rich-document.test.mjs image-generate.mjs image-generate.test.mjs layout-policy.mjs layout-policy.test.mjs'
 
 test -x /home/root/node/bin/node
 test -x /home/root/node/bin/pi
@@ -147,16 +149,16 @@ cp "$INCOMING/assets/icons/paper-agent-ai.svg" "$ICONS/paper-agent-ai.svg"
 cp "$INCOMING/assets/icons/paper-agent-beautify.svg" "$ICONS/paper-agent-beautify.svg"
 grep -q '<svg' "$ICONS/paper-agent-ai.svg"
 grep -q '<svg' "$ICONS/paper-agent-beautify.svg"
-for name in native-oracle-client.mjs native-oracle-server.mjs native-oracle-service.sh native-selection-prepare.sh native-selection-write.sh rich-document.mjs rich-document.test.mjs image-generate.mjs image-generate.test.mjs layout-policy.mjs layout-policy.test.mjs; do
+for name in broker-signal.mjs native-oracle-client.mjs native-oracle-server.mjs native-oracle-service.sh native-selection-prepare.sh native-selection-write.sh rich-document.mjs rich-document.test.mjs image-generate.mjs image-generate.test.mjs layout-policy.mjs layout-policy.test.mjs; do
   cp "$INCOMING/runtime/$name" "$NATIVE/$name"
 done
 cp "$INCOMING/paper-agent-native-oracle.service" "$UNIT"
 cp "$INCOMING/paper-agent-selection.qmd" "$QMD_FILE"
 if [ ! -f "$CONFIG" ]; then cp "$INCOMING/paper-agent.env.example" "$CONFIG"; fi
-# 0.78 was Paper Agent's previous bundled default. Move existing installs to
-# the new readable CJK size while preserving every user-selected custom value.
-if grep -qx 'PAPER_AGENT_CJK_SCALE=0.78' "$CONFIG"; then
-  sed -i 's/^PAPER_AGENT_CJK_SCALE=0\.78$/PAPER_AGENT_CJK_SCALE=0.86/' "$CONFIG"
+# 0.86 was the short-lived oversized default. Move those installs back to the
+# user-validated 0.78 size while preserving every custom value.
+if grep -qx 'PAPER_AGENT_CJK_SCALE=0.86' "$CONFIG"; then
+  sed -i 's/^PAPER_AGENT_CJK_SCALE=0\.86$/PAPER_AGENT_CJK_SCALE=0.78/' "$CONFIG"
 fi
 chmod 0755 "$NATIVE/paper-agent-native" "$NATIVE/native-oracle-service.sh" "$NATIVE/native-selection-prepare.sh" "$NATIVE/native-selection-write.sh"
 chmod 0644 "$NATIVE/"*.mjs "$ICONS/"*.svg "$UNIT" "$QMD_FILE" "$CONFIG"

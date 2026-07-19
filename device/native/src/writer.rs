@@ -13,6 +13,7 @@ use std::fs::{File, OpenOptions};
 use std::io;
 use std::os::fd::{AsRawFd, RawFd};
 use std::os::unix::fs::OpenOptionsExt;
+use std::path::PathBuf;
 use std::process::Command;
 use std::thread::sleep;
 use std::time::Duration;
@@ -34,11 +35,13 @@ pub struct WriterSession {
     _lock: WriterLock,
     probe: device::Probe,
     pen: NativePen,
+    expected_xochitl_pid: Option<u32>,
 }
 
 impl WriterSession {
     pub fn open() -> Result<Self, String> {
-        ensure_xochitl_active()?;
+        let expected_xochitl_pid = expected_xochitl_pid()?;
+        ensure_xochitl_active(expected_xochitl_pid)?;
         let lock = WriterLock::acquire()?;
         let probe = device::probe()?;
         let fd = open_writer(&probe.marker_path)
@@ -54,10 +57,12 @@ impl WriterSession {
                 fd,
                 touching: false,
             },
+            expected_xochitl_pid,
         })
     }
 
     pub fn write_job(&mut self, job: &StrokeJob) -> Result<(), String> {
+        ensure_expected_xochitl(self.expected_xochitl_pid)?;
         let estimated = estimated_points(job)?;
         let canvas = (job.canvas_width, job.canvas_height);
         eprintln!(
@@ -66,7 +71,10 @@ impl WriterSession {
             job.point_count()
         );
 
-        for stroke in &job.strokes {
+        for (stroke_index, stroke) in job.strokes.iter().enumerate() {
+            if stroke_index % 16 == 0 {
+                ensure_expected_xochitl(self.expected_xochitl_pid)?;
+            }
             let first = canvas_point_to_axes(
                 (stroke[0].x, stroke[0].y),
                 canvas,
@@ -100,13 +108,41 @@ impl WriterSession {
     }
 }
 
-fn ensure_xochitl_active() -> Result<(), String> {
+fn expected_xochitl_pid() -> Result<Option<u32>, String> {
+    let Some(value) = std::env::var_os("PAPER_AGENT_XOCHITL_PID") else {
+        return Ok(None);
+    };
+    let value = value
+        .to_str()
+        .ok_or_else(|| "PAPER_AGENT_XOCHITL_PID is not UTF-8".to_string())?;
+    let pid = value
+        .parse::<u32>()
+        .map_err(|_| "PAPER_AGENT_XOCHITL_PID is invalid".to_string())?;
+    if !(2..=4_194_304).contains(&pid) {
+        return Err("PAPER_AGENT_XOCHITL_PID is outside the valid range".into());
+    }
+    Ok(Some(pid))
+}
+
+fn ensure_expected_xochitl(expected_pid: Option<u32>) -> Result<(), String> {
+    let Some(pid) = expected_pid else {
+        return Ok(());
+    };
+    let comm = std::fs::read_to_string(PathBuf::from(format!("/proc/{pid}/comm")))
+        .map_err(|_| "Xochitl restarted during native writeback".to_string())?;
+    if comm.trim() != "xochitl" {
+        return Err("Xochitl restarted during native writeback".into());
+    }
+    Ok(())
+}
+
+fn ensure_xochitl_active(expected_pid: Option<u32>) -> Result<(), String> {
     let status = Command::new("systemctl")
         .args(["is-active", "--quiet", "xochitl"])
         .status()
         .map_err(|e| format!("cannot check xochitl state: {e}"))?;
     if status.success() {
-        Ok(())
+        ensure_expected_xochitl(expected_pid)
     } else {
         Err("xochitl is not active; refusing native writeback".into())
     }

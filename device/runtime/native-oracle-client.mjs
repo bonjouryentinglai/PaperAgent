@@ -24,6 +24,7 @@ const request = health
       width: Number(args[4]),
       height: Number(args[5]),
       newPageRequired: args[6] === "1",
+      xochitlPid: Number(process.env.PAPER_AGENT_XOCHITL_PID),
     };
 
 let accepted = false;

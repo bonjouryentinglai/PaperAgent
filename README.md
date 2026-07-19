@@ -27,7 +27,7 @@ ordinary strokes. Raster output uses Xochitl's native notebook-image path.
 | Native selection actions | Original AI-sparkle and Beautify-wand SVG icons packaged with the QMD integration |
 | AI answers and calculations | Implemented; complete answers are preflighted at 100%, may shrink only to 60%, then use a new native page at 100% |
 | Rich and mixed answers | Implemented locally; headings, paragraphs, lists, bold, inline/fenced code, tables and vectors; device acceptance pending |
-| Handwriting fonts | Kalam Regular for Latin; ChenYuLuoyan 2.0 Thin for Chinese, with jf open 粉圓 2.1 fallback and straight-segment skeleton simplification |
+| Handwriting fonts | Kalam Regular for Latin; ChenYuLuoyan 2.0 Thin for Chinese, with jf open 粉圓 2.1 fallback and lightly smoothed skeleton tracing |
 | Native tables | Implemented with centered cell text and the shared AI body-size policy; device acceptance pending |
 | Native vector figures | Bounded non-executable DSL with lines, polygons, sampled curves, rounded shapes, arcs and sparse hatch fills; device acceptance pending |
 | Beautify text or sketch | Preserves the source, normalizes rough geometry, and writes into a lasso-sized box below or on a new native page; physical acceptance pending |

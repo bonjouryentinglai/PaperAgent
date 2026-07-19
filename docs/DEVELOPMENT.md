@@ -10,6 +10,8 @@ cargo test --locked
 cd ../..
 node --check device/runtime/native-oracle-server.mjs
 node device/runtime/native-oracle-server.mjs --self-test
+node --check device/runtime/broker-signal.mjs
+node device/runtime/broker-signal.mjs --self-test
 node --check device/runtime/native-oracle-client.mjs
 node --check device/runtime/rich-document.mjs
 node --test device/runtime/rich-document.test.mjs
@@ -73,6 +75,9 @@ After an install, verify separately:
 14. Beautify a lasso near the page bottom whose same-size result cannot fit;
     confirm Xochitl creates a new page and preserves the lasso-based visual size.
 15. Undo, move, resize, page save, reopen and sync behavior for native ink.
+16. Restart Xochitl during selection capture or before writeback. The old
+    request must stop, `scripts/doctor.sh` must report `coordinator_lock=clear`,
+    and the next AI/Beautify request must start normally.
 
 Vector acceptance should also confirm that hatch density remains readable at
 small and large placements. Paper Agent deliberately keeps the active Xochitl

@@ -113,7 +113,7 @@ if [ "$KIND" = document ]; then
   RENDER_INPUT=$DOCUMENT
 fi
 
-PAPER_AGENT_CJK_SCALE=${PAPER_AGENT_CJK_SCALE:-0.86} \
+PAPER_AGENT_CJK_SCALE=${PAPER_AGENT_CJK_SCALE:-0.78} \
   "$BIN" "render-$KIND" "$RENDER_INPUT" "$JOB" "$X" "$Y" "$WIDTH" "$HEIGHT"
 "$BIN" dry-run "$JOB"
 chmod 0600 "$JOB"

@@ -5,9 +5,9 @@ Paper Agent uses a thin Xochitl integration and a separate local runtime.
 ## Request path
 
 1. The QMD adds AI and Beautify icons to Xochitl's lasso menu.
-2. It snapshots selection bounds, asks `rm-shot` for a bounded PNG and schedules
-   a systemd worker with a direct action argument, then closes the lasso and
-   restores the primary pen for either action.
+2. It snapshots selection bounds, asks `rm-shot` for a bounded PNG, then closes
+   the lasso and restores the primary pen. Only `screenshotComplete` schedules
+   a systemd worker, so a capture-time Xochitl crash cannot strand a worker.
 3. The worker waits for a complete PNG and sends an allowlisted request to a
    mode-`0600` Unix socket.
 4. A persistent Pi RPC process sees the image and returns a typed result.
@@ -20,7 +20,8 @@ Paper Agent uses a thin Xochitl integration and a separate local runtime.
    and activate a real page, waits for acknowledgement, and renders at 100%.
    Beautify never shrinks because the old page is short: its lasso-sized box
    moves to a new page when required.
-7. StrokeJobs use the guarded Marker writer. Images use Xochitl 3.27's native
+7. StrokeJobs use the guarded Marker writer, bound to the Xochitl PID that
+   originated the request. Images use Xochitl 3.27's native
    scene-image insertion method only if the originating controller and page are
    still active. Beautify validates its entire text/vector result, preserves
    the source and writes the result below it through the same Marker path as AI.
@@ -86,7 +87,8 @@ the rectangle with a virtual eraser.
 - **Renderer:** parses only local data formats; no scripts, HTML or arbitrary SVG.
 - **Image preparation:** rejects unsafe PNGs and publishes only bounded,
   owner-readable RGBA artifacts in an owner-only directory.
-- **Writer:** validates hardware, axes, job size, lock and confirmation string.
+- **Writer:** validates hardware, axes, job size, lock, originating Xochitl PID
+  and confirmation string. Shell-to-XOVI signals use non-blocking FIFO writes.
 
 ## Native image acceptance
 
@@ -97,7 +99,6 @@ scene-image insertion path with a local file URL and a scene-space center point.
 
 This path is still a developer preview. It is not considered accepted until a
 physical Move test verifies insertion, move, resize, Undo/Redo, close/reopen,
-reboot, export and sync. The transport currently has no positive acknowledgement
-from Xochitl back to the local oracle; QML insertion failures remain sticky in
-the on-device error notification so a later transport-level completion cannot
-hide them.
+reboot, export and sync. The oracle retries the bounded image signal until QML
+creates a positive or negative acknowledgement file; transport completion can
+therefore no longer hide a dropped or rejected Xochitl insertion command.

@@ -58,6 +58,7 @@ AFFECT [[11806562588218124596]]
 	property double paperAgentCachedSelectionAt: 0
 	property var paperAgentPendingImageRequests: ({})
 	property var paperAgentImageResults: ({})
+	property var paperAgentPendingCapture: null
 	property string paperAgentActiveRequest: ""
 
 	XoviMessageBroker {
@@ -115,6 +116,12 @@ AFFECT [[11806562588218124596]]
 			console.log("paper-agent active request guard timed out", paperAgentActiveRequest)
 			paperAgentActiveRequest = ""
 		}
+	}
+
+	Timer {
+		id: paperAgentCaptureTimer
+		interval: 8000
+		onTriggered: paperAgentCancelPendingCapture("rm-shot completion timed out")
 	}
 
 	function paperAgentBestSelectionBounds() {
@@ -365,10 +372,63 @@ AFFECT [[11806562588218124596]]
 		}
 	}
 
+	function paperAgentCancelPendingCapture(reason) {
+		var capture = paperAgentPendingCapture
+		paperAgentPendingCapture = null
+		paperAgentCaptureTimer.stop()
+		if (!capture) return
+		console.log("paper-agent native capture failed", reason, capture.requestId)
+		if (paperAgentActiveRequest === capture.requestId) {
+			paperAgentActiveRequestTimer.stop()
+			paperAgentActiveRequest = ""
+		}
+		paperAgentForgetImageRequest(capture.requestId)
+		try {
+			paperAgentCommandExecutor.executeCommand("/bin/rm", ["-f", capture.shotPath])
+		} catch (error) {
+			console.log("paper-agent selection cleanup failed", String(error))
+		}
+		paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "error")
+	}
+
+	function paperAgentScheduleNativeWrite(capture) {
+		if (!capture || !paperAgentPendingCapture
+				|| capture.requestId !== paperAgentPendingCapture.requestId) return false
+		try {
+			paperAgentCaptureTimer.stop()
+			var unit = "paper-agent-native-selection-" + capture.requestId
+			var placement = capture.placement
+			var output = paperAgentCommandExecutor.executeCommand(
+				"/bin/systemd-run",
+				 ["--unit=" + unit, "--collect", "--property=RuntimeMaxSec=320",
+				  "/home/root/paper-agent/native/native-selection-write.sh",
+				  capture.action, capture.shotPath, String(placement.x), String(placement.y),
+				  String(placement.width), String(placement.height),
+				  placement.newPageRequired ? "1" : "0"])
+			paperAgentPendingCapture = null
+			console.log("paper-agent native write scheduled", unit, output)
+			return true
+		} catch (error) {
+			paperAgentCancelPendingCapture(String(error))
+			return false
+		}
+	}
+
 	XoviMessageBroker {
 		id: paperAgentNativeImageBroker
-		listeningFor: ["paper-agent$image", "paper-agent$request", "paper-agent$page"]
+		listeningFor: ["paper-agent$image", "paper-agent$request", "paper-agent$page",
+			"screenshotComplete", "screenshotFailed"]
 		function onSignalReceived(signal, message) {
+			if (signal === "screenshotComplete") {
+				var capture = paperAgentPendingCapture
+				if (capture && String(message) === capture.shotPath)
+					paperAgentScheduleNativeWrite(capture)
+				return
+			}
+			if (signal === "screenshotFailed") {
+				if (paperAgentPendingCapture) paperAgentCancelPendingCapture("rm-shot failed")
+				return
+			}
 			var fields = String(message).split(",")
 			var requestId = fields[0]
 			if (!/^[0-9]{10,20}$/.test(requestId)) return
@@ -479,43 +539,27 @@ AFFECT [[11806562588218124596]]
 		}
 		var requestId = (new Date()).getTime()
 		var shotPath = "/home/root/paper-agent/selection/native-selection-" + requestId + ".png"
-		var args = shotPath + ",180,0," + crop.join(",")
+		var stamp = String(requestId)
+		var capture = {
+			requestId: stamp, action: action, shotPath: shotPath,
+			placement: placement
+		}
+		paperAgentPendingCapture = capture
+		if (action === "ai") paperAgentRememberImageRequest(stamp, bounds)
+		paperAgentActiveRequest = stamp
+		paperAgentActiveRequestTimer.restart()
+		// rm-shot captures on a detached thread. Wait for its completion signal
+		// before creating a worker, so an rm-shot/Xochitl crash cannot strand the
+		// coordinator lock and poison every later Paper Agent request.
+		var args = shotPath + ",300,0," + crop.join(",")
 		var result = paperAgentScreenshotBroker.sendSimpleSignal("takeScreenshot", args)
 		console.log("paper-agent native capture", result, args)
 		if (result !== "success") {
-			paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "error")
+			paperAgentCancelPendingCapture("rm-shot did not start")
 			return false
 		}
-
-		// systemd owns the long-running GPT request after Xochitl dismisses this
-		// transient selection scene. Arguments are passed directly without a
-		// shell; the coordinator waits for the PNG, prepares a bounded job, then
-		// calls the guarded writer and removes all temporary content.
-		try {
-			var stamp = requestId
-			if (action === "ai") paperAgentRememberImageRequest(stamp, bounds)
-			paperAgentActiveRequest = String(stamp)
-			paperAgentActiveRequestTimer.restart()
-			var unit = "paper-agent-native-selection-" + stamp
-			var output = paperAgentCommandExecutor.executeCommand(
-				"/bin/systemd-run",
-				 ["--unit=" + unit, "--collect", "--property=RuntimeMaxSec=320",
-				  "/home/root/paper-agent/native/native-selection-write.sh",
-				  action, shotPath, String(placement.x), String(placement.y),
-				  String(placement.width), String(placement.height),
-				  placement.newPageRequired ? "1" : "0"])
-			console.log("paper-agent native write scheduled", unit, output)
-			return true
-		} catch (error) {
-			if (paperAgentActiveRequest === String(stamp)) {
-				paperAgentActiveRequestTimer.stop()
-				paperAgentActiveRequest = ""
-			}
-			paperAgentForgetImageRequest(stamp)
-			console.log("paper-agent native write schedule failed", String(error))
-			paperAgentScreenshotBroker.sendSimpleSignal("paper-agent$status", "error")
-			return false
-		}
+		paperAgentCaptureTimer.restart()
+		return true
 	}
 
 	function paperAgentRunSelection(action) {
