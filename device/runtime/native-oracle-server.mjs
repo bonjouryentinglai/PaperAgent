@@ -139,24 +139,24 @@ function selfTest() {
       !== "/run/paper-agent-image-1234567890123.ack") {
     throw new Error("image-insertion acknowledgement path failed");
   }
-  const below = imageDropLayout({
+  const below = imageDropPoint({
     bounds: { x: -380, y: 100, width: 650, height: 80 },
     paper: { x: -729, y: 0, width: 1458, height: 820 },
   }, 620, 413);
-  if (below.requiresNewPage || !Number.isFinite(below.x) || !Number.isFinite(below.y)
+  if (!Number.isFinite(below.x) || !Number.isFinite(below.y)
       || below.x < -395 || below.x > 395 || below.y < 230 || below.y > 590) {
     throw new Error("image drop-point layout failed");
   }
-  const portrait = imageDropLayout({
-    bounds: { x: -380, y: 280, width: 650, height: 80 },
-    paper: { x: -729, y: 0, width: 1458, height: 820 },
-  }, 413, 620);
-  if (!portrait.requiresNewPage) throw new Error("portrait image must not cover the selection");
-  const nextPage = imageDropLayout({
+  if (imageRequiresNewPage({ height: 1_035, newPageRequired: false }, 620)
+      || !imageRequiresNewPage({ height: 620, newPageRequired: false }, 620)
+      || !imageRequiresNewPage({ height: 1_035, newPageRequired: true }, 413)) {
+    throw new Error("image page-fit policy failed");
+  }
+  const nextPage = imageDropPoint({
     bounds: { x: -380, y: 280, width: 650, height: 80 },
     paper: { x: -729, y: 0, width: 1458, height: 820 },
   }, 413, 620, true);
-  if (nextPage.requiresNewPage || nextPage.y !== 334 || nextPage.x !== 0) {
+  if (nextPage.y !== 334 || nextPage.x !== 0) {
     throw new Error("new-page image layout failed");
   }
   if (streamJobStem("1784451570211-1", 2) !== "stream-1784451570211-1-2") {
@@ -250,7 +250,20 @@ function imageAckPathFor(selectionPath, error = false) {
   return `/run/paper-agent-image-${artifactIdFor(selectionPath)}.${error ? "error" : "ack"}`;
 }
 
-function imageDropLayout(sceneTarget, imageWidth, imageHeight, onNewPage = false) {
+function imageRequiresNewPage(request, imageHeight) {
+  if (!request || !Number.isFinite(request.height) || request.height <= 0
+      || !Number.isFinite(imageHeight) || imageHeight <= 0) {
+    throw new Error("image placement dimensions are invalid");
+  }
+  // request.height is the actual remaining 954x1696 framebuffer space below
+  // the lasso. sceneTarget.paper uses Xochitl's differently scaled scene
+  // coordinates, so comparing the prepared PNG height to paper.height falsely
+  // sends images to a new page even when the visible page has ample room.
+  const bottomMargin = 24;
+  return request.newPageRequired || imageHeight + bottomMargin > request.height;
+}
+
+function imageDropPoint(sceneTarget, imageWidth, imageHeight, onNewPage = false) {
   if (!sceneTarget) throw new Error("image request has no scene target");
   const { bounds, paper } = sceneTarget;
   const gap = 64;
@@ -264,10 +277,12 @@ function imageDropLayout(sceneTarget, imageWidth, imageHeight, onNewPage = false
   const preferredX = onNewPage ? paper.x + paper.width / 2 : bounds.x + bounds.width / 2;
   const x = Math.max(left, Math.min(right, preferredX));
   const below = bounds.y + bounds.height + gap + halfHeight;
-  const requiresNewPage = !onNewPage && below > bottom;
-  const y = onNewPage ? top : below;
+  // Page-fit policy is evaluated in framebuffer coordinates above. Here the
+  // scene bounds are used only to produce a safe insertion point, never to
+  // decide whether the visible space below the source is sufficient.
+  const y = onNewPage ? top : Math.max(top, Math.min(bottom, below));
   if (![x, y].every(Number.isFinite)) throw new Error("image scene target is invalid");
-  return { x, y, requiresNewPage };
+  return { x, y };
 }
 
 function isValidXochitlPid(pid) {
@@ -349,8 +364,7 @@ async function deliverImageArtifact(turn, artifactId, width, height, onNewPage) 
   fs.rmSync(ack, { force: true });
   fs.rmSync(errorPath, { force: true });
   const deadline = Date.now() + IMAGE_ACK_TIMEOUT_MS;
-  const point = imageDropLayout(turn.request.sceneTarget, width, height, onNewPage);
-  if (point.requiresNewPage) throw new Error("generated image requires a new notebook page");
+  const point = imageDropPoint(turn.request.sceneTarget, width, height, onNewPage);
   let nextSignalAt = 0;
   while (Date.now() < deadline) {
     if (turn.failed) throw new Error("image insertion was cancelled");
@@ -468,8 +482,11 @@ function generateImageArtifact(turn, prompt) {
         // Both paths are in the owner-only artifact directory. rename(2)
         // atomically replaces the validated source with the bounded RGBA PNG.
         fs.renameSync(prepared, output);
-        const imageLayout = imageDropLayout(turn.request.sceneTarget, width, height);
-        const onNewPage = turn.request.newPageRequired || imageLayout.requiresNewPage;
+        const onNewPage = imageRequiresNewPage(turn.request, height);
+        console.log(
+          `native-oracle image-layout width=${width} height=${height}`
+            + ` remaining_height=${turn.request.height} new_page=${onNewPage}`,
+        );
         if (onNewPage) await requestNewPage(turn);
         reportStage(turn, "inserting");
         await deliverImageArtifact(turn, artifactId, width, height, onNewPage);

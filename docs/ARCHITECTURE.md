@@ -70,9 +70,10 @@ validates the returned PNG, and never receives general agent tools. The native
 binary decodes it again, removes metadata, converts it to RGBA8 and scales it
 down without upscaling. The QMD remembers the source SceneController and page;
 it rejects and deletes a result if the user changed pages while generation was
-running. An image is placed only when it fits entirely below the selection;
-otherwise Paper Agent creates a new page and places it at that page's top
-centre. The source PNG is removed five seconds after acknowledged insertion.
+running. Page fit is decided against the remaining 954x1696 framebuffer area
+below the lasso, not Xochitl's differently scaled scene bounds. An image that
+does not fit there moves to a new page and is placed at that page's top centre.
+The source PNG is removed five seconds after acknowledged insertion.
 Failures and cancellations delete it immediately, and an hourly sweep removes
 any orphaned artifact older than 24 hours.
 
