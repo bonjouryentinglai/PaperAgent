@@ -1,10 +1,13 @@
 #!/usr/bin/env node
+// SPDX-License-Identifier: MIT
+//
 // Narrow ChatGPT-subscription image helper for Paper Agent.
 //
 // Authentication and refresh follow Pi 0.80.7's openai-codex OAuth provider;
 // the Codex Responses image_generation request and SSE extraction follow
-// OpenClaw's OpenAI image provider. This process has no general agent tools:
-// it accepts one prompt on stdin and writes one validated PNG.
+// OpenClaw's MIT-licensed OpenAI image provider, pinned at
+// 28a3540f3283b0700ffde4ffaa0a5f7303d73a09. This process has no general agent
+// tools: it accepts one prompt on stdin and writes one validated PNG.
 
 import { randomUUID } from "node:crypto";
 import {

@@ -11,8 +11,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable, pinned 2026-07-20
         with:
           components: rustfmt
       - name: Rust format
@@ -25,14 +25,19 @@ jobs:
         run: |
           node --check device/runtime/native-oracle-server.mjs
           node device/runtime/native-oracle-server.mjs --self-test
+          node --check device/runtime/broker-signal.mjs
+          node device/runtime/broker-signal.mjs --self-test
           node --check device/runtime/native-oracle-client.mjs
           node --check device/runtime/rich-document.mjs
           node --test device/runtime/rich-document.test.mjs
           node --check device/runtime/image-generate.mjs
           node --test device/runtime/image-generate.test.mjs
+          node --check device/runtime/layout-policy.mjs
+          node --test device/runtime/layout-policy.test.mjs
       - name: Shell syntax
         run: |
           sh -n device/runtime/native-oracle-service.sh
           sh -n device/runtime/native-selection-prepare.sh
           sh -n device/runtime/native-selection-write.sh
+          sh -n device/systemd/paper-agent-xovi-post-start.sh
           bash -n scripts/*.sh

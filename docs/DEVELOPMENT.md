@@ -28,6 +28,20 @@ The native crate can be tested on ordinary Linux because hardware access is
 only performed by explicit commands. A real ARM64 Move build is still required
 before installation.
 
+## Reproducible image-plugin build
+
+`scripts/build-image-plugin.sh` cross-builds the GPL image bridge with two
+immutable default inputs:
+
+- `eeems/remarkable-toolchain@sha256:297237d78a2aafa14896dd6a1495f7af173bcd646b0359be72ac00c04483dda3`
+- XOVI commit `2b99649f5e4fd6288be7792a8570bd16418adb70`
+
+If `/tmp/paper-agent-xovi` exists, the script verifies that it is clean and at
+the pinned commit. Otherwise it fetches exactly that commit inside the
+container. Maintainers can deliberately test replacements with
+`PAPER_AGENT_TOOLCHAIN_IMAGE`, `PAPER_AGENT_XOVI_COMMIT`, and
+`PAPER_AGENT_XOVI_SOURCE`; release builds should use the recorded defaults.
+
 ## Move build
 
 `scripts/build-on-move.sh` uploads only `device/native`, builds it in a

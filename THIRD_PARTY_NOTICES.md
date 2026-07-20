@@ -23,10 +23,10 @@ Paper Agent's original code is MIT licensed unless a file says otherwise.
   `third_party/STARNUMBER-XOVI-QMD-EXTENSIONS-MIT.txt`.
 - **remarkable-doc-links** `remarkable-xovi-native`, pinned
   `23e41858818ae2c1f836043852118a323cb1e77d`, GPL-3.0, copyright Martin
-  Weber. The separate `device/xovi-image` plugin adapts its active
-  DocumentView, Qt clipboard and `SceneClipboardText` image-paste sequence.
-  Paper Agent removes the upstream inspection, notebook-link and desktop
-  clipboard features. The GPL-3.0 license is preserved in
+  Weber. The separate `device/xovi-image` plugin adapts its active DocumentView
+  discovery and invokes Xochitl's native `insertImageFileAsSceneItem` method;
+  it does not retain the upstream clipboard, inspection or notebook-link
+  features. The GPL-3.0 license is preserved in
   `third_party/GPL-3.0.txt`.
 - **Pi**, MIT, copyright 2025 Mario Zechner. Pi is installed as an external
   runtime and owns ChatGPT OAuth and RPC transport.
@@ -51,7 +51,8 @@ dual-license terms as declared by each crate).
 
 Installation uses but does not redistribute the following binaries:
 
-- XOVI (LGPL-3.0)
+- XOVI, pinned for native-plugin generation at
+  `2b99649f5e4fd6288be7792a8570bd16418adb70` (LGPL-3.0)
 - rm-xovi-extensions and optional modules (GPL-3.0)
 - xovi-message-broker (GPL-3.0)
 - qt-resource-rebuilder (GPL-3.0)

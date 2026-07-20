@@ -100,6 +100,31 @@ credential store. No OpenAI API key is required. Contributors who want the
 individual commands and build details can read
 [Development](docs/DEVELOPMENT.md).
 
+### Data and authentication
+
+- Paper Agent captures the selected notebook region as a PNG. The on-device Pi
+  runtime sends that image, the selected action, and the associated prompt to
+  OpenAI for processing. Do not select content that you do not want to send to
+  an external AI service.
+- ChatGPT OAuth credentials stay on the Move in
+  `/home/root/.pi/agent/auth.json`, which must remain owner-readable only
+  (`0600`). They must never be committed, copied into diagnostics, or shared in
+  an issue.
+- This developer preview uses Pi's ChatGPT/Codex subscription login and the
+  Codex Responses transport at `chatgpt.com/backend-api/codex/responses`. That
+  transport is not documented as a stable public OpenAI API for third-party
+  applications and may stop working after an upstream change. The supported
+  public OpenAI API uses API-key authentication; Paper Agent does not currently
+  implement that provider.
+- `scripts/uninstall.sh` removes Paper Agent but deliberately preserves Pi's
+  credential store. Remove or revoke the `openai-codex` credential separately
+  when retiring or transferring the device. Deleting `auth.json` removes every
+  Pi provider credential stored in that file, not only Paper Agent's login.
+
+See [Security](SECURITY.md) for the complete trust boundary and
+[OpenAI's Codex authentication documentation](https://developers.openai.com/codex/auth)
+for the officially documented Codex sign-in surfaces.
+
 ## Documentation
 
 - [Features](docs/FEATURES.md) contains the detailed capability matrix.

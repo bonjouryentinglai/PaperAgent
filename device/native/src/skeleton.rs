@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: MIT
+//
+// Skeleton tracing is adapted from smart_remarkable's MIT-licensed
+// implementation, pinned at cb787065281b7211b012bd5e5d9be751fe5adaef.
+// See THIRD_PARTY_NOTICES.md.
+
 /// Zhang-Suen thinning and skeleton-to-polyline tracing.
 ///
 /// Converts a filled binary image to 1-pixel-wide skeleton paths.
