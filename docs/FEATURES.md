@@ -12,13 +12,16 @@ The public project owns only the native Xochitl selection workflow.
 | Code blocks | Preserved verbatim, wrapped and drawn in a smaller framed style; never executed | Pending combined-build acceptance |
 | Tables | Pipe-table parser, wrapped and centered cells, bounded native grid and shared body-size policy | Pending combined-build acceptance |
 | Vector drawings | Lines, arrows, polylines, polygons, quadratic/cubic curves, rectangles, rounded rectangles, circles, ellipses, arcs, dots, labels and sparse hatch fills | Pending combined-build acceptance |
-| GPT raster images | ChatGPT OAuth to `gpt-image-2`, strict PNG validation, bounded RGBA normalization and guarded Xochitl 3.27 image insertion | End-to-end physical acceptance pending |
+| GPT raster images | ChatGPT OAuth to `gpt-image-2` at the low-latency `low` quality setting, strict PNG validation, bounded RGBA normalization and guarded Xochitl 3.27 image insertion; images move to a new page rather than covering the source when they do not fit below | End-to-end physical acceptance pending |
 | Mixed documents | Text, code, tables and vector blocks keep their original order in one result | Pending combined-build acceptance |
 
 The image router deliberately sends photographs, photorealistic work,
 watercolor, paintings, posters, ordinary illustrations and ambiguous requests
 to "draw a picture" to GPT Image. Explicit diagrams, charts, maps, schematics,
 line drawings and vector requests use the safe vector renderer instead.
+Thinking and GPT Image generation can be cancelled before native writeback
+starts. Cancellation aborts Pi, stops the image helper and releases all request
+locks and temporary files.
 
 ## Beautify action
 

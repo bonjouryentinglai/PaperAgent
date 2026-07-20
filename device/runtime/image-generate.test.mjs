@@ -47,6 +47,7 @@ assert.equal(body.model, "gpt-5.6-sol");
 assert.deepEqual(body.tool_choice, { type: "image_generation" });
 assert.equal(body.tools[0].model, "gpt-image-2");
 assert.equal(body.tools[0].output_format, "png");
+assert.equal(body.tools[0].quality, "low");
 assert.equal(body.stream, true);
 assert.equal(body.store, false);
 

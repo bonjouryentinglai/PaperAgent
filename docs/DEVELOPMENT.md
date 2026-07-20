@@ -64,11 +64,15 @@ After an install, verify separately:
 8. Test an offline or forced-error Beautify request and confirm the source
    remains unchanged.
 9. Test Undo/Redo after both Beautify routes.
-10. Thinking, success and error notifications.
+10. Thinking, writing, success, cancellation and error notifications. Start a
+    slow request, press Cancel while it is thinking, then confirm no ink is
+    written and the next request starts immediately.
 11. A GPT photo or ordinary illustration appears as a native image object; move
    and resize it, then test Undo/Redo, close/reopen, reboot, export and sync.
 12. Start a GPT image request and change pages before it finishes; Paper Agent
     must reject the stale insertion and remove its temporary artifact.
+    Also request a portrait image near the page bottom and confirm it is placed
+    at the top of a newly created page instead of covering the selection.
 13. AI adaptive layout: verify a short answer remains at 100%, a longer answer
     fits between 60% and 99%, and a result that cannot fit at 60% creates a new
     native page and returns to 100% there.
@@ -85,4 +89,5 @@ ink color; per-command color, stroke width and dash state are not part of the
 current native vector format.
 
 Image generation can take substantially longer than text even with Pi thinking
-set to `off`; that setting does not reduce the selected GPT Image quality.
+set to `off`. The default GPT Image quality is `low` to prioritize latency; it
+can be changed in `config.env` for comparisons.

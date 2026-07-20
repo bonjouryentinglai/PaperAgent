@@ -54,6 +54,7 @@ file "$IMAGE_PLUGIN" | grep -Eq 'ARM aarch64|ARM64' || {
 sh -n "$ROOT/device/runtime/native-oracle-service.sh"
 sh -n "$ROOT/device/runtime/native-selection-prepare.sh"
 sh -n "$ROOT/device/runtime/native-selection-write.sh"
+sh -n "$ROOT/device/systemd/paper-agent-xovi-post-start.sh"
 
 mkdir -p "$STAGE/payload/runtime" "$STAGE/payload/assets/icons"
 cp "$BIN" "$STAGE/payload/paper-agent-native"
@@ -62,6 +63,7 @@ cp "$ROOT/device/runtime/"* "$STAGE/payload/runtime/"
 cp "$ROOT/docs/assets/icons/paper-agent-ai.svg" "$STAGE/payload/assets/icons/"
 cp "$ROOT/docs/assets/icons/paper-agent-beautify.svg" "$STAGE/payload/assets/icons/"
 cp "$ROOT/device/systemd/paper-agent-native-oracle.service" "$STAGE/payload/"
+cp "$ROOT/device/systemd/paper-agent-xovi-post-start.sh" "$STAGE/payload/"
 cp "$ROOT/device/qmd/paper-agent-selection.qmd" "$STAGE/payload/"
 cp "$ROOT/config/paper-agent.env.example" "$STAGE/payload/"
 tar -czf "$STAGE/paper-agent-payload.tar.gz" -C "$STAGE/payload" .
@@ -75,7 +77,10 @@ NATIVE="$BASE/native"
 ICONS="$BASE/assets/icons"
 QMD_HOME=/home/root/xovi/exthome/qt-resource-rebuilder
 QMD_FILE="$QMD_HOME/paperAgentSelection.qmd"
-UNIT=/etc/systemd/system/paper-agent-native-oracle.service
+SYSTEMD_HOME="$BASE/systemd"
+UNIT_SOURCE="$SYSTEMD_HOME/paper-agent-native-oracle.service"
+UNIT=/run/systemd/system/paper-agent-native-oracle.service
+START_HOOK=/home/root/xovi/scripts/post-start/paper-agent-native-oracle.sh
 IMAGE_PLUGIN=/home/root/xovi/extensions.d/paper-agent-image.so
 CONFIG="$BASE/config.env"
 STATE_ROOT="$BASE/backups"
@@ -97,7 +102,7 @@ cleanup() {
   rm -f /tmp/paper-agent-payload.tar.gz /tmp/paper-agent-health.log
 }
 trap cleanup EXIT
-mkdir -p "$INCOMING" "$STATE_ROOT" "$BACKUP" "$NATIVE" "$ICONS" "$BASE/selection"
+mkdir -p "$INCOMING" "$STATE_ROOT" "$BACKUP" "$NATIVE" "$ICONS" "$BASE/selection" "$SYSTEMD_HOME"
 tar -xzf /tmp/paper-agent-payload.tar.gz -C "$INCOMING"
 rm -f /tmp/paper-agent-payload.tar.gz
 
@@ -125,6 +130,8 @@ for name in $FILES; do backup_file "$name" "$NATIVE/$name"; done
 backup_file paper-agent-ai.svg "$ICONS/paper-agent-ai.svg"
 backup_file paper-agent-beautify.svg "$ICONS/paper-agent-beautify.svg"
 backup_file paper-agent-native-oracle.service "$UNIT"
+backup_file paper-agent-native-oracle.source "$UNIT_SOURCE"
+backup_file paper-agent-native-oracle.hook "$START_HOOK"
 backup_file paper-agent-image.so "$IMAGE_PLUGIN"
 backup_file paperAgentSelection.qmd "$QMD_FILE"
 backup_file config.env "$CONFIG"
@@ -139,6 +146,8 @@ rollback() {
   restore_file paper-agent-ai.svg "$ICONS/paper-agent-ai.svg"
   restore_file paper-agent-beautify.svg "$ICONS/paper-agent-beautify.svg"
   restore_file paper-agent-native-oracle.service "$UNIT"
+  restore_file paper-agent-native-oracle.source "$UNIT_SOURCE"
+  restore_file paper-agent-native-oracle.hook "$START_HOOK"
   restore_file paper-agent-image.so "$IMAGE_PLUGIN"
   restore_file paperAgentSelection.qmd "$QMD_FILE"
   restore_file config.env "$CONFIG"
@@ -163,7 +172,9 @@ grep -q '<svg' "$ICONS/paper-agent-beautify.svg"
 for name in broker-signal.mjs native-oracle-client.mjs native-oracle-server.mjs native-oracle-service.sh native-selection-prepare.sh native-selection-write.sh rich-document.mjs rich-document.test.mjs image-generate.mjs image-generate.test.mjs layout-policy.mjs layout-policy.test.mjs; do
   cp "$INCOMING/runtime/$name" "$NATIVE/$name"
 done
-cp "$INCOMING/paper-agent-native-oracle.service" "$UNIT"
+cp "$INCOMING/paper-agent-native-oracle.service" "$UNIT_SOURCE"
+cp "$INCOMING/paper-agent-xovi-post-start.sh" "$START_HOOK"
+ln -sf "$UNIT_SOURCE" "$UNIT"
 cp "$INCOMING/paper-agent-selection.qmd" "$QMD_FILE"
 if [ ! -f "$CONFIG" ]; then cp "$INCOMING/paper-agent.env.example" "$CONFIG"; fi
 # Move the two earlier project defaults to the user-validated 0.70 size while
@@ -171,9 +182,16 @@ if [ ! -f "$CONFIG" ]; then cp "$INCOMING/paper-agent.env.example" "$CONFIG"; fi
 if grep -Eqx 'PAPER_AGENT_CJK_SCALE=(0\.78|0\.86)' "$CONFIG"; then
   sed -Ei 's/^PAPER_AGENT_CJK_SCALE=(0\.78|0\.86)$/PAPER_AGENT_CJK_SCALE=0.70/' "$CONFIG"
 fi
+# Medium was Paper Agent's previous image-generation default. Move existing
+# installations to the newly selected low-latency default while leaving any
+# other explicit quality override untouched.
+if grep -Eqx 'PAPER_AGENT_IMAGE_QUALITY=medium' "$CONFIG"; then
+  sed -Ei 's/^PAPER_AGENT_IMAGE_QUALITY=medium$/PAPER_AGENT_IMAGE_QUALITY=low/' "$CONFIG"
+fi
 chmod 0755 "$NATIVE/paper-agent-native" "$NATIVE/native-oracle-service.sh" "$NATIVE/native-selection-prepare.sh" "$NATIVE/native-selection-write.sh"
 chmod 0755 "$IMAGE_PLUGIN"
-chmod 0644 "$NATIVE/"*.mjs "$ICONS/"*.svg "$UNIT" "$QMD_FILE" "$CONFIG"
+chmod 0644 "$NATIVE/"*.mjs "$ICONS/"*.svg "$UNIT_SOURCE" "$QMD_FILE" "$CONFIG"
+chmod 0755 "$START_HOOK"
 chmod 0600 "$CONFIG"
 mkdir -p "$NATIVE/jobs" "$NATIVE/oracle-data" "$NATIVE/artifacts"
 chmod 0700 "$NATIVE/jobs" "$NATIVE/oracle-data" "$NATIVE/artifacts" "$BASE/selection"

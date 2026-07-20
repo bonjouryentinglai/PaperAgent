@@ -27,6 +27,12 @@ Paper Agent uses a thin Xochitl integration and a separate local runtime.
    still active. Beautify validates its entire text/vector result, preserves
    the source and writes the result below it through the same Marker path as AI.
 
+The native status bar exposes Cancel while the request is still in model or
+image generation. The local cancel client aborts the active Pi turn, terminates
+the image child process and releases the coordinator before reporting the
+cancelled lifecycle state. Once native writing begins, the control disappears
+so cancellation cannot deliberately leave half an answer on the page.
+
 ## Result protocol
 
 The model begins with one marker line:
@@ -64,7 +70,11 @@ validates the returned PNG, and never receives general agent tools. The native
 binary decodes it again, removes metadata, converts it to RGBA8 and scales it
 down without upscaling. The QMD remembers the source SceneController and page;
 it rejects and deletes a result if the user changed pages while generation was
-running. The source file is removed after Xochitl synchronously reads it.
+running. An image is placed only when it fits entirely below the selection;
+otherwise Paper Agent creates a new page and places it at that page's top
+centre. The source PNG is removed five seconds after acknowledged insertion.
+Failures and cancellations delete it immediately, and an hourly sweep removes
+any orphaned artifact older than 24 hours.
 
 Beautify accepts only `::text` or `::vector`; untyped content and attempts to
 return a table or image are rejected. It never streams partial output. The QMD
@@ -90,6 +100,10 @@ the rectangle with a virtual eraser.
   owner-readable RGBA artifacts in an owner-only directory.
 - **Writer:** validates hardware, axes, job size, lock, originating Xochitl PID
   and confirmation string. Shell-to-XOVI signals use non-blocking FIFO writes.
+
+The Move mounts `/etc` as a volatile overlay. Paper Agent therefore stores its
+systemd source unit under `/home/root/paper-agent/systemd` and installs an XOVI
+post-start hook that recreates and starts the runtime unit whenever XOVI starts.
 
 ## Native image acceptance
 

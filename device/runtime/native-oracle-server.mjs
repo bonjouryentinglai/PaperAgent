@@ -36,11 +36,12 @@ const ARTIFACT_MAX_AGE_MS = 24 * 60 * 60 * 1_000;
 const TOOL_ACK_TIMEOUT_MS = 4_000;
 const TOOL_SIGNAL_RETRY_MS = 120;
 const TOOL_WRITE_SETTLE_MS = 100;
-const PAGE_ACK_TIMEOUT_MS = 8_000;
+const PAGE_ACK_TIMEOUT_MS = 12_000;
 const PAGE_SETTLE_MS = 350;
 const IMAGE_ACK_TIMEOUT_MS = 10_000;
 const IMAGE_SIGNAL_RETRY_MS = 180;
 const IMAGE_SOURCE_SETTLE_MS = 5_000;
+const ARTIFACT_CLEANUP_INTERVAL_MS = 60 * 60 * 1_000;
 const IMAGE_MAX_WIDTH = boundedEnvironmentInteger("PAPER_AGENT_IMAGE_MAX_WIDTH", 620, 128, 800);
 const IMAGE_MAX_HEIGHT = boundedEnvironmentInteger("PAPER_AGENT_IMAGE_MAX_HEIGHT", 620, 128, 800);
 const LINE_GAP = 24;
@@ -138,13 +139,25 @@ function selfTest() {
       !== "/run/paper-agent-image-1234567890123.ack") {
     throw new Error("image-insertion acknowledgement path failed");
   }
-  const drop = imageDropPoint({
-    bounds: { x: -380, y: 280, width: 650, height: 80 },
+  const below = imageDropLayout({
+    bounds: { x: -380, y: 100, width: 650, height: 80 },
     paper: { x: -729, y: 0, width: 1458, height: 820 },
   }, 620, 413);
-  if (!Number.isFinite(drop.x) || !Number.isFinite(drop.y)
-      || drop.x < -395 || drop.x > 395 || drop.y < 230 || drop.y > 590) {
+  if (below.requiresNewPage || !Number.isFinite(below.x) || !Number.isFinite(below.y)
+      || below.x < -395 || below.x > 395 || below.y < 230 || below.y > 590) {
     throw new Error("image drop-point layout failed");
+  }
+  const portrait = imageDropLayout({
+    bounds: { x: -380, y: 280, width: 650, height: 80 },
+    paper: { x: -729, y: 0, width: 1458, height: 820 },
+  }, 413, 620);
+  if (!portrait.requiresNewPage) throw new Error("portrait image must not cover the selection");
+  const nextPage = imageDropLayout({
+    bounds: { x: -380, y: 280, width: 650, height: 80 },
+    paper: { x: -729, y: 0, width: 1458, height: 820 },
+  }, 413, 620, true);
+  if (nextPage.requiresNewPage || nextPage.y !== 334 || nextPage.x !== 0) {
+    throw new Error("new-page image layout failed");
   }
   if (streamJobStem("1784451570211-1", 2) !== "stream-1784451570211-1-2") {
     throw new Error("streaming writer job path contract failed");
@@ -237,7 +250,7 @@ function imageAckPathFor(selectionPath, error = false) {
   return `/run/paper-agent-image-${artifactIdFor(selectionPath)}.${error ? "error" : "ack"}`;
 }
 
-function imageDropPoint(sceneTarget, imageWidth, imageHeight) {
+function imageDropLayout(sceneTarget, imageWidth, imageHeight, onNewPage = false) {
   if (!sceneTarget) throw new Error("image request has no scene target");
   const { bounds, paper } = sceneTarget;
   const gap = 64;
@@ -247,12 +260,14 @@ function imageDropPoint(sceneTarget, imageWidth, imageHeight) {
   const right = paper.x + paper.width - 24 - halfWidth;
   const top = paper.y + 24 + halfHeight;
   const bottom = paper.y + paper.height - 24 - halfHeight;
-  const x = Math.max(left, Math.min(right, bounds.x + bounds.width / 2));
+  if (left > right || top > bottom) throw new Error("image does not fit the notebook page");
+  const preferredX = onNewPage ? paper.x + paper.width / 2 : bounds.x + bounds.width / 2;
+  const x = Math.max(left, Math.min(right, preferredX));
   const below = bounds.y + bounds.height + gap + halfHeight;
-  const above = bounds.y - gap - halfHeight;
-  const y = below > bottom && above >= top ? above : Math.max(top, Math.min(bottom, below));
+  const requiresNewPage = !onNewPage && below > bottom;
+  const y = onNewPage ? top : below;
   if (![x, y].every(Number.isFinite)) throw new Error("image scene target is invalid");
-  return { x, y };
+  return { x, y, requiresNewPage };
 }
 
 function isValidXochitlPid(pid) {
@@ -325,7 +340,7 @@ function reportTiming(turn, stage, started) {
   );
 }
 
-async function deliverImageArtifact(turn, artifactId, width, height) {
+async function deliverImageArtifact(turn, artifactId, width, height, onNewPage) {
   const insertionStarted = Date.now();
   const ack = imageAckPathFor(turn.request.png);
   const errorPath = imageAckPathFor(turn.request.png, true);
@@ -334,7 +349,8 @@ async function deliverImageArtifact(turn, artifactId, width, height) {
   fs.rmSync(ack, { force: true });
   fs.rmSync(errorPath, { force: true });
   const deadline = Date.now() + IMAGE_ACK_TIMEOUT_MS;
-  const point = imageDropPoint(turn.request.sceneTarget, width, height);
+  const point = imageDropLayout(turn.request.sceneTarget, width, height, onNewPage);
+  if (point.requiresNewPage) throw new Error("generated image requires a new notebook page");
   let nextSignalAt = 0;
   while (Date.now() < deadline) {
     if (turn.failed) throw new Error("image insertion was cancelled");
@@ -452,9 +468,11 @@ function generateImageArtifact(turn, prompt) {
         // Both paths are in the owner-only artifact directory. rename(2)
         // atomically replaces the validated source with the bounded RGBA PNG.
         fs.renameSync(prepared, output);
-        if (turn.request.newPageRequired) await requestNewPage(turn);
+        const imageLayout = imageDropLayout(turn.request.sceneTarget, width, height);
+        const onNewPage = turn.request.newPageRequired || imageLayout.requiresNewPage;
+        if (onNewPage) await requestNewPage(turn);
         reportStage(turn, "inserting");
-        await deliverImageArtifact(turn, artifactId, width, height);
+        await deliverImageArtifact(turn, artifactId, width, height, onNewPage);
         turn.chunkCount += 1;
         send(turn.socket, {
           type: "chunk",
@@ -619,6 +637,8 @@ class WriterPipe {
 fs.mkdirSync(JOBS, { recursive: true, mode: 0o700 });
 fs.mkdirSync(ARTIFACTS, { recursive: true, mode: 0o700 });
 cleanupStaleArtifacts();
+const artifactCleanupTimer = setInterval(cleanupStaleArtifacts, ARTIFACT_CLEANUP_INTERVAL_MS);
+artifactCleanupTimer.unref();
 fs.mkdirSync(path.join(BASE, "oracle-data"), { recursive: true, mode: 0o700 });
 try { fs.unlinkSync(SOCKET); } catch (error) { if (error.code !== "ENOENT") throw error; }
 
@@ -893,7 +913,10 @@ function queueAvailable(turn, done) {
   if (!done || turn.structuredQueued) return;
   turn.kind = envelope.kind;
   turn.structuredQueued = true;
-  turn.writeChain = turn.writeChain.then(() => writeCompleteResult(turn, envelope));
+  turn.writeChain = turn.writeChain.then(() => {
+    reportStage(turn, "writing");
+    return writeCompleteResult(turn, envelope);
+  });
   turn.writeChain.catch((error) => failTurn(turn, error));
 }
 
@@ -946,6 +969,25 @@ function failTurn(turn, error) {
     active = null;
   }
   console.error(`native-oracle request=${turn.id} failed: ${safeError(error)}`);
+}
+
+function cancelTurn(turn) {
+  if (!turn || turn.failed || turn.finishing) return false;
+  turn.failed = true;
+  turn.cancelled = true;
+  clearTimeout(turn.timeout);
+  turn.imageChild?.kill("SIGTERM");
+  turn.writer?.kill();
+  cleanupTurn(turn);
+  send(turn.socket, { type: "cancelled", active: true });
+  turn.socket.end();
+  if (active === turn) {
+    writePi({ id: `abort-${turn.id}`, type: "abort" });
+    active = null;
+  }
+  sendBroker("paper-agent$status", "cancelled");
+  console.log(`native-oracle request=${turn.id} cancelled by user`);
+  return true;
 }
 
 function promptTurn(turn) {
@@ -1043,6 +1085,12 @@ const server = net.createServer((socket) => {
         socket.end();
         return;
       }
+      if (request?.version === 1 && request?.type === "cancel") {
+        const cancelled = cancelTurn(active);
+        send(socket, { type: "cancelled", active: cancelled });
+        socket.end();
+        return;
+      }
       if (!piReady) throw Object.assign(new Error("Pi RPC is warming"), { code: "warming" });
       if (active) throw Object.assign(new Error("another native request is active"), { code: "busy" });
       validateRequest(request);
@@ -1065,6 +1113,7 @@ const server = net.createServer((socket) => {
         writer: null,
         temp: new Set(),
         failed: false,
+        cancelled: false,
         finishing: false,
         structuredQueued: false,
         toolAckPath: null,

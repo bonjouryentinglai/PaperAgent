@@ -6,14 +6,17 @@ import net from "node:net";
 const SOCKET = process.env.PAPER_AGENT_NATIVE_SOCKET || "/run/paper-agent-native-oracle.sock";
 const args = process.argv.slice(2);
 const health = args.length === 1 && args[0] === "--health";
+const cancel = args.length === 1 && args[0] === "--cancel";
 
-if (!health && args.length !== 7 && args.length !== 15) {
-  console.error("usage: native-oracle-client.mjs ACTION PNG X Y WIDTH HEIGHT NEW_PAGE_REQUIRED [SCENE_X SCENE_Y SCENE_WIDTH SCENE_HEIGHT PAPER_X PAPER_Y PAPER_WIDTH PAPER_HEIGHT] | --health");
+if (!health && !cancel && args.length !== 7 && args.length !== 15) {
+  console.error("usage: native-oracle-client.mjs ACTION PNG X Y WIDTH HEIGHT NEW_PAGE_REQUIRED [SCENE_X SCENE_Y SCENE_WIDTH SCENE_HEIGHT PAPER_X PAPER_Y PAPER_WIDTH PAPER_HEIGHT] | --health | --cancel");
   process.exit(2);
 }
 
 const request = health
   ? { version: 1, type: "health" }
+  : cancel
+    ? { version: 1, type: "cancel" }
   : {
       version: 1,
       type: "write",
@@ -81,6 +84,9 @@ socket.on("data", (data) => {
     } else if (event.type === "done") {
       console.log(`native_oracle=done chunks=${event.chunks} elapsed_ms=${event.elapsedMs}`);
       finish(0);
+    } else if (event.type === "cancelled") {
+      console.log(`native_oracle=cancelled active=${event.active !== false}`);
+      finish(cancel ? 0 : 130);
     } else if (event.type === "error") {
       const unavailable = !accepted && ["warming", "busy"].includes(event.code);
       finish(unavailable ? 75 : 1, `native oracle: ${event.error || "request failed"}`);

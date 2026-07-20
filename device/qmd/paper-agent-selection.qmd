@@ -64,7 +64,8 @@ AFFECT [[11806562588218124596]]
 		function onSignalReceived(signal, message) {
 			if (signal !== "paper-agent$request") return
 			var fields = String(message).split(",")
-			if (fields.length !== 2 || (fields[1] !== "done" && fields[1] !== "error")) return
+			if (fields.length !== 2 || (fields[1] !== "done" && fields[1] !== "error"
+					&& fields[1] !== "cancelled")) return
 			if (paperAgentActiveRequest === fields[0]) {
 				paperAgentActiveRequestTimer.stop()
 				paperAgentActiveRequest = ""
@@ -242,7 +243,8 @@ AFFECT [[11806562588218124596]]
 			console.log("paper-agent beautify placement",
 				"selection=" + [selX, selY, selW, selH].join(","),
 				"placement=" + [beautifyPlacement.x, beautifyPlacement.y,
-					beautifyPlacement.width, beautifyPlacement.height].join(","))
+					beautifyPlacement.width, beautifyPlacement.height].join(","),
+				"newPage=" + beautifyPlacement.newPageRequired)
 			return beautifyPlacement
 		}
 
@@ -261,7 +263,8 @@ AFFECT [[11806562588218124596]]
 		}
 		console.log("paper-agent native placement",
 			"selection=" + [selX, selY, selW, selH].join(","),
-			"placement=" + [placement.x, placement.y, placement.width, placement.height].join(","))
+			"placement=" + [placement.x, placement.y, placement.width, placement.height].join(","),
+			"newPage=" + placement.newPageRequired)
 		return placement
 	}
 
@@ -584,7 +587,8 @@ AFFECT [[1224665461898798997]]
 					return
 				}
 				if (signal === "paper-agent$request") {
-					if (fields.length === 2 && (fields[1] === "done" || fields[1] === "error"))
+					if (fields.length === 2 && (fields[1] === "done" || fields[1] === "error"
+							|| fields[1] === "cancelled"))
 						paperAgentForgetPersistentImageRequest(requestId)
 					return
 				}
@@ -730,7 +734,7 @@ AFFECT [[1224665461898798997]]
 						requestId + ",ready," + sequence)
 					console.log("paper-agent created native page", requestId, sequence,
 						"pageCount=" + count, "currentPage=" + current)
-				} else if (paperAgentPagePollAttempts >= 50) {
+				} else if (paperAgentPagePollAttempts >= 100) {
 					paperAgentFailPageRequest("page switch timed out")
 				}
 			}
@@ -807,12 +811,15 @@ END AFFECT
 AFFECT [[2328484894988065446]]
 	IMPORT [[233700934949963.233693781272506]] [[180922.180921]]
 	IMPORT net.asivery.XoviMessageBroker [[180923.180921]]
+	IMPORT net.asivery.CommandExecutor [[180922.180921]]
 	TRAVERSE [[8397788359424131273]]#[[6504254477]] > [[8397993708429497603]]#[[7713531976371484]]
 		LOCATE AFTER ALL
 		INSERT {
 		~&425121728314878811&~.~&11119534664549952261&~ {
 			id: paperAgentStatusBar
 			property string paperAgentState: "idle"
+			property bool paperAgentCancellable: paperAgentState === "thinking"
+				|| paperAgentState === "generating_image"
 			~&233721384511543&~.~&6504027668&~: parent.left
 			~&233721384511543&~.~&214640173127&~: parent.right
 			~&233721384511543&~.~&7082507142622&~: parent.bottom
@@ -827,7 +834,8 @@ AFFECT [[2328484894988065446]]
 				// the worker's later transport-level `done` cannot hide it.
 				if (paperAgentState === "error" && nextState === "done") return
 				paperAgentState = nextState
-				if (nextState === "thinking" || nextState === "new_page"
+				if (nextState === "thinking" || nextState === "writing"
+						|| nextState === "new_page"
 						|| nextState === "generating_image"
 						|| nextState === "inserting") {
 					paperAgentDeadline.restart()
@@ -844,12 +852,31 @@ AFFECT [[2328484894988065446]]
 				listeningFor: ["paper-agent$status"]
 				function onSignalReceived(signal, message) {
 					if (signal !== "paper-agent$status") return
-					if (message === "thinking" || message === "new_page"
+					if (message === "thinking" || message === "writing"
+							|| message === "new_page"
 							|| message === "generating_image"
 							|| message === "inserting"
-							|| message === "done" || message === "error")
+							|| message === "done" || message === "cancelled"
+							|| message === "error")
 						paperAgentStatusBar.paperAgentShowState(message)
 				}
+			}
+
+			function paperAgentCancelActiveRequest() {
+				if (!paperAgentCancellable) return
+				paperAgentState = "cancelling"
+				try {
+					paperAgentCancelCommandExecutor.executeCommand(
+						"/home/root/node/bin/node",
+						["/home/root/paper-agent/native/native-oracle-client.mjs", "--cancel"])
+				} catch (error) {
+					console.log("paper-agent cancel failed", String(error))
+					paperAgentShowState("error")
+				}
+			}
+
+			CommandExecutor {
+				id: paperAgentCancelCommandExecutor
 			}
 
 			Timer {
@@ -865,18 +892,49 @@ AFFECT [[2328484894988065446]]
 			~&425121728314878811&~.~&11119534664549952261&~.~&233695222288046&~ {
 				~&6504315758&~: paperAgentStatusBar.paperAgentState === "thinking"
 					? "Paper Agent is thinking..."
+					: paperAgentStatusBar.paperAgentState === "writing"
+						? "Paper Agent is writing..."
 					: paperAgentStatusBar.paperAgentState === "new_page"
 						? "Paper Agent is adding a page..."
 					: paperAgentStatusBar.paperAgentState === "generating_image"
 						? "Paper Agent is creating an image..."
 						: paperAgentStatusBar.paperAgentState === "inserting"
 							? "Paper Agent is adding the image..."
+					: paperAgentStatusBar.paperAgentState === "cancelling"
+						? "Cancelling Paper Agent..."
+					: paperAgentStatusBar.paperAgentState === "cancelled"
+						? "Paper Agent cancelled"
 					: paperAgentStatusBar.paperAgentState === "done"
 								? "Paper Agent finished"
 								: "Paper Agent failed"
 				~&7081629735527&~.~&254529418434902000&~: true
 				~&7081629735527&~.~&8399743405844438450&~: ~&425121728314878811&~.~&7082020628281&~.~&233740248806464&~.~&214641496386&~
 				~&7081629735527&~.~&499747351624466981&~: ~&425121728314878811&~.~&7082020628281&~.~&233740248806464&~.~&214641496386&~
+			}
+
+			Rectangle {
+				id: paperAgentCancelButton
+				visible: paperAgentStatusBar.paperAgentCancellable
+				anchors.right: parent.right
+				anchors.verticalCenter: parent.verticalCenter
+				anchors.rightMargin: 12
+				width: 132
+				height: Math.max(44, parent.height - 16)
+				radius: 8
+				color: "white"
+				border.color: "black"
+				border.width: 2
+				z: 2
+				Text {
+					anchors.centerIn: parent
+					text: "Cancel"
+					color: "black"
+					font.pixelSize: 24
+				}
+				MouseArea {
+					anchors.fill: parent
+					onClicked: paperAgentStatusBar.paperAgentCancelActiveRequest()
+				}
 			}
 		}
 		}

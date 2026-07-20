@@ -13,6 +13,8 @@ echo "machine=$(cat /sys/devices/soc0/machine 2>/dev/null || echo unknown)"
 echo "os=$(cat /etc/os-release 2>/dev/null | sed -n "s/^VERSION_ID=//p" | tr -d "\"")"
 echo "xochitl=$(systemctl is-active xochitl 2>/dev/null || true)"
 echo "oracle=$(systemctl is-active paper-agent-native-oracle.service 2>/dev/null || true)"
+echo "oracle_source=$([ -f /home/root/paper-agent/systemd/paper-agent-native-oracle.service ] && echo present || echo missing)"
+echo "xovi_start_hook=$([ -x /home/root/xovi/scripts/post-start/paper-agent-native-oracle.sh ] && echo present || echo missing)"
 echo "qmd=$([ -f /home/root/xovi/exthome/qt-resource-rebuilder/paperAgentSelection.qmd ] && echo present || echo missing)"
 echo "icons=$([ -f /home/root/paper-agent/assets/icons/paper-agent-ai.svg ] && [ -f /home/root/paper-agent/assets/icons/paper-agent-beautify.svg ] && echo present || echo missing)"
 echo "image_plugin=$([ -f /home/root/xovi/extensions.d/paper-agent-image.so ] && echo present || echo missing)"
@@ -22,7 +24,7 @@ echo "coordinator_lock=$([ -d /run/paper-agent-native-coordinator.lock ] && echo
 X_PID=$(systemctl show xochitl -p MainPID --value 2>/dev/null || true)
 if [ -n "$X_PID" ] && [ "$X_PID" != 0 ]; then
   QMD_LOG=$(journalctl "_PID=$X_PID" -n 1000 --no-pager -o cat 2>/dev/null || true)
-  if printf '%s\n' "$QMD_LOG" | grep -Eq 'Error while processing file tree:.*paperAgentSelection\.qmd|paperAgentSelection\.qmd.*(Cannot locate element in tree|Error|failed)|Cannot assign to non-existent property "onPaperAgent'; then
+  if printf '%s\n' "$QMD_LOG" | grep -Eq 'Error while processing file tree:.*paperAgentSelection\.qmd|paperAgentSelection\.qmd.*(Cannot locate element in tree|Error|failed)|Cannot assign to non-existent property "onPaperAgent|CommandExecutor is not a type'; then
     echo "qmd_runtime=error"
     printf '%s\n' "$QMD_LOG" | grep -E 'paperAgentSelection\.qmd|Cannot assign to non-existent property "onPaperAgent' | tail -n 5
   elif printf '%s\n' "$QMD_LOG" | grep -q '\[qmldiff\].*Loading file paperAgentSelection\.qmd'; then

@@ -219,6 +219,10 @@ if [ -x "$NODE" ] && [ -f "$STREAM_CLIENT" ]; then
     FINAL_STATUS=done
     echo "native_writeback=streaming-complete"
     exit 0
+  elif [ "$stream_rc" -eq 130 ]; then
+    FINAL_STATUS=cancelled
+    echo "native_writeback=cancelled"
+    exit 0
   else
     if [ "$stream_rc" -ne 75 ]; then
       echo "resident native oracle failed after accepting the request" >&2

@@ -27,7 +27,8 @@ Paper Pro Move. Lasso something in your notebook, then choose one of two actions
 
 Text, tables, and vector drawings are written back as native ink, so they remain
 selectable, movable, resizable, and undoable. Generated pictures are inserted
-as native notebook images.
+as native notebook images. Long-running thinking and image-generation requests
+can be cancelled from the on-device status bar.
 
 > [!WARNING]
 > Paper Agent is a developer preview for the Paper Pro Move (`chiappa`). It

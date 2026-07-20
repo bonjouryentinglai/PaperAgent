@@ -10,7 +10,7 @@ use crate::traditional;
 use std::f32::consts::PI;
 
 const TEXT_MIN_PX: i32 = 26;
-const AI_DEFAULT_BODY_PX: i32 = 112;
+const AI_DEFAULT_BODY_PX: i32 = 104;
 const TEXT_MAX_PX: i32 = AI_DEFAULT_BODY_PX;
 const TEXT_MARGIN: i32 = 12;
 const BEAUTIFY_TEXT_MIN_PX: i32 = 16;
