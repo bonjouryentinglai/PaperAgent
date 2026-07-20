@@ -3,10 +3,27 @@
 Paper Agent brings AI directly into the native selection menu on a reMarkable
 Paper Pro Move. Lasso something in your notebook, then choose one of two actions:
 
-- **AI** understands the selected handwriting and creates a useful answer in
-  the notebook.
-- **Beautify** cleans up the selected handwriting or sketch without changing
-  its meaning.
+<table>
+  <tr>
+    <td width="80" align="center">
+      <img src="docs/assets/icons/paper-agent-ai.svg" alt="AI icon" width="56">
+    </td>
+    <td>
+      <strong>AI</strong><br>
+      Understands the selected handwriting and creates a useful answer in the
+      notebook.
+    </td>
+  </tr>
+  <tr>
+    <td width="80" align="center">
+      <img src="docs/assets/icons/paper-agent-beautify.svg" alt="Beautify icon" width="56">
+    </td>
+    <td>
+      <strong>Beautify</strong><br>
+      Cleans up the selected handwriting or sketch without changing its meaning.
+    </td>
+  </tr>
+</table>
 
 Text, tables, and vector drawings are written back as native ink, so they remain
 selectable, movable, resizable, and undoable. Generated pictures are inserted
@@ -19,7 +36,10 @@ as native notebook images.
 
 ## Features
 
-### AI
+<h3>
+  <img src="docs/assets/icons/paper-agent-ai.svg" alt="AI icon" width="36">
+  AI
+</h3>
 
 Select a handwritten request and tap **AI**. Paper Agent chooses an output that
 fits the request; one answer can also combine text, lists, code, tables, and
@@ -41,7 +61,10 @@ docs/assets/demos/ai-diagram.gif
 docs/assets/demos/ai-image.gif
 -->
 
-### Beautify
+<h3>
+  <img src="docs/assets/icons/paper-agent-beautify.svg" alt="Beautify icon" width="36">
+  Beautify
+</h3>
 
 Select existing content and tap **Beautify**. Paper Agent treats the selection
 as source material, never as a question or instruction. The original remains
