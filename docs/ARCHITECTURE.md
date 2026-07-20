@@ -24,9 +24,9 @@ Paper Agent uses a thin Xochitl integration and a separate local runtime.
 7. StrokeJobs use the guarded Marker writer, bound to the Xochitl PID that
    originated the request. Images use Xochitl 3.27's native
    scene-image insertion method only if the originating controller and page are
-   still active. The image drop point is anchored below the lasso; PNG pixels
-   are not treated as Xochitl scene units because Xochitl determines the
-   imported item's display size. Beautify validates its entire text/vector
+   still active. The image center is anchored one half-height below the lasso;
+   its current-page drop point is not clamped against Chiappa's differently
+   scaled `paperNoteBounds`. Beautify validates its entire text/vector
    result, preserves the source and writes the result below it through the same
    Marker path as AI.
 

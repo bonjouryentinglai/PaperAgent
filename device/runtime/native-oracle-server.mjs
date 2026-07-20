@@ -144,7 +144,7 @@ function selfTest() {
     paper: { x: -729, y: 0, width: 1458, height: 820 },
   }, 620, 413);
   if (!Number.isFinite(below.x) || !Number.isFinite(below.y)
-      || below.x < -395 || below.x > 395 || below.y !== 244) {
+      || below.x < -395 || below.x > 395 || below.y !== 450.5) {
     throw new Error("image drop-point layout failed");
   }
   if (imageRequiresNewPage({ height: 1_035, newPageRequired: false }, 620)
@@ -276,14 +276,12 @@ function imageDropPoint(sceneTarget, imageWidth, imageHeight, onNewPage = false)
   if (left > right || top > bottom) throw new Error("image does not fit the notebook page");
   const preferredX = onNewPage ? paper.x + paper.width / 2 : bounds.x + bounds.width / 2;
   const x = Math.max(left, Math.min(right, preferredX));
-  // insertImageFileAsSceneItem() treats this as a drop position and computes
-  // the imported item's display size itself. PNG pixels are not scene units.
-  // Subtracting half the PNG height from the paper edge used to clamp a valid
-  // below-selection drop point back into the source lasso.
-  const belowDrop = bounds.y + bounds.height + gap;
-  const y = onNewPage
-    ? top
-    : Math.max(paper.y + 24, Math.min(paper.y + paper.height - 24, belowDrop));
+  // insertImageFileAsSceneItem() treats the drop position as the image center.
+  // On Chiappa, paperNoteBounds is not a reliable visible-page bottom for this
+  // operation: clamping to it moves the image center back into the lasso even
+  // when framebuffer-space page fit says the image belongs on this page.
+  const belowCenter = bounds.y + bounds.height + gap + halfHeight;
+  const y = onNewPage ? top : belowCenter;
   if (![x, y].every(Number.isFinite)) throw new Error("image scene target is invalid");
   return { x, y };
 }
