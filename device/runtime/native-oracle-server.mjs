@@ -144,7 +144,7 @@ function selfTest() {
     paper: { x: -729, y: 0, width: 1458, height: 820 },
   }, 620, 413);
   if (!Number.isFinite(below.x) || !Number.isFinite(below.y)
-      || below.x < -395 || below.x > 395 || below.y < 230 || below.y > 590) {
+      || below.x < -395 || below.x > 395 || below.y !== 244) {
     throw new Error("image drop-point layout failed");
   }
   if (imageRequiresNewPage({ height: 1_035, newPageRequired: false }, 620)
@@ -276,11 +276,14 @@ function imageDropPoint(sceneTarget, imageWidth, imageHeight, onNewPage = false)
   if (left > right || top > bottom) throw new Error("image does not fit the notebook page");
   const preferredX = onNewPage ? paper.x + paper.width / 2 : bounds.x + bounds.width / 2;
   const x = Math.max(left, Math.min(right, preferredX));
-  const below = bounds.y + bounds.height + gap + halfHeight;
-  // Page-fit policy is evaluated in framebuffer coordinates above. Here the
-  // scene bounds are used only to produce a safe insertion point, never to
-  // decide whether the visible space below the source is sufficient.
-  const y = onNewPage ? top : Math.max(top, Math.min(bottom, below));
+  // insertImageFileAsSceneItem() treats this as a drop position and computes
+  // the imported item's display size itself. PNG pixels are not scene units.
+  // Subtracting half the PNG height from the paper edge used to clamp a valid
+  // below-selection drop point back into the source lasso.
+  const belowDrop = bounds.y + bounds.height + gap;
+  const y = onNewPage
+    ? top
+    : Math.max(paper.y + 24, Math.min(paper.y + paper.height - 24, belowDrop));
   if (![x, y].every(Number.isFinite)) throw new Error("image scene target is invalid");
   return { x, y };
 }
