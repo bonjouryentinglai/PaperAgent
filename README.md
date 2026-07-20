@@ -1,113 +1,140 @@
 # Paper Agent
 
-Paper Agent adds two AI actions directly to the native Xochitl selection menu
-on a reMarkable Paper Pro Move:
+Paper Agent brings AI directly into the native selection menu on a reMarkable
+Paper Pro Move. Lasso something in your notebook, then choose one of two actions:
 
-- **AI** interprets the selected handwriting and can answer, calculate, create
-  a formatted Markdown document, create a native table, or draw a bounded
-  vector figure. It can also generate a raster image through GPT Image. One
-  answer may mix text, tables, code and vector drawings.
-- **Beautify** treats the selection as source material only. It preserves the
-  original and writes a handwriting transcription or reconstructed native
-  vector below it; it never answers the selected content.
+- **AI** understands the selected handwriting and creates a useful answer in
+  the notebook.
+- **Beautify** cleans up the selected handwriting or sketch without changing
+  its meaning.
 
-Text, tables and vectors are written back through Xochitl's Marker input path,
-so generated ink remains selectable, movable, resizable and undoable like
-ordinary strokes. Raster output uses Xochitl's native notebook-image path.
+Text, tables, and vector drawings are written back as native ink, so they remain
+selectable, movable, resizable, and undoable. Generated pictures are inserted
+as native notebook images.
 
 > [!WARNING]
 > Paper Agent is a developer preview for the Paper Pro Move (`chiappa`). It
 > modifies the closed-source Xochitl UI through XOVI/QMD and may require updates
-> after every reMarkable OS release. Back up important notebooks before testing.
+> after a reMarkable OS release. Back up important notebooks before testing.
 
-## Current status
+## Features
 
-| Capability | Status |
-|---|---|
-| Native selection actions | Original AI-sparkle and Beautify-wand SVG icons packaged with the QMD integration |
-| AI answers and calculations | Implemented; complete answers are preflighted at 100%, may shrink only to 60%, then use a new native page at 100% |
-| Rich and mixed answers | Implemented locally; headings, paragraphs, lists, bold, inline/fenced code, tables and vectors; device acceptance pending |
-| Handwriting fonts | Kalam Regular for Latin; ChenYuLuoyan 2.0 Thin for Chinese, with jf open 粉圓 2.1 fallback and lightly smoothed skeleton tracing |
-| Native tables | Implemented with centered cell text and the shared AI body-size policy; device acceptance pending |
-| Native vector figures | Bounded non-executable DSL with lines, polygons, sampled curves, rounded shapes, arcs and sparse hatch fills; device acceptance pending |
-| Beautify text or sketch | Preserves the source, normalizes rough geometry, and writes into a lasso-sized box below or on a new native page; physical acceptance pending |
-| GPT raster images | Implemented locally: ChatGPT OAuth, `gpt-image-2`, bounded PNG normalization and a GPL XOVI native clipboard-paste bridge; physical acceptance pending |
-| One-click install and settings UI | Planned |
+### AI
 
-Paper Agent is intentionally independent from any standalone notebook app. It
-contains only the Xochitl integration, its local runtime and native renderer.
+Select a handwritten request and tap **AI**. Paper Agent chooses an output that
+fits the request; one answer can also combine text, lists, code, tables, and
+diagrams.
 
-## How it works
+| What you write | What Paper Agent creates | Demo |
+|---|---|---|
+| Ask a question, request an explanation, or solve a calculation | A concise handwritten answer or a structured explanation | Coming soon |
+| Ask for notes, a summary, an outline, or formatted content | A document with headings, paragraphs, lists, emphasis, and code | Coming soon |
+| Ask to organize information into rows and columns | A native table with wrapped, centered cells | Coming soon |
+| Ask for a flowchart, diagram, map, chart, or schematic | A clean native vector drawing that remains editable like ink | Coming soon |
+| Ask for a photo, illustration, poster, painting, or other picture | A GPT-generated image inserted into the notebook | Coming soon |
+
+<!-- Suggested demo paths:
+docs/assets/demos/ai-question-answer.gif
+docs/assets/demos/ai-document.gif
+docs/assets/demos/ai-table.gif
+docs/assets/demos/ai-diagram.gif
+docs/assets/demos/ai-image.gif
+-->
+
+### Beautify
+
+Select existing content and tap **Beautify**. Paper Agent treats the selection
+as source material, never as a question or instruction. The original remains
+untouched while the cleaned result is placed below it or on a new page.
+
+| What you select | What Paper Agent creates | Demo |
+|---|---|---|
+| Rough handwriting, including Traditional Chinese and Latin text | A faithful, more legible handwriting transcription | Coming soon |
+| A rough diagram, flowchart, or labeled sketch | A faithful vector reconstruction with aligned shapes, straight connectors, and consistent labels | Coming soon |
+
+<!-- Suggested demo paths:
+docs/assets/demos/beautify-handwriting.gif
+docs/assets/demos/beautify-diagram.gif
+-->
+
+## Install with Claude or Codex
+
+The current release is for a Paper Pro Move with Developer Mode, XOVI, and
+AppLoad already available. Instead of copying installation commands by hand,
+open this repository in Claude Code or Codex and give it the following prompt:
 
 ```text
-Xochitl lasso
-  -> AI or Beautify QMD action
-  -> selection PNG + explicit action
-  -> local Pi RPC process using the user's ChatGPT login
-  -> validated text, rich document, table, vector, or image result
-  -> bounded StrokeJob -> guarded Marker writeback
-     OR bounded PNG -> guarded Xochitl image insertion
+Install Paper Agent from this repository on my reMarkable Paper Pro Move.
+
+Before changing the device:
+1. Read README.md, docs/DEVELOPMENT.md, and docs/COMPATIBILITY.md.
+2. Ask me for the device hostname or IP address and confirm that Developer Mode,
+   XOVI, and AppLoad are available.
+3. Check that my device model and software version are compatible. Stop and
+   explain the problem if they are not.
+4. Show me the installation plan and the rollback path.
+
+Then use the repository's scripts to bootstrap the runtime, perform the
+interactive ChatGPT login, install the pinned XOVI dependencies, build the
+native components, install Paper Agent, and run scripts/doctor.sh.
+
+Do not print, copy, or commit OAuth credentials, passwords, notebook content,
+device logs, or private configuration. Ask before any destructive or
+device-modifying action. When finished, report every check that passed, every
+check that could not be run, and how to uninstall Paper Agent safely.
 ```
 
-OAuth credentials stay in Pi's mode-`0600` credential store on the tablet.
-They are never placed in this repository, QML, command arguments, screenshots,
-or the Paper Agent socket protocol.
+The ChatGPT login is interactive and stays on the Move in Pi's private
+credential store. No OpenAI API key is required. Contributors who want the
+individual commands and build details can read
+[Development](docs/DEVELOPMENT.md).
 
-## Developer installation
+## Documentation
 
-General-user installation is a productization milestone. The current workflow
-is intended for contributors who already have Developer Mode, XOVI and AppLoad:
+- [Features](docs/FEATURES.md) contains the detailed capability matrix.
+- [Development](docs/DEVELOPMENT.md) contains prerequisites, build commands,
+  and device validation steps.
+- [Compatibility](docs/COMPATIBILITY.md) records the supported device and
+  software assumptions.
+- [Architecture](docs/ARCHITECTURE.md) explains the integration and trust
+  boundaries.
+- [Roadmap](docs/ROADMAP.md) tracks planned productization work.
 
-```sh
-export PAPER_AGENT_HOST=remarkable.local
+## Special thanks
 
-scripts/bootstrap-runtime.sh
-scripts/login.sh
-scripts/install-xovi-deps.sh
-scripts/build-on-move.sh
-scripts/build-image-plugin.sh
-scripts/install-device.sh dist/paper-agent-native
-scripts/doctor.sh
-```
+Paper Agent exists because of the work shared by the reMarkable and open-source
+communities. Special thanks to:
 
-`login.sh` opens Pi's interactive OpenAI/Codex device login. A ChatGPT
-subscription is used through that provider; no OpenAI API key is required.
-This route is not a public reMarkable or ChatGPT API and may change upstream.
+- [XOVI](https://github.com/asivery/xovi) and
+  [rm-xovi-extensions](https://github.com/asivery/rm-xovi-extensions) for the
+  extension runtime and ecosystem that make native Xochitl integration possible.
+- [remarkable-doc-links](https://github.com/Marty-W/remarkable-doc-links) by
+  Martin Weber for the selection-menu, selection-bound, DocumentView, and native
+  image-paste foundations adapted by Paper Agent.
+- [alefaraci/xovi-qmd-extensions](https://github.com/alefaraci/xovi-qmd-extensions)
+  and
+  [StarNumber12046/xovi-qmd-extensions](https://github.com/StarNumber12046/xovi-qmd-extensions)
+  for QMD techniques used in pen restoration and native page creation.
+- [smart_remarkable](https://github.com/yangg1224/smart_remarkable) by Brock
+  Wilcox for the native pen sequencing and skeleton-tracing foundations.
+- [Pi](https://github.com/earendil-works/pi) by Mario Zechner for the agent
+  runtime, ChatGPT authentication, and RPC transport used on the Move.
+- [OpenClaw](https://github.com/openclaw/openclaw) for the image-generation
+  request and event-extraction reference.
+- [OpenCC](https://github.com/BYVoid/OpenCC), Kalam, ChenYuLuoyan, and Open
+  Huninn for the language, handwriting, and font assets that make mixed Chinese
+  and Latin output possible.
 
-See [Development](docs/DEVELOPMENT.md) for prerequisites and build details,
-[Architecture](docs/ARCHITECTURE.md) for trust boundaries,
-[Features](docs/FEATURES.md) for the exact capability matrix, and
-[Roadmap](docs/ROADMAP.md) for the user-facing installer/settings plan. The
-[project structure](docs/PROJECT_STRUCTURE.md) documents the public repository
-boundary and files that must never be committed; the
-[performance plan](docs/PERFORMANCE.md) defines how model and device latency are
-to be measured before choosing a faster default.
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for exact versions,
+copyright notices, licenses, and the boundary between included and external
+components.
 
-## Safety
+## Contributing and security
 
-- The QMD passes an allowlisted action as a direct `systemd-run` argument; it
-  never constructs a shell command from notebook content.
-- The local oracle socket is owner-only and accepts only bounded selection PNGs
-  under Paper Agent's runtime directory.
-- Model output is parsed into non-executable result formats before rendering.
-- AI text, rich documents and tables share one visual body size. Layout starts
-  at 100%, may shrink only as far as 60%, and otherwise requests a real native
-  notebook page before rendering again at 100%.
-- Beautify never deletes or edits the lassoed source; it accepts only complete,
-  validated text/vector output and keeps the lasso-sized destination. If that
-  box does not fit below, it is placed on a newly created native page without
-  shrinking merely because the old page ran out of room.
-- Generated images are decoded, dimension- and memory-bounded, normalized to
-  RGBA PNG and inserted only into the page that originated the request.
-- The native writer requires the Move hardware identity, active Xochitl, a
-  single-writer lock and an explicit confirmation string.
-- Install scripts preserve the previous files before replacement.
-
-## Project policy
-
-Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) and
-[SECURITY.md](SECURITY.md) before opening a pull request or reporting a
-vulnerability.
+These files are not required to use Paper Agent, but they document how a public
+project should accept changes and private vulnerability reports:
+[CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and
+[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
 
 ## License
 
