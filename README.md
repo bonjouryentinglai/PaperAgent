@@ -42,24 +42,16 @@ as native notebook images.
 </h3>
 
 Select a handwritten request and tap **AI**. Paper Agent chooses an output that
-fits the request; one answer can also combine text, lists, code, tables, and
-diagrams.
+fits the request; one answer can also combine text, lists, code, and tables.
+
+Click any demo to open the larger 320px version.
 
 | What you write | What Paper Agent creates | Demo |
 |---|---|---|
-| Ask a question, request an explanation, or solve a calculation | A concise handwritten answer or a structured explanation | Coming soon |
-| Ask for notes, a summary, an outline, or formatted content | A document with headings, paragraphs, lists, emphasis, and code | Coming soon |
-| Ask to organize information into rows and columns | A native table with wrapped, centered cells | Coming soon |
-| Ask for a flowchart, diagram, map, chart, or schematic | A clean native vector drawing that remains editable like ink | Coming soon |
-| Ask for a photo, illustration, poster, painting, or other picture | A GPT-generated image inserted into the notebook | Coming soon |
-
-<!-- Suggested demo paths:
-docs/assets/demos/ai-question-answer.gif
-docs/assets/demos/ai-document.gif
-docs/assets/demos/ai-table.gif
-docs/assets/demos/ai-diagram.gif
-docs/assets/demos/ai-image.gif
--->
+| Ask a question, request an explanation, or solve a calculation | A concise handwritten answer or a structured explanation | <a href="docs/assets/demos/ai-question-answer.gif"><img src="docs/assets/demos/ai-question-answer.gif" alt="AI question and answer demo" width="240"></a> |
+| Ask for notes, a summary, an outline, or formatted content | A document with headings, paragraphs, lists, emphasis, and code | <a href="docs/assets/demos/ai-document.gif"><img src="docs/assets/demos/ai-document.gif" alt="AI formatted document demo" width="240"></a> |
+| Ask to organize information into rows and columns | A native table with wrapped, centered cells | <a href="docs/assets/demos/ai-table.gif"><img src="docs/assets/demos/ai-table.gif" alt="AI table demo" width="240"></a> |
+| Ask for a photo, illustration, poster, painting, or other picture | A GPT-generated image inserted into the notebook | <a href="docs/assets/demos/ai-image.gif"><img src="docs/assets/demos/ai-image.gif" alt="AI image generation demo" width="240"></a> |
 
 <h3>
   <img src="docs/assets/icons/paper-agent-beautify.svg" alt="Beautify icon" width="36">
@@ -72,13 +64,8 @@ untouched while the cleaned result is placed below it or on a new page.
 
 | What you select | What Paper Agent creates | Demo |
 |---|---|---|
-| Rough handwriting, including Traditional Chinese and Latin text | A faithful, more legible handwriting transcription | Coming soon |
-| A rough diagram, flowchart, or labeled sketch | A faithful vector reconstruction with aligned shapes, straight connectors, and consistent labels | Coming soon |
-
-<!-- Suggested demo paths:
-docs/assets/demos/beautify-handwriting.gif
-docs/assets/demos/beautify-diagram.gif
--->
+| Rough handwriting, including Traditional Chinese and Latin text | A faithful, more legible handwriting transcription | <a href="docs/assets/demos/beautify-handwriting.gif"><img src="docs/assets/demos/beautify-handwriting.gif" alt="Beautify handwriting demo" width="240"></a> |
+| A rough diagram, flowchart, or labeled sketch | A faithful vector reconstruction with aligned shapes, straight connectors, and consistent labels | <a href="docs/assets/demos/beautify-diagram.gif"><img src="docs/assets/demos/beautify-diagram.gif" alt="Beautify drawing demo" width="240"></a> |
 
 ## Install with Claude or Codex
 
