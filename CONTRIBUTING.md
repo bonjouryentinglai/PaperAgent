@@ -17,8 +17,9 @@ Device-affecting pull requests should state which checks were run off-device
 and which were physically verified on a Paper Pro Move. A successful build is
 not evidence that Xochitl displayed or committed the expected ink.
 
-Paper Agent uses a cloud-first workflow. See `docs/CLOUD_DEVELOPMENT.md` before
-requesting access to a Move or treating an unavailable device as a blocker.
+Paper Agent's default workflow uses a local Codex checkout and GitHub CI. Do not
+request access to a Move or treat an unavailable device as a blocker unless the
+change has reached physical acceptance.
 
 ## Design constraints
 

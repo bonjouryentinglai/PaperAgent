@@ -11,8 +11,8 @@ only performed by explicit commands. A real ARM64 Move build is still required
 before installation.
 
 GitHub Actions runs the same off-device checks for pull requests and pushes.
-See `docs/CLOUD_DEVELOPMENT.md` for the boundary between hosted work and
-physical acceptance.
+Passing those checks is not evidence of physical behavior; use the acceptance
+checklist below when a change is ready to test on a connected Move.
 
 ## Reproducible image-plugin build
 

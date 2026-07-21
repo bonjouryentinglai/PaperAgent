@@ -1,20 +1,27 @@
 # Repository instructions
 
-Paper Agent is developed cloud-first. GitHub is the source of truth; normal
-implementation, documentation, review and automated validation should happen
-from a branch or pull request without requiring a connected reMarkable.
+Paper Agent is developed from a local Codex checkout on a maintainer-controlled
+host. GitHub is the source of truth for published commits, pull requests and
+automated validation. A connected reMarkable is not required for ordinary
+implementation, documentation, review or host-safe tests.
 
 ## Default workflow
 
-1. Create a focused branch for each change.
-2. Run `scripts/check.sh` before committing.
-3. Keep the change reviewable and document user-visible behavior.
-4. Push the branch and use GitHub CI as the off-device acceptance gate.
-5. Clearly report any physical checks that remain pending.
+1. Modify the local checkout with Codex.
+2. Create a focused branch for each change.
+3. Run `scripts/check.sh` before committing.
+4. Keep the change reviewable and document user-visible behavior.
+5. Push the branch and use GitHub CI as the off-device acceptance gate.
+6. Clearly report any physical checks that remain pending.
 
 Do not treat an unavailable Move as a blocker for work that can be validated
 off-device. Do not claim that a device-affecting change works on hardware until
 it has passed the relevant checklist in `docs/DEVELOPMENT.md`.
+
+Do not assume Codex Cloud is the default execution environment. Mobile Remote
+may steer a chat running on a connected Codex host, but files, commands,
+credentials and tools still come from that host. Keep the host available when
+remote control is required.
 
 ## Device boundary
 
@@ -39,5 +46,5 @@ acceptance on a Paper Pro Move. An ARM64 build alone is not physical acceptance.
 - Keep device changes reversible and preserve the original notebook content
   unless an undo-safe replacement path has been explicitly implemented.
 
-See `docs/CLOUD_DEVELOPMENT.md` for the cloud/local split and
-`docs/DEVELOPMENT.md` for the complete physical acceptance checklist.
+See `docs/DEVELOPMENT.md` for local checks and the complete physical acceptance
+checklist.

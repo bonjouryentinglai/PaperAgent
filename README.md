@@ -130,8 +130,6 @@ for the officially documented Codex sign-in surfaces.
 - [Features](docs/FEATURES.md) contains the detailed capability matrix.
 - [Development](docs/DEVELOPMENT.md) contains prerequisites, build commands,
   and device validation steps.
-- [Cloud-first development](docs/CLOUD_DEVELOPMENT.md) defines which work runs
-  in GitHub/Codex and which changes still require a connected Move.
 - [Compatibility](docs/COMPATIBILITY.md) records the supported device and
   software assumptions.
 - [Architecture](docs/ARCHITECTURE.md) explains the integration and trust
