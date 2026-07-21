@@ -8,7 +8,7 @@ must therefore be small, testable and reversible.
 1. Explain the user-visible behavior and supported Move firmware.
 2. Add or update unit tests for every parser, coordinate transform or safety
    guard you change.
-3. Run the commands in `docs/DEVELOPMENT.md`.
+3. Run `scripts/check.sh`; GitHub Actions runs the same off-device gate.
 4. Do not commit credentials, notebook captures, device logs, personal paths,
    account identifiers or user-specific validation history.
 5. Preserve upstream copyright and license notices for reused code and assets.
@@ -16,6 +16,9 @@ must therefore be small, testable and reversible.
 Device-affecting pull requests should state which checks were run off-device
 and which were physically verified on a Paper Pro Move. A successful build is
 not evidence that Xochitl displayed or committed the expected ink.
+
+Paper Agent uses a cloud-first workflow. See `docs/CLOUD_DEVELOPMENT.md` before
+requesting access to a Move or treating an unavailable device as a blocker.
 
 ## Design constraints
 

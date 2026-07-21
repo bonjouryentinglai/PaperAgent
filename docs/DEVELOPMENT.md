@@ -3,30 +3,16 @@
 ## Local checks
 
 ```sh
-cd device/native
-cargo fmt -- --check
-cargo test --locked
-
-cd ../..
-node --check device/runtime/native-oracle-server.mjs
-node device/runtime/native-oracle-server.mjs --self-test
-node --check device/runtime/broker-signal.mjs
-node device/runtime/broker-signal.mjs --self-test
-node --check device/runtime/native-oracle-client.mjs
-node --check device/runtime/rich-document.mjs
-node --test device/runtime/rich-document.test.mjs
-node --test device/runtime/image-generate.test.mjs
-node --check device/runtime/layout-policy.mjs
-node --test device/runtime/layout-policy.test.mjs
-
-sh -n device/runtime/native-oracle-service.sh
-sh -n device/runtime/native-selection-prepare.sh
-sh -n device/runtime/native-selection-write.sh
+scripts/check.sh
 ```
 
 The native crate can be tested on ordinary Linux because hardware access is
 only performed by explicit commands. A real ARM64 Move build is still required
 before installation.
+
+GitHub Actions runs the same off-device checks for pull requests and pushes.
+See `docs/CLOUD_DEVELOPMENT.md` for the boundary between hosted work and
+physical acceptance.
 
 ## Reproducible image-plugin build
 

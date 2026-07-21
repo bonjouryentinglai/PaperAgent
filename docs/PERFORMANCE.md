@@ -32,9 +32,10 @@ sketch. Compare median and slowest observed times as well as correctness.
 3. A/B test `gpt-5.6-sol` and `gpt-5.6-luna` with identical selections. Luna is
    the first speed candidate, subject to the `openai-codex` provider actually
    exposing that model through the user's ChatGPT subscription.
-4. Make the default plain answer deliberately short. OpenAI's latency guide says
-   output generation is usually the largest latency step and that smaller models
-   usually run faster.
+4. Do not impose a global short-answer limit. It does not apply to Beautify and
+   would damage transformations whose output length is determined by the
+   selection. For AI answers, preserve the user's requested detail; use model
+   choice and transport measurements as the primary latency controls.
 5. Carefully overlap the initial primary-pen restoration with screenshot settling
    and tune the PNG stability interval only after measurement. These can remove
    fractions of a second, but must not reintroduce stale or partial screenshots.
@@ -57,3 +58,29 @@ while restarting Pi for every action would erase the warm-process latency gain.
 The first experiment should therefore change the global model for one test run.
 Dynamic per-request routing should be implemented only after Pi's RPC support and
 memory cost have been verified on the Move.
+
+## ChatGPT Instant is not a thinking level
+
+ChatGPT's **Instant** option currently uses GPT-5.5 Instant. It is not an
+`instant` reasoning value for GPT-5.6 Sol. Paper Agent already uses Sol with Pi
+thinking set to `off`, which is the lowest-overhead Sol configuration exposed by
+the current runtime, but it does not turn Sol into the ChatGPT Instant model.
+
+Do not set `PAPER_AGENT_THINKING=instant`. Before adding GPT-5.5 Instant as a
+candidate, verify that Pi's `openai-codex` provider and the user's subscription
+actually expose it. Luna and Terra remain the safer first A/B candidates for
+the existing Codex transport.
+
+Codex also has a separate **Fast mode** that accelerates supported models at a
+higher ChatGPT-credit rate. Paper Agent currently starts Pi with model and
+thinking arguments only; Pi's documented CLI does not expose Codex's Fast
+service tier, so this cannot be enabled by changing `config.env`. Treat Fast
+mode as a transport experiment: first verify that Pi can forward the tier and
+that the subscription exposes it, then measure it against Standard without
+changing output semantics.
+
+References:
+
+- [GPT-5.6 in ChatGPT](https://help.openai.com/en/articles/20001354)
+- [Codex speed and Fast mode](https://learn.chatgpt.com/docs/agent-configuration/speed)
+- [Pi model and thinking options](https://github.com/earendil-works/pi/blob/main/packages/coding-agent/README.md#model-options)
