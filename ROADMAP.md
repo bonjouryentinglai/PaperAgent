@@ -11,7 +11,8 @@ release dates.
 - [x] Native text, tables, structured documents, and vector drawings.
 - [x] GPT-generated pictures inserted as notebook images.
 - [x] Traditional Chinese and Latin handwriting output.
-- [x] Progress, cancellation, new-page fallback, install, and rollback support.
+- [x] Progress, cancellation, adaptive multi-page text, install, and rollback
+  support.
 - [ ] Broader device, software, and physical acceptance coverage.
 
 ## Phase 2A: drawing foundation — in progress
@@ -36,7 +37,7 @@ release dates.
 
 ## Phase 3: multi-page creation
 
-- [ ] Continue long results across pages.
+- [x] Continue long text results across pages.
 - [ ] Create and navigate multiple pages for one task.
 - [ ] Apply suitable page templates and layouts.
 - [ ] Build calendars, planners, study packs, meeting notes, and workbooks.

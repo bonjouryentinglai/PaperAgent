@@ -13,6 +13,7 @@ import { fileURLToPath } from "node:url";
 import { compileRichDocument, parseRichDocument, validateVectorBody } from "./rich-document.mjs";
 import {
   chooseLargestFittingScale,
+  MIN_SCALE_PERCENT,
   safePagePlacement,
 } from "./layout-policy.mjs";
 import { compileScene, validateSceneToolCall } from "./scene.mjs";
@@ -46,6 +47,7 @@ const IMAGE_ACK_TIMEOUT_MS = 10_000;
 const IMAGE_SIGNAL_RETRY_MS = 180;
 const IMAGE_SOURCE_SETTLE_MS = 5_000;
 const ARTIFACT_CLEANUP_INTERVAL_MS = 60 * 60 * 1_000;
+const MAX_TEXT_PAGES = 8;
 const IMAGE_MAX_WIDTH = boundedEnvironmentInteger("PAPER_AGENT_IMAGE_MAX_WIDTH", 620, 128, 800);
 const IMAGE_MAX_HEIGHT = boundedEnvironmentInteger("PAPER_AGENT_IMAGE_MAX_HEIGHT", 620, 128, 800);
 const LINE_GAP = 24;
@@ -132,6 +134,14 @@ function selfTest() {
   if (artifactIdFor("/home/root/paper-agent/selection/native-selection-1234567890123.png") !== "1234567890123") {
     throw new Error("image artifact id extraction failed");
   }
+  if (safeError({ content: [{ type: "text", text: "schema path /objects/0" }] })
+      !== "schema path /objects/0") {
+    throw new Error("structured tool errors are not readable");
+  }
+  if (safeError("canvas.height: must be >= 48 Received arguments: private text")
+      !== "canvas.height: must be >= 48") {
+    throw new Error("tool error arguments are not redacted");
+  }
   if (toolAckPathFor("/home/root/paper-agent/selection/native-selection-1234567890123.png", 7)
       !== "/run/paper-agent-tool-1234567890123-7.ack") {
     throw new Error("primary-pen acknowledgement path failed");
@@ -167,6 +177,8 @@ function selfTest() {
   if (streamJobStem("1784451570211-1", 2) !== "stream-1784451570211-1-2") {
     throw new Error("streaming writer job path contract failed");
   }
+  const breakAt = preferredTextPageBreak([..."alpha beta gamma"], 9);
+  if (breakAt !== 6) throw new Error("text page break did not prefer a word boundary");
   if (!isValidXochitlPid(32_213) || isValidXochitlPid(0)
       || isValidXochitlPid(Number.NaN)) {
     throw new Error("Xochitl PID validation failed");
@@ -236,7 +248,21 @@ function send(socket, value) {
 }
 
 function safeError(error) {
-  return String(error instanceof Error ? error.message : error).replace(/[\r\n]+/g, " ").slice(0, 800);
+  let value = error instanceof Error ? error.message : error;
+  if (value && typeof value === "object") {
+    const content = Array.isArray(value.content)
+      ? value.content
+        .filter((part) => part?.type === "text" && typeof part.text === "string")
+        .map((part) => part.text)
+        .join(" ")
+      : "";
+    const detail = value.message || value.error || content;
+    value = typeof detail === "string" ? detail : JSON.stringify(detail || value);
+  }
+  return String(value)
+    .replace(/\s*Received arguments:.*$/su, "")
+    .replace(/[\r\n]+/g, " ")
+    .slice(0, 800);
 }
 
 function boundedEnvironmentInteger(name, fallback, minimum, maximum) {
@@ -869,6 +895,7 @@ async function requestNewPage(turn) {
 }
 
 async function renderAiTextualResult(turn, body, kind) {
+  const freshPage = turn.pageCount > 0 && turn.nextY === turn.request.y;
   const renderedByScale = new Map();
   const scale = await chooseLargestFittingScale(async (candidate) => {
     try {
@@ -890,14 +917,76 @@ async function renderAiTextualResult(turn, body, kind) {
   }
 
   for (const rendered of renderedByScale.values()) removeRenderedJob(turn, rendered);
-  await requestNewPage(turn);
-  try {
-    return await renderJob(turn, body, kind, 100);
-  } catch (error) {
-    if (isLayoutMiss(error)) {
-      throw new Error("the reply does not fit one new page at the default text size");
+  if (!freshPage) {
+    await requestNewPage(turn);
+    return renderAiTextualResult(turn, body, kind);
+  }
+  if (kind === "text") return null;
+  throw new Error("the reply does not fit one new page within the allowed text scale");
+}
+
+function preferredTextPageBreak(chars, maximum) {
+  const floor = Math.max(1, maximum - Math.max(32, Math.floor(maximum * 0.2)));
+  const boundary = /[\s,.;:!?，。；：！？、）)]/u;
+  for (let index = maximum - 1; index >= floor; index -= 1) {
+    if (boundary.test(chars[index])) return index + 1;
+  }
+  return maximum;
+}
+
+async function renderLargestTextPage(turn, body, scalePercent) {
+  const chars = [...body.trim()];
+  if (chars.length === 0) throw new Error("Paper Agent returned an empty text page");
+  const renderedByLength = new Map();
+  let best = 0;
+  let low = 1;
+  let high = chars.length;
+  while (low <= high) {
+    const candidate = low + Math.floor((high - low) / 2);
+    const prefix = chars.slice(0, candidate).join("").trimEnd();
+    try {
+      const rendered = await renderJob(turn, prefix, "text", scalePercent);
+      renderedByLength.set(candidate, rendered);
+      best = candidate;
+      low = candidate + 1;
+    } catch (error) {
+      if (!isLayoutMiss(error)) throw error;
+      high = candidate - 1;
     }
-    throw error;
+  }
+  if (best === 0) throw new Error("a text fragment does not fit a fresh notebook page");
+
+  const cut = preferredTextPageBreak(chars, best);
+  let chosen = renderedByLength.get(cut);
+  if (!chosen) {
+    chosen = await renderJob(
+      turn,
+      chars.slice(0, cut).join("").trimEnd(),
+      "text",
+      scalePercent,
+    );
+  }
+  for (const [candidate, rendered] of renderedByLength) {
+    if (candidate !== cut) removeRenderedJob(turn, rendered);
+  }
+  return {
+    rendered: chosen,
+    remainder: chars.slice(cut).join("").trimStart(),
+  };
+}
+
+async function writePaginatedText(turn, body, writeKind, style = null) {
+  let remaining = body.trim();
+  let pagesWritten = 0;
+  while (remaining) {
+    if (pagesWritten >= MAX_TEXT_PAGES) {
+      throw new Error(`the reply exceeds the ${MAX_TEXT_PAGES}-page safety limit`);
+    }
+    const page = await renderLargestTextPage(turn, remaining, MIN_SCALE_PERCENT);
+    await writeRenderedJob(turn, page.rendered, writeKind, style);
+    remaining = page.remainder;
+    pagesWritten += 1;
+    if (remaining) await requestNewPage(turn);
   }
 }
 
@@ -921,7 +1010,8 @@ async function writeCompleteResult(turn, envelope) {
     if (turn.request.newPageRequired) await requestNewPage(turn);
     rendered = await renderJob(turn, body, envelope.kind);
   }
-  await writeRenderedJob(turn, rendered, envelope.kind);
+  if (rendered) await writeRenderedJob(turn, rendered, envelope.kind);
+  else await writePaginatedText(turn, body, envelope.kind);
 }
 
 function penStyleMessage(style) {
@@ -1019,6 +1109,14 @@ async function writeToolCallResult(turn) {
   }, turn.request.action);
   reportStage(turn, "writing");
   try {
+    if (runs.length === 1 && ["bodyText", "beautifyText"].includes(runs[0].kind)) {
+      const rendered = runs[0].kind === "bodyText"
+        ? await renderAiTextualResult(turn, runs[0].body, "text")
+        : await renderJob(turn, runs[0].body, "text");
+      if (rendered) await writeRenderedJob(turn, rendered, "scene", runs[0].style);
+      else await writePaginatedText(turn, runs[0].body, "scene", runs[0].style);
+      return;
+    }
     for (const run of runs) {
       const rendered = await renderJob(turn, run.body, "scene");
       await writeRenderedJob(turn, rendered, "scene", run.style);

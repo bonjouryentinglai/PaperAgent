@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   accountIdFor,
   buildRequestBody,
+  decodeBase64Image,
   imagePayloadFromSse,
   validateCredential,
   validatePng,
@@ -36,6 +37,10 @@ const completed = `data: ${JSON.stringify({
   response: { output: [{ type: "image_generation_call", result: image }] },
 })}`;
 assert.equal(imagePayloadFromSse(completed), image);
+const largeEncoded = Buffer.alloc(1024 * 1024, 0x5a).toString("base64");
+assert.equal(decodeBase64Image(largeEncoded).length, 1024 * 1024);
+assert.throws(() => decodeBase64Image("AA=A"), /malformed image data/);
+assert.throws(() => decodeBase64Image("AA!A"), /malformed image data/);
 assert.throws(
   () => imagePayloadFromSse('data: {"type":"response.failed","error":{"message":"private detail"}}'),
   /^Error: ChatGPT image generation failed$/,

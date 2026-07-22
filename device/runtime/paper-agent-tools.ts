@@ -98,6 +98,8 @@ const renderScene = defineTool({
 	promptSnippet: "Render a bounded semantic Scene as native notebook ink",
 	promptGuidelines: [
 		"Use move_render_scene as the final action for text, calculations, tables, Sudoku, calendars, mind maps, flowcharts, charts, and clean geometric drawings.",
+		"Set layout to flow for ordinary prose, headings, and lists so local typography can wrap and paginate them. Set layout to spatial for tables, diagrams, charts, calendars, puzzles, and positioned labels.",
+		"For a plain prose answer, use wide left-aligned text objects and add intentional line breaks so body text remains comfortably readable; do not place it in tiny label boxes.",
 		"Represent repeated structures semantically: one grid object for a table or Sudoku, not dozens of unrelated line objects.",
 		"Use a scene canvas whose aspect ratio matches the intended output. Coordinates and object extents must remain inside that canvas.",
 		"Use supported color and strokeWidth fields sparingly for hierarchy and readability. Native ink is the default.",
@@ -106,10 +108,11 @@ const renderScene = defineTool({
 	parameters: Type.Object({
 		version: Type.Literal(1),
 		canvas: Type.Object({
-			width: Type.Integer({ minimum: 100, maximum: 4000 }),
-			height: Type.Integer({ minimum: 100, maximum: 4000 }),
+			width: Type.Integer({ minimum: 48, maximum: 4000 }),
+			height: Type.Integer({ minimum: 48, maximum: 4000 }),
 		}, { additionalProperties: false }),
 		background: Type.Optional(Type.Literal("transparent")),
+		layout: Type.Optional(Type.Union([Type.Literal("flow"), Type.Literal("spatial")])),
 		objects: Type.Array(SceneObject, { minItems: 1, maxItems: 192 }),
 	}, { additionalProperties: false }),
 	async execute(_toolCallId, params) {

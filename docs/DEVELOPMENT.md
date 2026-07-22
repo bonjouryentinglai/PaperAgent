@@ -84,7 +84,8 @@ After an install, verify separately:
     at the top of a newly created page instead of covering the selection.
 16. AI adaptive layout: verify a short answer remains at 100%, a longer answer
     fits between 60% and 99%, and a result that cannot fit at 60% creates a new
-    native page and returns to 100% there.
+    native page that repeats the same 100%-to-60% fit policy. If it still needs
+    multiple pages at 60%, confirm every page keeps the same 60% scale.
 17. Beautify a lasso near the page bottom whose same-size result cannot fit;
     confirm Xochitl creates a new page and preserves the lasso-based visual size.
 18. Undo, move, resize, page save, reopen and sync behavior for native ink.

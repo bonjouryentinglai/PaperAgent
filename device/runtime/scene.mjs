@@ -10,6 +10,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const SCENE_VERSION = 1;
+const MIN_CANVAS = 48;
 const MAX_CANVAS = 4_000;
 const MAX_OBJECTS = 192;
 const MAX_CELLS = 256;
@@ -19,6 +20,7 @@ const MAX_POINTS = 64;
 const COLORS = new Set(["black", "gray", "blue", "red", "green", "yellow", "cyan", "magenta"]);
 const WIDTHS = new Set(["thin", "medium", "thick"]);
 const ALIGNS = new Set(["left", "center", "right"]);
+const LAYOUTS = new Set(["auto", "flow", "spatial"]);
 const OBJECT_TYPES = new Set([
   "text", "line", "arrow", "rect", "ellipse", "circle", "polyline", "grid",
 ]);
@@ -218,13 +220,13 @@ function validateSceneObject(raw, canvas, index, fallbackStyle) {
 
 export function validateSceneToolCall(raw, action = "ai") {
   const value = object(raw, "move_render_scene arguments");
-  exactKeys(value, new Set(["version", "canvas", "objects", "background"]), "move_render_scene arguments");
+  exactKeys(value, new Set(["version", "canvas", "objects", "background", "layout"]), "move_render_scene arguments");
   if (value.version !== SCENE_VERSION) throw new Error(`scene version must be ${SCENE_VERSION}`);
   const canvasRaw = object(value.canvas, "scene canvas");
   exactKeys(canvasRaw, new Set(["width", "height"]), "scene canvas");
   const canvas = {
-    width: integer(canvasRaw.width, "scene canvas width", 100, MAX_CANVAS),
-    height: integer(canvasRaw.height, "scene canvas height", 100, MAX_CANVAS),
+    width: integer(canvasRaw.width, "scene canvas width", MIN_CANVAS, MAX_CANVAS),
+    height: integer(canvasRaw.height, "scene canvas height", MIN_CANVAS, MAX_CANVAS),
   };
   if (!Array.isArray(value.objects) || value.objects.length < 1 || value.objects.length > MAX_OBJECTS) {
     throw new Error(`scene objects must contain 1..=${MAX_OBJECTS} items`);
@@ -232,10 +234,21 @@ export function validateSceneToolCall(raw, action = "ai") {
   const background = value.background === undefined ? "transparent" : value.background;
   if (background !== "transparent") throw new Error("only a transparent scene background is supported");
   const objects = value.objects.map((item, index) => validateSceneObject(item, canvas, index, DEFAULT_STYLE));
+  const requestedLayout = enumValue(value.layout, LAYOUTS, "auto", "scene layout");
+  const hasText = objects.some((item) => item.type === "text");
+  if (requestedLayout === "flow" && !hasText) {
+    throw new Error("flow Scene layout requires text content");
+  }
+  const flowCompatible = hasText
+    && objects.every((item) => item.type === "text"
+      || (item.type === "line" && item.y1 === item.y2));
+  const layout = action === "beautify"
+    ? "spatial"
+    : (flowCompatible ? "flow" : "spatial");
   if (action === "beautify" && objects.some((item) => item.type === "text" && item.text.length === 0)) {
     throw new Error("Beautify cannot emit empty text");
   }
-  return { version: SCENE_VERSION, canvas, background, objects };
+  return { version: SCENE_VERSION, canvas, background, layout, objects };
 }
 
 function makeMapper(scene, target) {
@@ -382,6 +395,26 @@ export function compileScene(raw, target, action = "ai") {
       || target.width < 48 || target.height < 48) {
     throw new Error("scene target must be at least 48 x 48 pixels");
   }
+  if (scene.layout === "flow") {
+    const textItems = scene.objects.filter((item) => item.type === "text");
+    const item = textItems[0];
+    return [{
+      kind: "bodyText",
+      style: item.style,
+      body: textItems.map((entry) => entry.text).join("\n"),
+      groups: [...new Set(textItems.map((entry) => entry.group).filter(Boolean))],
+    }];
+  }
+  if (action === "beautify" && scene.objects.length === 1 && scene.objects[0].type === "text") {
+    const item = scene.objects[0];
+    return [{
+      kind: "beautifyText",
+      style: item.style,
+      body: item.text,
+      groups: item.group ? [item.group] : [],
+    }];
+  }
+
   const map = makeMapper(scene, target);
   const runs = [];
   for (const item of scene.objects) compileObject(runs, item, map);
@@ -389,22 +422,24 @@ export function compileScene(raw, target, action = "ai") {
   if (runs.length > 96) throw new Error("scene expands into too many styled runs");
   return runs.map((run) => {
     const body = validateVectorBody(`paper-agent-vector 1\n${run.commands.join("\n")}`);
-    return { style: run.style, body, groups: [...run.groups] };
+    return { kind: "vector", style: run.style, body, groups: [...run.groups] };
   });
 }
 
 export const SCENE_LIMITS = Object.freeze({
   version: SCENE_VERSION,
+  minCanvas: MIN_CANVAS,
   maxCanvas: MAX_CANVAS,
   maxObjects: MAX_OBJECTS,
   maxCells: MAX_CELLS,
   colors: [...COLORS],
   widths: [...WIDTHS],
+  layouts: [...LAYOUTS],
 });
 
 if (fileURLToPath(import.meta.url) === path.resolve(process.argv[1] || "")
     && process.argv.includes("--self-test")) {
-  const sudoku = validateSceneToolCall({
+  const sudoku = {
     version: 1,
     canvas: { width: 900, height: 900 },
     objects: [{
@@ -413,7 +448,8 @@ if (fileURLToPath(import.meta.url) === path.resolve(process.argv[1] || "")
       majorStrokeWidth: "thick", color: "black",
       cells: [{ row: 0, column: 0, text: "5" }],
     }],
-  });
+  };
+  validateSceneToolCall(sudoku);
   const runs = compileScene(sudoku, { width: 800, height: 1_200 });
   if (runs.length < 2 || !runs.some((run) => run.style.width === "thick")) {
     throw new Error("scene self-test did not preserve grid line weights");

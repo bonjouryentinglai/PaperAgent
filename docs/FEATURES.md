@@ -51,10 +51,10 @@ Undo/Redo behavior.
 
 Phase 2A Scene supports the normal Xochitl palette and thin, medium and thick
 native-pen styles, restoring the user's original pen afterward. Custom RGB,
-syntax coloring, dashed strokes, smooth solid fills and pagination of one answer
-across multiple new pages are not implemented. The current policy can move one
-complete result to one new page, and filled vector areas use sparse native-ink
-hatching.
+syntax coloring, dashed strokes and smooth solid fills are not implemented.
+Flow text can continue across up to eight new pages at a consistent bounded
+scale; spatial Scenes are kept as one composition rather than split across
+pages. Filled vector areas use sparse native-ink hatching.
 
 An independent canvas, pen/eraser tools, chat drawer, page scrubber, app-level
 power handling and full-screen takeover are standalone-application concerns;

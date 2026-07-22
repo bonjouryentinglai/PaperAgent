@@ -19,11 +19,13 @@ Paper Agent uses a thin Xochitl integration and a separate local runtime.
    compiles it into bounded, non-executable native-vector runs grouped by pen
    style. Image requests use the narrow image helper, then decode and normalize
    the result to a bounded RGBA PNG.
-6. Scene content is fitted as one proportion-preserving composition. The legacy
-   marker path still preflights text, documents and tables from 100% down to
-   60%, then asks Xochitl for a real page if necessary. Beautify never shrinks
-   merely because the old page is short: its lasso-sized destination moves to
-   a new page when required.
+6. Spatial Scene content is fitted as one proportion-preserving composition.
+   Prose, headings and lists use flow layout: each available page is preflighted
+   from 100% down to 60%, then Xochitl creates a real page if necessary. If a
+   complete answer still cannot fit at 60%, it continues across bounded new
+   pages at a consistent 60% scale. Beautify never shrinks merely because the
+   old page is short: its lasso-sized destination moves to a new page when
+   required.
 7. StrokeJobs use the guarded Marker writer, bound to the Xochitl PID that
    originated the request. Images use Xochitl 3.27's native
    scene-image insertion method only if the originating controller and page are
