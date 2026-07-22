@@ -58,5 +58,5 @@ release dates.
   boundaries.
 
 The immediate contribution focus is **Phase 2A**. See
-[CONTRIBUTING.md](../CONTRIBUTING.md) and [DEVELOPMENT.md](DEVELOPMENT.md) before
-working on device integration.
+[CONTRIBUTING.md](CONTRIBUTING.md) and [DEVELOPMENT.md](docs/DEVELOPMENT.md)
+before working on device integration.

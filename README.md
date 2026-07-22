@@ -3,6 +3,9 @@
 Paper Agent brings AI directly into the native selection menu on a reMarkable
 Paper Pro Move. Lasso something in your notebook, then choose one of two actions:
 
+**[Roadmap](ROADMAP.md)** · [Features](docs/FEATURES.md) ·
+[Development](docs/DEVELOPMENT.md) · [Compatibility](docs/COMPATIBILITY.md)
+
 <table>
   <tr>
     <td width="80" align="center">
@@ -134,7 +137,7 @@ for the officially documented Codex sign-in surfaces.
   software assumptions.
 - [Architecture](docs/ARCHITECTURE.md) explains the integration and trust
   boundaries.
-- [Roadmap](docs/ROADMAP.md) tracks planned productization work.
+- [Roadmap](ROADMAP.md) shows the current status and planned direction.
 
 ## Special thanks
 

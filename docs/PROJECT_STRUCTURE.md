@@ -32,8 +32,7 @@ PaperAgent/
 │   ├── DEVELOPMENT.md
 │   ├── FEATURES.md
 │   ├── PERFORMANCE.md
-│   ├── PROJECT_STRUCTURE.md
-│   └── ROADMAP.md
+│   └── PROJECT_STRUCTURE.md
 ├── scripts/                          # Login, build, install, diagnose and uninstall
 ├── third_party/                      # Third-party license texts
 ├── .gitignore
@@ -41,6 +40,7 @@ PaperAgent/
 ├── CONTRIBUTING.md
 ├── LICENSE
 ├── README.md
+├── ROADMAP.md
 ├── SECURITY.md
 └── THIRD_PARTY_NOTICES.md
 ```
