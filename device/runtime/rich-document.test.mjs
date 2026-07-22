@@ -90,6 +90,8 @@ test("accepts the expanded bounded curve, shape, and hatch primitives", () => {
     "box 600 100 200 150",
     "disc 700 500 80",
     "fillellipse 300 700 160 80",
+    "labelleft 20 850 220 80 Left",
+    "labelright 760 850 220 80 Right",
   ].join("\n");
   assert.equal(validateVectorBody(vector), vector);
 });

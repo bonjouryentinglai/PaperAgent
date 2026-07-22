@@ -45,6 +45,9 @@ file "$IMAGE_PLUGIN" | grep -Eq 'ARM aarch64|ARM64' || {
 "$NODE_CHECK" --check "$ROOT/device/runtime/broker-signal.mjs"
 "$NODE_CHECK" "$ROOT/device/runtime/broker-signal.mjs" --self-test
 "$NODE_CHECK" --check "$ROOT/device/runtime/native-oracle-client.mjs"
+"$NODE_CHECK" --check "$ROOT/device/runtime/scene.mjs"
+"$NODE_CHECK" --experimental-strip-types --check "$ROOT/device/runtime/paper-agent-tools.ts"
+"$NODE_CHECK" --test "$ROOT/device/runtime/scene.test.mjs"
 "$NODE_CHECK" --check "$ROOT/device/runtime/rich-document.mjs"
 "$NODE_CHECK" --test "$ROOT/device/runtime/rich-document.test.mjs"
 "$NODE_CHECK" --check "$ROOT/device/runtime/image-generate.mjs"
@@ -56,10 +59,13 @@ sh -n "$ROOT/device/runtime/native-selection-prepare.sh"
 sh -n "$ROOT/device/runtime/native-selection-write.sh"
 sh -n "$ROOT/device/systemd/paper-agent-xovi-post-start.sh"
 
-mkdir -p "$STAGE/payload/runtime" "$STAGE/payload/assets/icons"
+mkdir -p "$STAGE/payload/runtime/skills" "$STAGE/payload/assets/icons"
 cp "$BIN" "$STAGE/payload/paper-agent-native"
 cp "$IMAGE_PLUGIN" "$STAGE/payload/paper-agent-image.so"
-cp "$ROOT/device/runtime/"* "$STAGE/payload/runtime/"
+for file in "$ROOT/device/runtime/"*.mjs "$ROOT/device/runtime/"*.ts "$ROOT/device/runtime/"*.sh; do
+  cp "$file" "$STAGE/payload/runtime/"
+done
+cp -R "$ROOT/device/runtime/skills/"* "$STAGE/payload/runtime/skills/"
 cp "$ROOT/docs/assets/icons/paper-agent-ai.svg" "$STAGE/payload/assets/icons/"
 cp "$ROOT/docs/assets/icons/paper-agent-beautify.svg" "$STAGE/payload/assets/icons/"
 cp "$ROOT/device/systemd/paper-agent-native-oracle.service" "$STAGE/payload/"
@@ -87,7 +93,8 @@ STATE_ROOT="$BASE/backups"
 STAMP=$(date +%Y%m%d-%H%M%S)
 BACKUP="$STATE_ROOT/install-$STAMP"
 INCOMING="$BASE/.install-incoming.$$"
-FILES='paper-agent-native broker-signal.mjs native-oracle-client.mjs native-oracle-server.mjs native-oracle-service.sh native-selection-prepare.sh native-selection-write.sh rich-document.mjs rich-document.test.mjs image-generate.mjs image-generate.test.mjs layout-policy.mjs layout-policy.test.mjs'
+FILES='paper-agent-native broker-signal.mjs native-oracle-client.mjs native-oracle-server.mjs native-oracle-service.sh native-selection-prepare.sh native-selection-write.sh rich-document.mjs rich-document.test.mjs image-generate.mjs image-generate.test.mjs layout-policy.mjs layout-policy.test.mjs scene.mjs scene.test.mjs paper-agent-tools.ts'
+SKILLS='ai-selection structured-drawing beautify-selection'
 
 test -x /home/root/node/bin/node
 test -x /home/root/node/bin/pi
@@ -127,6 +134,7 @@ restore_file() {
 }
 
 for name in $FILES; do backup_file "$name" "$NATIVE/$name"; done
+for skill in $SKILLS; do backup_file "skill-$skill" "$NATIVE/skills/$skill/SKILL.md"; done
 backup_file paper-agent-ai.svg "$ICONS/paper-agent-ai.svg"
 backup_file paper-agent-beautify.svg "$ICONS/paper-agent-beautify.svg"
 backup_file paper-agent-native-oracle.service "$UNIT"
@@ -143,6 +151,10 @@ printf '%s\n' "$OLD_ACTIVE" > "$BACKUP/service.active"
 rollback() {
   systemctl stop paper-agent-native-oracle.service 2>/dev/null || true
   for name in $FILES; do restore_file "$name" "$NATIVE/$name"; done
+  for skill in $SKILLS; do
+    mkdir -p "$NATIVE/skills/$skill"
+    restore_file "skill-$skill" "$NATIVE/skills/$skill/SKILL.md"
+  done
   restore_file paper-agent-ai.svg "$ICONS/paper-agent-ai.svg"
   restore_file paper-agent-beautify.svg "$ICONS/paper-agent-beautify.svg"
   restore_file paper-agent-native-oracle.service "$UNIT"
@@ -169,8 +181,12 @@ cp "$INCOMING/assets/icons/paper-agent-ai.svg" "$ICONS/paper-agent-ai.svg"
 cp "$INCOMING/assets/icons/paper-agent-beautify.svg" "$ICONS/paper-agent-beautify.svg"
 grep -q '<svg' "$ICONS/paper-agent-ai.svg"
 grep -q '<svg' "$ICONS/paper-agent-beautify.svg"
-for name in broker-signal.mjs native-oracle-client.mjs native-oracle-server.mjs native-oracle-service.sh native-selection-prepare.sh native-selection-write.sh rich-document.mjs rich-document.test.mjs image-generate.mjs image-generate.test.mjs layout-policy.mjs layout-policy.test.mjs; do
+for name in broker-signal.mjs native-oracle-client.mjs native-oracle-server.mjs native-oracle-service.sh native-selection-prepare.sh native-selection-write.sh rich-document.mjs rich-document.test.mjs image-generate.mjs image-generate.test.mjs layout-policy.mjs layout-policy.test.mjs scene.mjs scene.test.mjs paper-agent-tools.ts; do
   cp "$INCOMING/runtime/$name" "$NATIVE/$name"
+done
+for skill in $SKILLS; do
+  mkdir -p "$NATIVE/skills/$skill"
+  cp "$INCOMING/runtime/skills/$skill/SKILL.md" "$NATIVE/skills/$skill/SKILL.md"
 done
 cp "$INCOMING/paper-agent-native-oracle.service" "$UNIT_SOURCE"
 cp "$INCOMING/paper-agent-xovi-post-start.sh" "$START_HOOK"
@@ -190,7 +206,7 @@ if grep -Eqx 'PAPER_AGENT_IMAGE_QUALITY=medium' "$CONFIG"; then
 fi
 chmod 0755 "$NATIVE/paper-agent-native" "$NATIVE/native-oracle-service.sh" "$NATIVE/native-selection-prepare.sh" "$NATIVE/native-selection-write.sh"
 chmod 0755 "$IMAGE_PLUGIN"
-chmod 0644 "$NATIVE/"*.mjs "$ICONS/"*.svg "$UNIT_SOURCE" "$QMD_FILE" "$CONFIG"
+chmod 0644 "$NATIVE/"*.mjs "$NATIVE/"*.ts "$NATIVE/skills/"*/SKILL.md "$ICONS/"*.svg "$UNIT_SOURCE" "$QMD_FILE" "$CONFIG"
 chmod 0755 "$START_HOOK"
 chmod 0600 "$CONFIG"
 mkdir -p "$NATIVE/jobs" "$NATIVE/oracle-data" "$NATIVE/artifacts"

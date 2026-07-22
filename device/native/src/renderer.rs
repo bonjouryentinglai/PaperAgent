@@ -32,6 +32,9 @@ const MAX_VECTOR_LABEL_CHARS: usize = 240;
 const MAX_VECTOR_OUTPUT_STROKES: usize = 512;
 const MAX_VECTOR_OUTPUT_POINTS: usize = 24_000;
 const MAX_VECTOR_PATH_STEPS: usize = 400_000;
+const MAX_SCENE_OUTPUT_STROKES: usize = MAX_OUTPUT_STROKES;
+const MAX_SCENE_OUTPUT_POINTS: usize = 96_000;
+const MAX_SCENE_PATH_STEPS: usize = 400_000;
 const QUADRATIC_SAMPLES: usize = 32;
 const CUBIC_SAMPLES: usize = 40;
 const MAX_ARC_SAMPLES: usize = 64;
@@ -55,6 +58,13 @@ enum DocumentBlockKind {
     Rich,
     Table,
     Vector,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum LabelAlignment {
+    Left,
+    Center,
+    Right,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -273,6 +283,28 @@ pub fn vector_to_job(
     canvas_width: u32,
     canvas_height: u32,
 ) -> Result<StrokeJob, String> {
+    vector_to_job_with_text_scale(
+        text,
+        target,
+        canvas_width,
+        canvas_height,
+        1,
+        MAX_VECTOR_OUTPUT_STROKES,
+        MAX_VECTOR_OUTPUT_POINTS,
+        MAX_VECTOR_PATH_STEPS,
+    )
+}
+
+fn vector_to_job_with_text_scale(
+    text: &str,
+    target: Target,
+    canvas_width: u32,
+    canvas_height: u32,
+    text_scale: i32,
+    max_output_strokes: usize,
+    max_output_points: usize,
+    max_path_steps: usize,
+) -> Result<StrokeJob, String> {
     validate_target(target, canvas_width, canvas_height)?;
     if text.chars().count() > MAX_INPUT_CHARS {
         return Err("vector input is too large".into());
@@ -416,7 +448,7 @@ pub fn vector_to_job(
                     strokes.push(map_polyline(&[(x1, y1), (head_x, head_y)], target));
                 }
             }
-            Some("label") if fields.len() >= 6 => {
+            Some("label" | "labelleft" | "labelright") if fields.len() >= 6 => {
                 let values = parse_vector_numbers(&fields[1..5])?;
                 if values[2] == 0 || values[3] == 0 {
                     return Err("vector label width and height must be positive".into());
@@ -433,8 +465,19 @@ pub fn vector_to_job(
                     map_vector_target(values[0], values[1], values[2], values[3], target)?;
                 let label_target =
                     expand_vector_label_target(label_target, target, text.chars().count());
-                let mut label_strokes = render_text_box(&text, label_target, 26, 72, 3, false)?;
-                center_strokes_in_target(&mut label_strokes, label_target);
+                let alignment = match fields[0] {
+                    "labelleft" => LabelAlignment::Left,
+                    "labelright" => LabelAlignment::Right,
+                    _ => LabelAlignment::Center,
+                };
+                let mut label_strokes = render_label_text_box(
+                    &text,
+                    label_target,
+                    26 * text_scale,
+                    72 * text_scale,
+                    3 * text_scale,
+                    alignment,
+                )?;
                 strokes.append(&mut label_strokes);
             }
             Some(command) => {
@@ -448,8 +491,38 @@ pub fn vector_to_job(
     if strokes.is_empty() {
         return Err("vector data contains no drawable commands".into());
     }
-    validate_vector_complexity(&strokes)?;
+    validate_vector_complexity(
+        &strokes,
+        max_output_strokes,
+        max_output_points,
+        max_path_steps,
+    )?;
     build_job(strokes, canvas_width, canvas_height)
+}
+
+/// Phase 2A scenes use the same bounded vector parser, but rasterize their
+/// labels and curves on the existing 2x logical canvas. The Marker writer maps
+/// that canvas back to the physical device, preserving half-pixel decisions
+/// without exposing a second model-facing drawing language.
+pub fn scene_vector_to_job(
+    text: &str,
+    target: Target,
+    canvas_width: u32,
+    canvas_height: u32,
+) -> Result<StrokeJob, String> {
+    validate_target(target, canvas_width, canvas_height)?;
+    let target = supersampled_target(target)?;
+    let (canvas_width, canvas_height) = supersampled_canvas(canvas_width, canvas_height)?;
+    vector_to_job_with_text_scale(
+        text,
+        target,
+        canvas_width,
+        canvas_height,
+        TEXT_SUPERSAMPLE,
+        MAX_SCENE_OUTPUT_STROKES,
+        MAX_SCENE_OUTPUT_POINTS,
+        MAX_SCENE_PATH_STEPS,
+    )
 }
 
 pub fn document_to_job(
@@ -1118,6 +1191,62 @@ fn normalized_input(text: &str) -> Result<String, String> {
         return Err(format!("content exceeds {MAX_INPUT_CHARS} characters"));
     }
     Ok(traditional::for_display(text))
+}
+
+fn render_label_text_box(
+    text: &str,
+    target: Target,
+    min_px: i32,
+    max_px: i32,
+    margin: i32,
+    alignment: LabelAlignment,
+) -> Result<Vec<Vec<Point>>, String> {
+    let available_width = target.width as i32 - margin * 2;
+    let available_height = target.height as i32 - margin * 2;
+    if available_width <= 0 || available_height <= 0 {
+        return Err("vector label placement has no usable area".into());
+    }
+    let text = text.trim();
+    if text.is_empty() || text.contains('\r') || text.contains('\n') {
+        return Err("vector label must contain exactly one non-empty line".into());
+    }
+
+    let mut selected = None;
+    for px in (min_px..=max_px).rev() {
+        let raster = handwriting::rasterize_line(text, px as f32);
+        let Some((min_x, min_y, width, height)) = raster_ink_bounds(&raster) else {
+            continue;
+        };
+        if width <= available_width && height <= available_height {
+            selected = Some((raster, min_x, min_y, width, height));
+            break;
+        }
+    }
+    let Some((raster, min_x, min_y, width, height)) = selected else {
+        return Err("vector label does not fit its requested box".into());
+    };
+    let x = match alignment {
+        LabelAlignment::Left => target.x + margin,
+        LabelAlignment::Center => target.x + margin + (available_width - width) / 2,
+        LabelAlignment::Right => target.x + target.width as i32 - margin - width,
+    };
+    let y = target.y + margin + (available_height - height) / 2;
+    let mut strokes = Vec::new();
+    for stroke in handwriting::trace_line(raster) {
+        let mapped = stroke
+            .into_iter()
+            .map(|(point_x, point_y)| Point {
+                x: x + point_x - min_x,
+                y: y + point_y - min_y,
+            })
+            .filter(|point| contains(target, *point))
+            .collect();
+        add_stroke(&mut strokes, mapped, target, false);
+    }
+    if strokes.is_empty() {
+        return Err("vector label produced no drawable strokes".into());
+    }
+    Ok(strokes)
 }
 
 fn render_text_box(
@@ -1823,28 +1952,29 @@ fn append_dot(strokes: &mut Vec<Vec<Point>>, x: i32, y: i32, target: Target) {
     strokes.push(map_polyline(&[(x, top), (x, bottom)], target));
 }
 
-fn validate_vector_complexity(strokes: &[Vec<Point>]) -> Result<(), String> {
-    if strokes.len() > MAX_VECTOR_OUTPUT_STROKES {
-        return Err(format!(
-            "vector expands past {MAX_VECTOR_OUTPUT_STROKES} strokes"
-        ));
+fn validate_vector_complexity(
+    strokes: &[Vec<Point>],
+    max_strokes: usize,
+    max_points: usize,
+    max_path_steps: usize,
+) -> Result<(), String> {
+    if strokes.len() > max_strokes {
+        return Err(format!("vector expands past {max_strokes} strokes"));
     }
     let mut points = 0usize;
     let mut path_steps = strokes.len();
     for stroke in strokes {
         points = points.saturating_add(stroke.len());
-        if points > MAX_VECTOR_OUTPUT_POINTS {
-            return Err(format!(
-                "vector expands past {MAX_VECTOR_OUTPUT_POINTS} source points"
-            ));
+        if points > max_points {
+            return Err(format!("vector expands past {max_points} source points"));
         }
         for pair in stroke.windows(2) {
             let dx = (pair[1].x - pair[0].x).unsigned_abs() as usize;
             let dy = (pair[1].y - pair[0].y).unsigned_abs() as usize;
             path_steps = path_steps.saturating_add(dx.max(dy).max(1));
-            if path_steps > MAX_VECTOR_PATH_STEPS {
+            if path_steps > max_path_steps {
                 return Err(format!(
-                    "vector expands past {MAX_VECTOR_PATH_STEPS} planned path points"
+                    "vector expands past {max_path_steps} planned path points"
                 ));
             }
         }
@@ -2171,8 +2301,44 @@ mod tests {
     }
 
     #[test]
+    fn phase_2a_scene_uses_the_supersampled_native_canvas() {
+        let scene = "paper-agent-vector 1\ncircle 500 500 240\nlabel 300 420 400 160 月月";
+        let job = scene_vector_to_job(scene, target(), 954, 1696).unwrap();
+        assert_eq!((job.canvas_width, job.canvas_height), (1907, 3391));
+        assert!(!job.strokes.is_empty());
+        let rendered_target = supersampled_target(target()).unwrap();
+        assert!(job
+            .strokes
+            .iter()
+            .flatten()
+            .all(|point| contains(rendered_target, *point)));
+    }
+
+    #[test]
+    fn phase_2a_scene_labels_honor_horizontal_alignment_without_rewrapping() {
+        let box_target = Target {
+            x: 100,
+            y: 300,
+            width: 500,
+            height: 120,
+        };
+        let left =
+            render_label_text_box("Paper Agent", box_target, 26, 72, 6, LabelAlignment::Left)
+                .unwrap();
+        let right =
+            render_label_text_box("Paper Agent", box_target, 26, 72, 6, LabelAlignment::Right)
+                .unwrap();
+        let (left_min, _, left_max, _) = stroke_bounds(&left).unwrap();
+        let (right_min, _, right_max, _) = stroke_bounds(&right).unwrap();
+        assert!((left_min - (box_target.x + 6)).abs() <= 3);
+        assert!((right_max - (box_target.x + box_target.width as i32 - 7)).abs() <= 3);
+        assert!(right_min > left_min);
+        assert!(right_max > left_max);
+    }
+
+    #[test]
     fn accepts_only_the_bounded_vector_language() {
-        let vector = "paper-agent-vector 1\nrect 100 100 300 200\narrow 400 200 800 700\ncircle 500 500 120\nlabel 100 50 300 100 Start\npolygon 100 400 250 300 400 400\ncurve 100 500 250 350 400 500\ncurve 450 500 550 350 650 650 750 500\nrrect 500 100 300 200 40\narc 500 500 120 0 180\nwedge 500 500 120 180 360\ndot 500 500\nfillpoly 100 700 250 550 400 700\nbox 600 700 200 150\ndisc 700 500 80\nfillellipse 300 800 160 80";
+        let vector = "paper-agent-vector 1\nrect 100 100 300 200\narrow 400 200 800 700\ncircle 500 500 120\nlabel 100 50 300 100 Start\nlabelleft 20 850 220 80 Left\nlabelright 760 850 220 80 Right\npolygon 100 400 250 300 400 400\ncurve 100 500 250 350 400 500\ncurve 450 500 550 350 650 650 750 500\nrrect 500 100 300 200 40\narc 500 500 120 0 180\nwedge 500 500 120 180 360\ndot 500 500\nfillpoly 100 700 250 550 400 700\nbox 600 700 200 150\ndisc 700 500 80\nfillellipse 300 800 160 80";
         let job = vector_to_job(vector, target(), 954, 1696).unwrap();
         assert!(job.strokes.len() >= 30);
         assert!(job

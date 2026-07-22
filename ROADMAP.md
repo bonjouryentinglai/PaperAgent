@@ -14,14 +14,16 @@ release dates.
 - [x] Progress, cancellation, new-page fallback, install, and rollback support.
 - [ ] Broader device, software, and physical acceptance coverage.
 
-## Phase 2A: drawing foundation — next
+## Phase 2A: drawing foundation — in progress
 
-- [ ] Introduce the first Paper Agent skills and tools.
-- [ ] Improve Chinese and Latin text consistency.
-- [ ] Preserve proportions for grids, circles, squares, and diagrams.
-- [ ] Support varied line weights, supported colors, alignment, and grouping.
-- [ ] Improve tables, Sudoku, mind maps, flowcharts, and charts.
-- [ ] Keep native ink as the default, with native images when appropriate.
+- [x] Introduce the first Paper Agent skills and two bounded output tools.
+- [x] Add a semantic Scene format for text, grids, diagrams, and charts.
+- [x] Preserve proportions for grids, circles, squares, and diagrams.
+- [x] Add varied line weights, supported colors, alignment, and logical-group
+  metadata for future native grouping.
+- [x] Keep native ink as the default, with native images when appropriate.
+- [ ] Complete physical Move acceptance for text quality, palette colors, pen
+  widths, placement, Undo/Redo, reopen, export, and sync.
 
 ## Phase 2B: current-page agent
 

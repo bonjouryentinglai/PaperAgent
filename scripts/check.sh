@@ -36,12 +36,15 @@ node device/runtime/native-oracle-server.mjs --self-test
 node --check device/runtime/broker-signal.mjs
 node device/runtime/broker-signal.mjs --self-test
 node --check device/runtime/native-oracle-client.mjs
+node --check device/runtime/scene.mjs
+node --experimental-strip-types --check device/runtime/paper-agent-tools.ts
 node --check device/runtime/rich-document.mjs
 node --check device/runtime/image-generate.mjs
 node --check device/runtime/layout-policy.mjs
 node --test device/runtime/rich-document.test.mjs
 node --test device/runtime/image-generate.test.mjs
 node --test device/runtime/layout-policy.test.mjs
+node --test device/runtime/scene.test.mjs
 
 echo "Checking shell syntax"
 for script in scripts/*.sh; do

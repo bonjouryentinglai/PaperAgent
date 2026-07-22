@@ -12,9 +12,11 @@ Paper Agent's original code is MIT licensed unless a file says otherwise.
   `23e41858818ae2c1f836043852118a323cb1e77d`, file-level MIT, by Martin
   Weber and based on Mitchell Scott's `tocFromSelection.qmd`. Paper Agent's
   QMD adapts selection-menu insertion and selection-bound lookup.
-- **xovi-qmd-extensions**, GPL-3.0-only. The primary-pen restoration block in
-  `device/qmd/paper-agent-selection.qmd` is adapted from this project; that QMD
-  file is therefore GPL-3.0-only. The full license is in
+- **FouzR/xovi-extensions**, pinned at
+  `c49e4654d33e5d8b65ce1a8c5eef45454a19a999`, GPL-3.0-only. The primary-pen
+  restoration and temporary palette/thickness fields in
+  `device/qmd/paper-agent-selection.qmd` are adapted from its 3.27 QMD files;
+  that Paper Agent QMD is therefore GPL-3.0-only. The full license is in
   `third_party/GPL-3.0.txt`.
 - **StarNumber12046/xovi-qmd-extensions** `autoNewPage.qmd`, pinned
   `c5d0972f9a7f77dc0c1479d5b1a4d32fbb1901c4`, MIT, copyright 2025.

@@ -172,7 +172,7 @@ export function validateVectorBody(body) {
       coordinates = fields.slice(1);
       commandStrokes = 2;
       commandPoints = 4;
-    } else if (command === "label") {
+    } else if (["label", "labelleft", "labelright"].includes(command)) {
       if (fields.length < 6) throw new Error("malformed vector label command");
       coordinates = fields.slice(1, 5);
       if ([...fields.slice(5).join(" ")].length > MAX_VECTOR_LABEL_CHARS) {
