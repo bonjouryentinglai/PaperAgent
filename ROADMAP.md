@@ -28,7 +28,7 @@ release dates.
 
 ## Phase 2A.1: current-page closed loop — deferred
 
-- [ ] Add and physically validate smooth semantic arcs and Bezier curves.
+- [x] Add and physically validate smooth semantic arcs and Bezier curves.
 - [ ] Plan and execute multiple tool outputs, such as native ink plus a GPT
   image, in one request.
 - [ ] Verify and revise content after it is written to the page.
