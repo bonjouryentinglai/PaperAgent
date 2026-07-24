@@ -11,6 +11,7 @@ use std::sync::OnceLock;
 const LATIN_TTF: &[u8] = include_bytes!("../assets/fonts/Kalam-Regular.ttf");
 const CJK_HAND_TTF: &[u8] = include_bytes!("../assets/fonts/ChenYuluoyan-2.0-Thin.ttf");
 const CJK_FALLBACK_TTF: &[u8] = include_bytes!("../assets/fonts/jf-openhuninn-2.1.ttf");
+const SYMBOL_TTF: &[u8] = include_bytes!("../assets/fonts/NotoSansSymbols2-Regular.ttf");
 const DEFAULT_CJK_SCALE: f32 = 0.70;
 const RASTER_PAD: f32 = 6.0;
 
@@ -19,6 +20,7 @@ enum Face {
     Latin,
     CjkHand,
     CjkFallback,
+    Symbols,
 }
 
 fn latin() -> &'static FontRef<'static> {
@@ -35,6 +37,13 @@ fn cjk_fallback() -> &'static FontRef<'static> {
     static FONT: OnceLock<FontRef<'static>> = OnceLock::new();
     FONT.get_or_init(|| {
         FontRef::try_from_slice(CJK_FALLBACK_TTF).expect("embedded Open Huninn font")
+    })
+}
+
+fn symbols() -> &'static FontRef<'static> {
+    static FONT: OnceLock<FontRef<'static>> = OnceLock::new();
+    FONT.get_or_init(|| {
+        FontRef::try_from_slice(SYMBOL_TTF).expect("embedded Noto Sans Symbols 2 font")
     })
 }
 
@@ -57,6 +66,10 @@ fn face_for(ch: char, px: f32) -> (Face, GlyphId, f32) {
         let latin_id = latin().glyph_id(ch);
         if latin_id.0 != 0 {
             return (Face::Latin, latin_id, px);
+        }
+        let symbol_id = symbols().glyph_id(ch);
+        if symbol_id.0 != 0 {
+            return (Face::Symbols, symbol_id, px);
         }
     }
 
@@ -86,6 +99,10 @@ fn face_for(ch: char, px: f32) -> (Face, GlyphId, f32) {
     if fallback_id.0 != 0 {
         return (Face::CjkFallback, fallback_id, hand_px);
     }
+    let symbol_id = symbols().glyph_id(ch);
+    if symbol_id.0 != 0 {
+        return (Face::Symbols, symbol_id, px);
+    }
     (Face::Latin, latin().glyph_id('?'), px)
 }
 
@@ -94,6 +111,7 @@ fn advance(face: Face, id: GlyphId, px: f32) -> f32 {
         Face::Latin => latin().as_scaled(PxScale::from(px)).h_advance(id),
         Face::CjkHand => cjk_hand().as_scaled(PxScale::from(px)).h_advance(id),
         Face::CjkFallback => cjk_fallback().as_scaled(PxScale::from(px)).h_advance(id),
+        Face::Symbols => symbols().as_scaled(PxScale::from(px)).h_advance(id),
     }
 }
 
@@ -104,6 +122,7 @@ fn kern(face: Face, left: GlyphId, right: GlyphId, px: f32) -> f32 {
         Face::CjkFallback => cjk_fallback()
             .as_scaled(PxScale::from(px))
             .kern(left, right),
+        Face::Symbols => symbols().as_scaled(PxScale::from(px)).kern(left, right),
     }
 }
 
@@ -119,6 +138,10 @@ fn metrics(face: Face, px: f32) -> (f32, f32) {
         }
         Face::CjkFallback => {
             let scaled = cjk_fallback().as_scaled(PxScale::from(px));
+            (scaled.ascent(), scaled.descent())
+        }
+        Face::Symbols => {
+            let scaled = symbols().as_scaled(PxScale::from(px));
             (scaled.ascent(), scaled.descent())
         }
     }
@@ -261,6 +284,7 @@ pub fn rasterize_line(text: &str, px: f32) -> RasterLine {
             Face::Latin => latin().outline_glyph(positioned.glyph),
             Face::CjkHand => cjk_hand().outline_glyph(positioned.glyph),
             Face::CjkFallback => cjk_fallback().outline_glyph(positioned.glyph),
+            Face::Symbols => symbols().outline_glyph(positioned.glyph),
         };
         if let Some(outline) = outline {
             let bounds = outline.px_bounds();
@@ -327,6 +351,17 @@ mod tests {
         assert_eq!(face_for('A', 52.0).0, Face::Latin);
         assert_eq!(face_for('你', 52.0).0, Face::CjkHand);
         assert_eq!(DEFAULT_CJK_SCALE, 0.70);
+    }
+
+    #[test]
+    fn common_symbols_use_the_symbol_face_and_unknown_glyphs_keep_question_fallback() {
+        for ch in ['♔', '♕', '♖', '♗', '♘', '♙', '♚', '♛', '♜', '♝', '♞', '♟']
+        {
+            assert_eq!(face_for(ch, 52.0).0, Face::Symbols);
+        }
+        let (face, id, _) = face_for('\u{10ffff}', 52.0);
+        assert_eq!(face, Face::Latin);
+        assert_eq!(id, latin().glyph_id('?'));
     }
 
     #[test]

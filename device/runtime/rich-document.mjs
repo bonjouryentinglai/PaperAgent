@@ -58,12 +58,18 @@ function isTableStart(lines, index) {
     && secondLine.startsWith("|") && secondLine.endsWith("|");
 }
 
-export function validateVectorBody(body) {
+export function validateVectorBody(body, limits = {}) {
+  const maxCommands = limits.maxCommands ?? MAX_VECTOR_COMMANDS;
+  const maxLabelChars = limits.maxLabelChars ?? MAX_VECTOR_LABEL_CHARS;
+  const maxEstimatedStrokes = limits.maxEstimatedStrokes ?? MAX_VECTOR_ESTIMATED_STROKES;
+  const maxEstimatedPoints = limits.maxEstimatedPoints ?? MAX_VECTOR_ESTIMATED_POINTS;
+  const labelStrokesPerCharacter = limits.labelStrokesPerCharacter ?? 0;
+  const labelPointsPerCharacter = limits.labelPointsPerCharacter ?? 0;
   const lines = body.split("\n").map((line) => line.trim()).filter(Boolean);
   if (lines.shift() !== VECTOR_HEADER) throw new Error(`vector block must start with '${VECTOR_HEADER}'`);
   if (lines.length === 0) throw new Error("vector block contains no commands");
-  if (lines.length > MAX_VECTOR_COMMANDS) {
-    throw new Error(`vector block exceeds ${MAX_VECTOR_COMMANDS} commands`);
+  if (lines.length > maxCommands) {
+    throw new Error(`vector block exceeds ${maxCommands} commands`);
   }
 
   let estimatedStrokes = 0;
@@ -175,11 +181,12 @@ export function validateVectorBody(body) {
     } else if (["label", "labelleft", "labelright"].includes(command)) {
       if (fields.length < 6) throw new Error("malformed vector label command");
       coordinates = fields.slice(1, 5);
-      if ([...fields.slice(5).join(" ")].length > MAX_VECTOR_LABEL_CHARS) {
-        throw new Error(`vector label exceeds ${MAX_VECTOR_LABEL_CHARS} characters`);
+      const labelCharacters = [...fields.slice(5).join(" ")].length;
+      if (labelCharacters > maxLabelChars) {
+        throw new Error(`vector label exceeds ${maxLabelChars} characters`);
       }
-      commandStrokes = 1;
-      commandPoints = 2;
+      commandStrokes = Math.max(1, labelCharacters * labelStrokesPerCharacter);
+      commandPoints = Math.max(2, labelCharacters * labelPointsPerCharacter);
     } else {
       throw new Error(`unsupported vector command '${command}'`);
     }
@@ -206,13 +213,18 @@ export function validateVectorBody(body) {
 
     estimatedStrokes += commandStrokes;
     estimatedPoints += commandPoints;
-    if (estimatedStrokes > MAX_VECTOR_ESTIMATED_STROKES) {
-      throw new Error(`vector expands past ${MAX_VECTOR_ESTIMATED_STROKES} strokes`);
+    if (estimatedStrokes > maxEstimatedStrokes) {
+      throw new Error(`vector expands past ${maxEstimatedStrokes} strokes`);
     }
-    if (estimatedPoints > MAX_VECTOR_ESTIMATED_POINTS) {
-      throw new Error(`vector expands past ${MAX_VECTOR_ESTIMATED_POINTS} source points`);
+    if (estimatedPoints > maxEstimatedPoints) {
+      throw new Error(`vector expands past ${maxEstimatedPoints} source points`);
     }
   }
+  limits.onStats?.({
+    commands: lines.length,
+    estimatedStrokes,
+    estimatedPoints,
+  });
   return body.trim();
 }
 

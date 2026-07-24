@@ -20,12 +20,13 @@ Paper Agent uses a thin Xochitl integration and a separate local runtime.
    style. Image requests use the narrow image helper, then decode and normalize
    the result to a bounded RGBA PNG.
 6. Spatial Scene content is fitted as one proportion-preserving composition.
-   Prose, headings and lists use flow layout: each available page is preflighted
-   from 100% down to 60%, then Xochitl creates a real page if necessary. If a
-   complete answer still cannot fit at 60%, it continues across bounded new
-   pages at a consistent 60% scale. Beautify never shrinks merely because the
-   old page is short: its lasso-sized destination moves to a new page when
-   required.
+   Diagram annotations wrap inside their model-provided boxes. Prose, headings,
+   lists and text-heavy mixed Scenes are forced into flow layout locally: each
+   available page is preflighted from 100% down to 60%, then Xochitl creates a
+   real page if necessary. If a complete answer still cannot fit at 60%, it
+   continues across bounded new pages at a consistent 60% scale. Beautify never
+   shrinks merely because the old page is short: its lasso-sized destination
+   moves to a new page when required.
 7. StrokeJobs use the guarded Marker writer, bound to the Xochitl PID that
    originated the request. Images use Xochitl 3.27's native
    scene-image insertion method only if the originating controller and page are
@@ -37,7 +38,8 @@ Paper Agent uses a thin Xochitl integration and a separate local runtime.
 The native status bar exposes Cancel while the request is still in model or
 image generation. The local cancel client aborts the active Pi turn, terminates
 the image child process and releases the coordinator before reporting the
-cancelled lifecycle state. Once native writing begins, the control disappears
+cancelled lifecycle state. Spatial Scene runs are all rendered and validated
+before the first pen event. Once native writing begins, the control disappears
 so cancellation cannot deliberately leave half an answer on the page.
 
 ## Phase 2A skills and tools
@@ -64,6 +66,9 @@ letterboxes it into the available notebook destination, so a circle remains a
 circle and a square remains a square in both portrait and landscape boxes.
 Regular grids are expanded locally with separate major and minor weights; GPT
 does not need to draw each Sudoku line independently.
+Compiled scenes are split into bounded native-command batches and have
+aggregate cell, text, path-point and command budgets. Common Unicode symbols
+use the embedded Noto Sans Symbols 2 face before the visible `?` fallback.
 
 ## Legacy result protocol
 

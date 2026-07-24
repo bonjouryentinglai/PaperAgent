@@ -7,11 +7,11 @@ The public project owns only the native Xochitl selection workflow.
 
 | Capability | Local implementation | Physical Move status |
 |---|---|---|
-| Plain answers and calculations | Semantic Scene text with bounded single-line labels and native ink | Phase 2A physical acceptance pending |
+| Plain answers and calculations | Semantic Scene text with local flow routing, adaptive pagination and native ink | Phase 2A physical acceptance pending |
 | Formatted text | Headings, paragraphs, ordered/unordered lists, bold and inline code with the same body-size policy as plain text | Pending combined-build acceptance |
 | Code blocks | Preserved verbatim, wrapped and drawn in a smaller framed style; never executed | Pending combined-build acceptance |
 | Tables and regular grids | One semantic grid object with local cell layout, centered labels, major/minor line weights and bounded native ink | Phase 2A physical acceptance pending |
-| Scene drawings | Lines, arrows, polylines, rectangles, circles, ellipses, text and grids with contain-fit proportions, supported colors, three line weights, alignment and logical groups | Phase 2A physical acceptance pending |
+| Scene drawings | Lines, arrows, polylines, rectangles, circles, ellipses, wrapping text and grids with contain-fit proportions, supported colors, three line weights, alignment, logical groups and a generic common-symbol font | Phase 2A physical acceptance pending |
 | GPT raster images | ChatGPT OAuth to `gpt-image-2` at the low-latency `low` quality setting, strict PNG validation, bounded RGBA normalization and guarded Xochitl 3.27 image insertion; images move to a new page rather than covering the source when they do not fit below | End-to-end physical acceptance pending |
 | Mixed documents | Text, code, tables and vector blocks keep their original order in one result | Pending combined-build acceptance |
 
@@ -52,9 +52,13 @@ Undo/Redo behavior.
 Phase 2A Scene supports the normal Xochitl palette and thin, medium and thick
 native-pen styles, restoring the user's original pen afterward. Custom RGB,
 syntax coloring, dashed strokes and smooth solid fills are not implemented.
+Common Unicode symbols use the embedded Noto Sans Symbols 2 fallback; characters
+missing from every embedded face retain the renderer's visible `?` fallback.
 Flow text can continue across up to eight new pages at a consistent bounded
-scale; spatial Scenes are kept as one composition rather than split across
-pages. Filled vector areas use sparse native-ink hatching.
+scale; text-heavy mixed Scenes are converted to flow locally. Spatial Scenes
+are kept as one composition rather than split across pages, and every run is
+rendered successfully before the first stroke is written. Filled vector areas
+use sparse native-ink hatching.
 
 An independent canvas, pen/eraser tools, chat drawer, page scrubber, app-level
 power handling and full-screen takeover are standalone-application concerns;

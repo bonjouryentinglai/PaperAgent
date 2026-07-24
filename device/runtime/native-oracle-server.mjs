@@ -1117,9 +1117,22 @@ async function writeToolCallResult(turn) {
       else await writePaginatedText(turn, runs[0].body, "scene", runs[0].style);
       return;
     }
-    for (const run of runs) {
-      const rendered = await renderJob(turn, run.body, "scene");
-      await writeRenderedJob(turn, rendered, "scene", run.style);
+    const prepared = [];
+    try {
+      // Render and validate every run before the first pen event. A later
+      // oversized label must not leave half of a Scene in the notebook.
+      for (const run of runs) {
+        prepared.push({
+          run,
+          rendered: await renderJob(turn, run.body, "scene"),
+        });
+      }
+      for (const item of prepared) {
+        await writeRenderedJob(turn, item.rendered, "scene", item.run.style);
+        item.rendered = null;
+      }
+    } finally {
+      for (const item of prepared) removeRenderedJob(turn, item.rendered);
     }
   } finally {
     await restorePenStyle(turn);

@@ -193,6 +193,163 @@ test("a real spatial primitive keeps positioned text and geometry", () => {
   assert.ok(runs.some((run) => /rect /u.test(run.body)));
 });
 
+test("large legitimate Scenes are split into bounded native command batches", () => {
+  const lines = Array.from({ length: 192 }, (_, index) => ({
+    type: "line",
+    x1: 0,
+    y1: index,
+    x2: 1_000,
+    y2: index,
+  }));
+  const runs = compileScene({
+    version: 1,
+    canvas: { width: 1_000, height: 1_000 },
+    objects: lines,
+  }, { width: 800, height: 1_200 });
+  assert.equal(runs.length, 2);
+  assert.ok(runs.every((run) => run.body.trim().split("\n").length - 1 <= 96));
+});
+
+test("expanded Scene totals are bounded before native writeback", () => {
+  const populatedCells = Array.from({ length: 256 }, (_, index) => ({
+    row: Math.floor(index / 16),
+    column: index % 16,
+    text: "1",
+  }));
+  const denseGrid = {
+    type: "grid",
+    x: 0,
+    y: 0,
+    width: 1_000,
+    height: 1_000,
+    rows: 16,
+    columns: 16,
+    cells: populatedCells,
+  };
+  const denseScene = {
+    version: 1,
+    canvas: { width: 1_000, height: 1_000 },
+    objects: [denseGrid, denseGrid],
+  };
+  validateSceneToolCall(denseScene);
+  assert.throws(
+    () => compileScene(denseScene, { width: 800, height: 1_200 }),
+    /512 native commands/u,
+  );
+
+  const path = Array.from({ length: 64 }, (_, index) => ({
+    x: index,
+    y: index,
+  }));
+  assert.throws(() => validateSceneToolCall({
+    version: 1,
+    canvas: { width: 1_000, height: 1_000 },
+    objects: Array.from({ length: 65 }, () => ({
+      type: "polyline",
+      points: path,
+    })),
+  }), /4096 polyline points/u);
+});
+
+test("long spatial labels remain bounded Scene labels for native wrapping", () => {
+  const text = "This is a deliberately long diagram annotation that should wrap inside its label box instead of failing the old two-hundred-and-forty character Scene limit. ".repeat(3).trim();
+  assert.ok([...text].length > 240);
+  const runs = compileScene({
+    version: 1,
+    canvas: { width: 1_000, height: 1_000 },
+    objects: [
+      { type: "rect", x: 50, y: 50, width: 900, height: 900 },
+      { type: "text", x: 100, y: 100, width: 800, height: 800, text, align: "left" },
+    ],
+  }, { width: 800, height: 1_200 });
+  assert.ok(runs.some((run) => run.body.includes(text)));
+});
+
+test("text-heavy mixed Scenes become paginatable flow instead of oversized labels", () => {
+  const methods = Array.from(
+    { length: 30 },
+    (_, index) => `${index + 1}. 方法 ${index + 1}。這是一段完整說明，並包含第二句補充。`,
+  );
+  const [result] = compileScene({
+    version: 1,
+    layout: "spatial",
+    canvas: { width: 1_000, height: 1_600 },
+    objects: [
+      { type: "rect", x: 40, y: 40, width: 920, height: 1_520 },
+      ...methods.map((text, index) => ({
+        type: "text",
+        x: index % 2 === 0 ? 80 : 520,
+        y: 100 + Math.floor(index / 2) * 90,
+        width: 400,
+        height: 70,
+        text,
+        align: "left",
+      })),
+    ],
+  }, { width: 800, height: 1_200 });
+  assert.equal(result.kind, "bodyText");
+  assert.equal(result.body.split("\n").length, 30);
+  assert.match(result.body, /30\. 方法 30/u);
+});
+
+test("numbered two-column prose is restored to logical numeric order", () => {
+  const objects = [{ type: "text", x: 100, y: 20, width: 800, height: 50, text: "改善睡眠" }];
+  for (let index = 1; index <= 20; index += 1) {
+    const rightColumn = index > 10;
+    objects.push({
+      type: "text",
+      x: rightColumn ? 520 : 80,
+      y: 100 + ((index - 1) % 10) * 100,
+      width: 400,
+      height: 80,
+      text: `${index}. 方法 ${index}。這是一段足以觸發流式排版的完整說明。`,
+      align: "left",
+    });
+  }
+  const [result] = compileScene({
+    version: 1,
+    layout: "spatial",
+    canvas: { width: 1_000, height: 1_200 },
+    objects,
+  }, { width: 800, height: 1_200 });
+  assert.equal(result.kind, "bodyText");
+  const numbers = result.body
+    .split("\n")
+    .map((line) => {
+      const match = line.match(/^(\d{1,3})[.)、．]/u);
+      return match ? Number(match[1]) : null;
+    })
+    .filter((value) => value !== null);
+  assert.deepEqual(numbers, Array.from({ length: 20 }, (_, index) => index + 1));
+});
+
+test("long diagram labels use the enclosing rectangle interior", () => {
+  const runs = compileScene({
+    version: 1,
+    layout: "spatial",
+    canvas: { width: 1_000, height: 1_000 },
+    objects: [
+      { type: "rect", x: 100, y: 200, width: 800, height: 300, radius: 20 },
+      {
+        type: "text",
+        x: 160,
+        y: 310,
+        width: 680,
+        height: 60,
+        text: "First, identify the complete problem that you want to solve before choosing an action.",
+      },
+    ],
+  }, { width: 800, height: 1_200 });
+  const label = runs
+    .flatMap((run) => run.body.split("\n"))
+    .find((line) => line.startsWith("label "));
+  assert.ok(label);
+  const [, x, y, width, height] = label.split(/\s+/u).map(Number);
+  assert.ok(x > 100 && y > 200);
+  assert.ok(width > 700);
+  assert.ok(height > 150, "the label should use the enclosing box height for wrapping");
+});
+
 test("flow layout without text fails closed", () => {
   assert.throws(() => validateSceneToolCall({
     version: 1,

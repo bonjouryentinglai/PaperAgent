@@ -43,6 +43,10 @@ Paper Agent's original code is MIT licensed unless a file says otherwise.
   `device/native/assets/fonts/CHENYULUOYAN-OFL.txt`.
 - **Open Huninn**, SIL Open Font License 1.1 with upstream attribution in
   `device/native/assets/fonts/OPEN-HUNINN-LICENSE.txt`.
+- **Noto Sans Symbols 2**, SIL Open Font License 1.1, copyright The Noto
+  Project Authors. It provides the generic symbol fallback used for chess,
+  mathematical and other common Unicode symbols. License:
+  `device/native/assets/fonts/NOTO-SYMBOLS-OFL.txt`.
 
 Rust dependency licenses are recorded by their upstream crates, including
 `ab_glyph`, `ab_glyph_rasterizer`, `owned_ttf_parser`, `ttf-parser`, `png`,

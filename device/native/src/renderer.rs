@@ -29,6 +29,7 @@ const VECTOR_ANGLE_MAX: i32 = 360;
 const MAX_VECTOR_COMMANDS: usize = 256;
 const MAX_VECTOR_PATH_POINTS: usize = 64;
 const MAX_VECTOR_LABEL_CHARS: usize = 240;
+const MAX_SCENE_LABEL_CHARS: usize = 1_200;
 const MAX_VECTOR_OUTPUT_STROKES: usize = 512;
 const MAX_VECTOR_OUTPUT_POINTS: usize = 24_000;
 const MAX_VECTOR_PATH_STEPS: usize = 400_000;
@@ -292,6 +293,7 @@ pub fn vector_to_job(
         MAX_VECTOR_OUTPUT_STROKES,
         MAX_VECTOR_OUTPUT_POINTS,
         MAX_VECTOR_PATH_STEPS,
+        MAX_VECTOR_LABEL_CHARS,
     )
 }
 
@@ -304,6 +306,7 @@ fn vector_to_job_with_text_scale(
     max_output_strokes: usize,
     max_output_points: usize,
     max_path_steps: usize,
+    max_label_chars: usize,
 ) -> Result<StrokeJob, String> {
     validate_target(target, canvas_width, canvas_height)?;
     if text.chars().count() > MAX_INPUT_CHARS {
@@ -455,10 +458,8 @@ fn vector_to_job_with_text_scale(
                 }
                 validate_rect_geometry(values[0], values[1], values[2], values[3], "label")?;
                 let raw_text = fields[5..].join(" ");
-                if raw_text.chars().count() > MAX_VECTOR_LABEL_CHARS {
-                    return Err(format!(
-                        "vector label exceeds {MAX_VECTOR_LABEL_CHARS} characters"
-                    ));
+                if raw_text.chars().count() > max_label_chars {
+                    return Err(format!("vector label exceeds {max_label_chars} characters"));
                 }
                 let text = traditional::for_display(&raw_text);
                 let label_target =
@@ -522,6 +523,7 @@ pub fn scene_vector_to_job(
         MAX_SCENE_OUTPUT_STROKES,
         MAX_SCENE_OUTPUT_POINTS,
         MAX_SCENE_PATH_STEPS,
+        MAX_SCENE_LABEL_CHARS,
     )
 }
 
@@ -1213,35 +1215,56 @@ fn render_label_text_box(
 
     let mut selected = None;
     for px in (min_px..=max_px).rev() {
-        let raster = handwriting::rasterize_line(text, px as f32);
-        let Some((min_x, min_y, width, height)) = raster_ink_bounds(&raster) else {
+        let lines = handwriting::wrap(text, px as f32, available_width as f32);
+        let line_height = (px * 5 / 4).max(1);
+        let Some(block_height) = line_height.checked_mul(lines.len() as i32) else {
             continue;
         };
-        if width <= available_width && height <= available_height {
-            selected = Some((raster, min_x, min_y, width, height));
+        let raster_bounds_fit = lines.iter().all(|line| {
+            let raster = handwriting::rasterize_line(line, px as f32);
+            match raster_ink_bounds(&raster) {
+                Some((_, _, width, height)) => width <= available_width && height <= line_height,
+                None => false,
+            }
+        });
+        if !lines.is_empty() && block_height <= available_height && raster_bounds_fit {
+            selected = Some((px, line_height, lines));
             break;
         }
     }
-    let Some((raster, min_x, min_y, width, height)) = selected else {
+    let Some((px, line_height, lines)) = selected else {
         return Err("vector label does not fit its requested box".into());
     };
-    let x = match alignment {
-        LabelAlignment::Left => target.x + margin,
-        LabelAlignment::Center => target.x + margin + (available_width - width) / 2,
-        LabelAlignment::Right => target.x + target.width as i32 - margin - width,
-    };
-    let y = target.y + margin + (available_height - height) / 2;
+    let block_height = line_height * lines.len() as i32;
+    let mut line_top = target.y + margin + (available_height - block_height) / 2;
     let mut strokes = Vec::new();
-    for stroke in handwriting::trace_line(raster) {
-        let mapped = stroke
-            .into_iter()
-            .map(|(point_x, point_y)| Point {
-                x: x + point_x - min_x,
-                y: y + point_y - min_y,
-            })
-            .filter(|point| contains(target, *point))
-            .collect();
-        add_stroke(&mut strokes, mapped, target, false);
+    for line in lines {
+        let raster = handwriting::rasterize_line(&line, px as f32);
+        let Some((min_x, min_y, width, height)) = raster_ink_bounds(&raster) else {
+            line_top += line_height;
+            continue;
+        };
+        if width > available_width || height > line_height {
+            return Err("vector label does not fit its requested box".into());
+        }
+        let x = match alignment {
+            LabelAlignment::Left => target.x + margin,
+            LabelAlignment::Center => target.x + margin + (available_width - width) / 2,
+            LabelAlignment::Right => target.x + target.width as i32 - margin - width,
+        };
+        let y = line_top + (line_height - height) / 2;
+        for stroke in handwriting::trace_line(raster) {
+            let mapped = stroke
+                .into_iter()
+                .map(|(point_x, point_y)| Point {
+                    x: x + point_x - min_x,
+                    y: y + point_y - min_y,
+                })
+                .filter(|point| contains(target, *point))
+                .collect();
+            add_stroke(&mut strokes, mapped, target, false);
+        }
+        line_top += line_height;
     }
     if strokes.is_empty() {
         return Err("vector label produced no drawable strokes".into());
@@ -2024,6 +2047,11 @@ fn map_vector_target(
 }
 
 fn expand_vector_label_target(label: Target, container: Target, characters: usize) -> Target {
+    // Tiny node labels need a minimum drawing area, but prose belongs inside
+    // the model-provided box so it wraps instead of widening across a diagram.
+    if characters > 12 {
+        return label;
+    }
     let container_right = container.x + container.width as i32;
     let container_bottom = container.y + container.height as i32;
     let maximum_width = (container.width as i32 - 8).max(24);
@@ -2347,6 +2375,53 @@ mod tests {
             .flatten()
             .all(|point| contains(target(), *point)));
         assert!(vector_to_job("<svg><script/></svg>", target(), 954, 1696).is_err());
+    }
+
+    #[test]
+    fn scene_labels_wrap_beyond_the_legacy_vector_label_limit() {
+        let long_label = "Paper Agent wraps long diagram annotations inside the model-provided label box without treating ordinary prose as a tiny one-line caption. ".repeat(3);
+        assert!(long_label.chars().count() > MAX_VECTOR_LABEL_CHARS);
+        let scene = format!(
+            "{VECTOR_HEADER}\nrect 20 20 960 960\nlabelleft 50 50 900 900 {}",
+            long_label.trim()
+        );
+        let job = scene_vector_to_job(&scene, target(), 954, 1696).unwrap();
+        assert!(!job.strokes.is_empty());
+        assert!(vector_to_job(&scene, target(), 954, 1696)
+            .unwrap_err()
+            .contains("240 characters"));
+    }
+
+    #[test]
+    fn sentence_labels_wrap_inside_their_provided_box() {
+        let label = Target {
+            x: 100,
+            y: 100,
+            width: 220,
+            height: 260,
+        };
+        assert_eq!(expand_vector_label_target(label, target(), 64), label);
+        let strokes = render_label_text_box(
+            "This complete sentence should wrap inside a diagram box at a readable size.",
+            label,
+            26,
+            72,
+            6,
+            LabelAlignment::Center,
+        )
+        .unwrap();
+        let (_, min_y, _, max_y) = stroke_bounds(&strokes).unwrap();
+        assert!(
+            max_y - min_y > 72,
+            "the sentence should occupy multiple lines"
+        );
+    }
+
+    #[test]
+    fn scene_labels_render_common_unicode_symbols() {
+        let scene = format!("{VECTOR_HEADER}\nlabel 50 50 900 900 ♔ ♕ ♖ ♗ ♘ ♙");
+        let job = scene_vector_to_job(&scene, target(), 954, 1696).unwrap();
+        assert!(!job.strokes.is_empty());
     }
 
     #[test]

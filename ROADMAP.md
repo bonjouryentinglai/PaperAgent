@@ -26,14 +26,29 @@ release dates.
 - [ ] Complete physical Move acceptance for text quality, palette colors, pen
   widths, placement, Undo/Redo, reopen, export, and sync.
 
-## Phase 2B: current-page agent
+## Phase 2A.1: current-page closed loop — deferred
 
-- [ ] Understand the selected content and available page space.
-- [ ] Choose the output type and placement automatically.
-- [ ] Combine text, tables, diagrams, and images in one response.
-- [ ] Verify, revise, or undo content created by Paper Agent.
-- [ ] Preserve original content unless a confirmed reversible action says
-  otherwise.
+- [ ] Plan and execute multiple tool outputs, such as native ink plus a GPT
+  image, in one request.
+- [ ] Verify and revise content after it is written to the page.
+- [ ] Treat one Paper Agent result as one reversible operation.
+- [ ] Support confirmed, undo-safe replacement of original content.
+
+Phase 2A already covers most everyday selection-assistant use. This long-tail
+follow-up is intentionally deferred.
+
+## Phase 2B: easy installation and onboarding
+
+- [ ] Ship one guided setup tool for macOS, Windows, and Linux.
+- [ ] Discover a connected Move and check developer mode, model, OS, storage,
+  and required dependencies before making changes.
+- [ ] Reuse the remagic installation stack for SSH, XOVI, and AppLoad instead
+  of rebuilding those foundations.
+- [ ] Download a checksum-verified Paper Agent release and install it with
+  automatic backup and rollback.
+- [ ] Guide ChatGPT subscription login while keeping OAuth credentials only on
+  the Move.
+- [ ] Verify the installation, then offer repair, update, and uninstall paths.
 
 ## Phase 3: multi-page creation
 

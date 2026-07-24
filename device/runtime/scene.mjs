@@ -14,9 +14,23 @@ const MIN_CANVAS = 48;
 const MAX_CANVAS = 4_000;
 const MAX_OBJECTS = 192;
 const MAX_CELLS = 256;
+const MAX_TOTAL_CELLS = 512;
 const MAX_TEXT_CHARS = 1_200;
-const MAX_LABEL_CHARS = 240;
+const MAX_TOTAL_TEXT_CHARS = 16_000;
+const MAX_LABEL_CHARS = MAX_TEXT_CHARS;
 const MAX_POINTS = 64;
+const MAX_TOTAL_PATH_POINTS = 4_096;
+const MAX_COMPILED_COMMANDS = 512;
+const MAX_COMMANDS_PER_RUN = 96;
+const MAX_RUN_ESTIMATED_STROKES = 4_096;
+const MAX_RUN_ESTIMATED_POINTS = 96_000;
+const MAX_TOTAL_ESTIMATED_STROKES = 8_192;
+const MAX_TOTAL_ESTIMATED_POINTS = 192_000;
+const SCENE_LABEL_STROKES_PER_CHARACTER = 8;
+const SCENE_LABEL_POINTS_PER_CHARACTER = 160;
+const PROSE_FLOW_MIN_CHARACTERS = 600;
+const PROSE_FLOW_MIN_ENTRIES = 8;
+const PROSE_FLOW_LONG_ENTRY_CHARACTERS = 320;
 const COLORS = new Set(["black", "gray", "blue", "red", "green", "yellow", "cyan", "magenta"]);
 const WIDTHS = new Set(["thin", "medium", "thick"]);
 const ALIGNS = new Set(["left", "center", "right"]);
@@ -70,6 +84,121 @@ function styleFor(value, fallback = DEFAULT_STYLE) {
   return {
     color: enumValue(value.color, COLORS, fallback.color, "scene color"),
     width: enumValue(value.strokeWidth, WIDTHS, fallback.width, "scene strokeWidth"),
+  };
+}
+
+function sceneTextEntries(objects) {
+  const entries = [];
+  for (const item of objects) {
+    if (item.type === "text") {
+      entries.push({
+        x: item.x,
+        y: item.y,
+        width: item.width,
+        height: item.height,
+        text: item.text,
+        style: item.style,
+        group: item.group,
+      });
+      continue;
+    }
+    if (item.type !== "grid") continue;
+    for (const cell of item.cells) {
+      entries.push({
+        x: item.x + item.width * cell.column / item.columns,
+        y: item.y + item.height * cell.row / item.rows,
+        width: item.width / item.columns,
+        height: item.height / item.rows,
+        text: cell.text,
+        style: { color: cell.color, width: "medium" },
+        group: item.group,
+      });
+    }
+  }
+  return entries.sort((left, right) => left.y - right.y || left.x - right.x);
+}
+
+function leadingOrdinal(text) {
+  const match = text.match(/^\s*(\d{1,3})\s*[.)、．]\s*/u);
+  return match ? Number(match[1]) : null;
+}
+
+function orderFlowEntries(entries, canvas) {
+  const numbered = entries
+    .map((entry) => ({ entry, ordinal: leadingOrdinal(entry.text) }))
+    .filter((item) => item.ordinal !== null);
+  if (numbered.length < 3 || new Set(numbered.map((item) => item.ordinal)).size !== numbered.length) {
+    return entries;
+  }
+
+  const firstNumberY = Math.min(...numbered.map((item) => item.entry.y));
+  const headers = entries
+    .filter((entry) => leadingOrdinal(entry.text) === null && entry.y < firstNumberY)
+    .sort((left, right) => left.y - right.y || left.x - right.x);
+  const continuations = new Map(numbered.map((item) => [item.entry, []]));
+  const unattached = [];
+  for (const entry of entries) {
+    if (leadingOrdinal(entry.text) !== null || headers.includes(entry)) continue;
+    const centerX = entry.x + entry.width / 2;
+    const candidate = numbered
+      .filter((item) => {
+        const itemCenterX = item.entry.x + item.entry.width / 2;
+        return item.entry.y <= entry.y
+          && Math.abs(itemCenterX - centerX) <= canvas.width * 0.3;
+      })
+      .sort((left, right) => right.entry.y - left.entry.y)[0];
+    if (candidate) continuations.get(candidate.entry).push(entry);
+    else unattached.push(entry);
+  }
+
+  const ordered = [...headers];
+  for (const item of numbered.sort((left, right) => left.ordinal - right.ordinal)) {
+    ordered.push(item.entry);
+    ordered.push(...continuations.get(item.entry).sort(
+      (left, right) => left.y - right.y || left.x - right.x,
+    ));
+  }
+  ordered.push(...unattached.sort((left, right) => left.y - right.y || left.x - right.x));
+  return ordered;
+}
+
+function isProseDominated(entries, totalTextChars) {
+  if (totalTextChars < PROSE_FLOW_MIN_CHARACTERS || entries.length === 0) return false;
+  const punctuationCount = entries.reduce(
+    (sum, entry) => sum + (entry.text.match(/[。！？；.!?;]/gu)?.length ?? 0),
+    0,
+  );
+  return entries.length >= PROSE_FLOW_MIN_ENTRIES
+    || punctuationCount >= 6
+    || entries.some((entry) => [...entry.text].length >= PROSE_FLOW_LONG_ENTRY_CHARACTERS);
+}
+
+function textBoxInsideContainingRect(item, objects) {
+  if (item.type !== "text" || [...item.text].length <= 24) return item;
+  const itemRight = item.x + item.width;
+  const itemBottom = item.y + item.height;
+  const itemArea = item.width * item.height;
+  const container = objects
+    .filter((candidate) => candidate.type === "rect"
+      && !candidate.filled
+      && candidate.x <= item.x
+      && candidate.y <= item.y
+      && candidate.x + candidate.width >= itemRight
+      && candidate.y + candidate.height >= itemBottom
+      && candidate.width * candidate.height <= itemArea * 12)
+    .sort((left, right) => left.width * left.height - right.width * right.height)[0];
+  if (!container) return item;
+  const padding = Math.max(
+    8,
+    Math.round(Math.min(container.width, container.height) * 0.08),
+  );
+  if (container.width <= padding * 2 || container.height <= padding * 2) return item;
+  return {
+    ...item,
+    x: container.x + padding,
+    y: container.y + padding,
+    width: container.width - padding * 2,
+    height: container.height - padding * 2,
   };
 }
 
@@ -234,8 +363,33 @@ export function validateSceneToolCall(raw, action = "ai") {
   const background = value.background === undefined ? "transparent" : value.background;
   if (background !== "transparent") throw new Error("only a transparent scene background is supported");
   const objects = value.objects.map((item, index) => validateSceneObject(item, canvas, index, DEFAULT_STYLE));
+  const totalCells = objects.reduce(
+    (sum, item) => sum + (item.type === "grid" ? item.cells.length : 0),
+    0,
+  );
+  if (totalCells > MAX_TOTAL_CELLS) {
+    throw new Error(`scene contains more than ${MAX_TOTAL_CELLS} populated grid cells`);
+  }
+  const totalPathPoints = objects.reduce(
+    (sum, item) => sum + (item.type === "polyline" ? item.points.length : 0),
+    0,
+  );
+  if (totalPathPoints > MAX_TOTAL_PATH_POINTS) {
+    throw new Error(`scene contains more than ${MAX_TOTAL_PATH_POINTS} polyline points`);
+  }
+  const totalTextChars = objects.reduce((sum, item) => {
+    if (item.type === "text") return sum + [...item.text].length;
+    if (item.type === "grid") {
+      return sum + item.cells.reduce((cellSum, cell) => cellSum + [...cell.text].length, 0);
+    }
+    return sum;
+  }, 0);
+  if (totalTextChars > MAX_TOTAL_TEXT_CHARS) {
+    throw new Error(`scene contains more than ${MAX_TOTAL_TEXT_CHARS} text characters`);
+  }
   const requestedLayout = enumValue(value.layout, LAYOUTS, "auto", "scene layout");
-  const hasText = objects.some((item) => item.type === "text");
+  const textEntries = sceneTextEntries(objects);
+  const hasText = textEntries.length > 0;
   if (requestedLayout === "flow" && !hasText) {
     throw new Error("flow Scene layout requires text content");
   }
@@ -244,7 +398,10 @@ export function validateSceneToolCall(raw, action = "ai") {
       || (item.type === "line" && item.y1 === item.y2));
   const layout = action === "beautify"
     ? "spatial"
-    : (flowCompatible ? "flow" : "spatial");
+    : (flowCompatible
+        || isProseDominated(textEntries, totalTextChars)
+      ? "flow"
+      : "spatial");
   if (action === "beautify" && objects.some((item) => item.type === "text" && item.text.length === 0)) {
     throw new Error("Beautify cannot emit empty text");
   }
@@ -285,7 +442,9 @@ function safeLabel(text) {
 
 function pushCommand(runs, style, command, group = null) {
   const key = styleKey(style);
-  const existing = runs.find((run) => run.key === key && run.commands.length < 96);
+  const existing = runs.find(
+    (run) => run.key === key && run.commands.length < MAX_COMMANDS_PER_RUN,
+  );
   if (existing) {
     existing.commands.push(command);
     if (group) existing.groups.add(group);
@@ -396,7 +555,7 @@ export function compileScene(raw, target, action = "ai") {
     throw new Error("scene target must be at least 48 x 48 pixels");
   }
   if (scene.layout === "flow") {
-    const textItems = scene.objects.filter((item) => item.type === "text");
+    const textItems = orderFlowEntries(sceneTextEntries(scene.objects), scene.canvas);
     const item = textItems[0];
     return [{
       kind: "bodyText",
@@ -417,13 +576,39 @@ export function compileScene(raw, target, action = "ai") {
 
   const map = makeMapper(scene, target);
   const runs = [];
-  for (const item of scene.objects) compileObject(runs, item, map);
+  for (const item of scene.objects) {
+    compileObject(runs, textBoxInsideContainingRect(item, scene.objects), map);
+  }
   if (runs.length === 0) throw new Error("scene contains no drawable content");
+  const commandCount = runs.reduce((sum, run) => sum + run.commands.length, 0);
+  if (commandCount > MAX_COMPILED_COMMANDS) {
+    throw new Error(`scene expands past ${MAX_COMPILED_COMMANDS} native commands`);
+  }
   if (runs.length > 96) throw new Error("scene expands into too many styled runs");
-  return runs.map((run) => {
-    const body = validateVectorBody(`paper-agent-vector 1\n${run.commands.join("\n")}`);
+  let totalEstimatedStrokes = 0;
+  let totalEstimatedPoints = 0;
+  const compiled = runs.map((run) => {
+    const body = validateVectorBody(`paper-agent-vector 1\n${run.commands.join("\n")}`, {
+      maxCommands: MAX_COMMANDS_PER_RUN,
+      maxLabelChars: MAX_LABEL_CHARS,
+      maxEstimatedStrokes: MAX_RUN_ESTIMATED_STROKES,
+      maxEstimatedPoints: MAX_RUN_ESTIMATED_POINTS,
+      labelStrokesPerCharacter: SCENE_LABEL_STROKES_PER_CHARACTER,
+      labelPointsPerCharacter: SCENE_LABEL_POINTS_PER_CHARACTER,
+      onStats(stats) {
+        totalEstimatedStrokes += stats.estimatedStrokes;
+        totalEstimatedPoints += stats.estimatedPoints;
+      },
+    });
     return { kind: "vector", style: run.style, body, groups: [...run.groups] };
   });
+  if (totalEstimatedStrokes > MAX_TOTAL_ESTIMATED_STROKES) {
+    throw new Error(`scene expands past ${MAX_TOTAL_ESTIMATED_STROKES} estimated strokes`);
+  }
+  if (totalEstimatedPoints > MAX_TOTAL_ESTIMATED_POINTS) {
+    throw new Error(`scene expands past ${MAX_TOTAL_ESTIMATED_POINTS} estimated source points`);
+  }
+  return compiled;
 }
 
 export const SCENE_LIMITS = Object.freeze({
@@ -432,6 +617,13 @@ export const SCENE_LIMITS = Object.freeze({
   maxCanvas: MAX_CANVAS,
   maxObjects: MAX_OBJECTS,
   maxCells: MAX_CELLS,
+  maxTotalCells: MAX_TOTAL_CELLS,
+  maxTotalTextChars: MAX_TOTAL_TEXT_CHARS,
+  maxTotalPathPoints: MAX_TOTAL_PATH_POINTS,
+  maxCompiledCommands: MAX_COMPILED_COMMANDS,
+  maxCommandsPerRun: MAX_COMMANDS_PER_RUN,
+  maxTotalEstimatedStrokes: MAX_TOTAL_ESTIMATED_STROKES,
+  maxTotalEstimatedPoints: MAX_TOTAL_ESTIMATED_POINTS,
   colors: [...COLORS],
   widths: [...WIDTHS],
   layouts: [...LAYOUTS],

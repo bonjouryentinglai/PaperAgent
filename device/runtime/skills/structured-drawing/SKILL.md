@@ -14,6 +14,11 @@ description: Design readable native-ink scenes without game-specific templates.
 - Use thin lines for subdivisions, medium lines for ordinary outlines, and thick
   lines only for boundaries or emphasis.
 - Use supported colors sparingly. Black must remain readable without color.
+- Use ordinary Unicode for common symbols. The local renderer supplies a
+  generic symbol face, so do not redraw chess pieces, arrows, mathematics or
+  other standard symbols as improvised line art.
+- Keep one-page compositions concise. Prefer one semantic repeated structure
+  over hundreds of decorative line or shape objects.
 - Make the Scene canvas aspect ratio match the intended composition. The local
   renderer preserves proportions when fitting it to the available notebook box.
 - This is generic layout guidance. Do not enumerate special cases for individual

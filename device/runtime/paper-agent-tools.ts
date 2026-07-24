@@ -101,6 +101,8 @@ const renderScene = defineTool({
 		"Set layout to flow for ordinary prose, headings, and lists so local typography can wrap and paginate them. Set layout to spatial for tables, diagrams, charts, calendars, puzzles, and positioned labels.",
 		"For a plain prose answer, use wide left-aligned text objects and add intentional line breaks so body text remains comfortably readable; do not place it in tiny label boxes.",
 		"Represent repeated structures semantically: one grid object for a table or Sudoku, not dozens of unrelated line objects.",
+		"Use ordinary Unicode characters for common mathematical, directional, musical, and board-game symbols; the local renderer provides a generic symbol font.",
+		"Give diagram annotations generous text boxes. Long prose belongs in flow layout rather than a tiny positioned label.",
 		"Use a scene canvas whose aspect ratio matches the intended output. Coordinates and object extents must remain inside that canvas.",
 		"Use supported color and strokeWidth fields sparingly for hierarchy and readability. Native ink is the default.",
 		"After calling move_render_scene, do not emit another assistant response in the same turn.",
