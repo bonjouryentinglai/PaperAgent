@@ -21,6 +21,17 @@ const Common = {
 };
 const Coordinate = (description: string) => Type.Integer({ minimum: 0, maximum: 4000, description });
 const Extent = (description: string) => Type.Integer({ minimum: 1, maximum: 4000, description });
+const StartAngle = Type.Integer({
+	minimum: 0,
+	maximum: 359,
+	description: "Start angle in degrees; 0 points right and positive angles turn clockwise",
+});
+const SweepAngle = Type.Union([
+	Type.Integer({ minimum: -360, maximum: -1 }),
+	Type.Integer({ minimum: 1, maximum: 360 }),
+], {
+	description: "Non-zero sweep in degrees; positive turns clockwise and negative counter-clockwise",
+});
 const Point = Type.Object({
 	x: Coordinate("Horizontal scene coordinate"),
 	y: Coordinate("Vertical scene coordinate"),
@@ -68,6 +79,29 @@ const PolylineObject = Type.Object({
 	filled: Type.Optional(Type.Boolean()),
 	...Common,
 }, { additionalProperties: false });
+const ArcObject = Type.Object({
+	type: Type.Literal("arc"),
+	cx: Coordinate("Ellipse center x"), cy: Coordinate("Ellipse center y"),
+	rx: Extent("Horizontal radius"), ry: Extent("Vertical radius; set equal to rx for a circular arc"),
+	startAngle: StartAngle,
+	sweepAngle: SweepAngle,
+	...Common,
+}, { additionalProperties: false });
+const QuadraticObject = Type.Object({
+	type: Type.Literal("quadratic"),
+	start: Point,
+	control: Point,
+	end: Point,
+	...Common,
+}, { additionalProperties: false });
+const CubicObject = Type.Object({
+	type: Type.Literal("cubic"),
+	start: Point,
+	control1: Point,
+	control2: Point,
+	end: Point,
+	...Common,
+}, { additionalProperties: false });
 const GridCell = Type.Object({
 	row: Type.Integer({ minimum: 0, maximum: 31 }),
 	column: Type.Integer({ minimum: 0, maximum: 31 }),
@@ -88,7 +122,7 @@ const GridObject = Type.Object({
 
 const SceneObject = Type.Union([
 	TextObject, LineObject("line"), LineObject("arrow"), RectObject, EllipseObject,
-	CircleObject, PolylineObject, GridObject,
+	CircleObject, PolylineObject, ArcObject, QuadraticObject, CubicObject, GridObject,
 ]);
 
 const renderScene = defineTool({
@@ -101,6 +135,7 @@ const renderScene = defineTool({
 		"Set layout to flow for ordinary prose, headings, and lists so local typography can wrap and paginate them. Set layout to spatial for tables, diagrams, charts, calendars, puzzles, and positioned labels.",
 		"For a plain prose answer, use wide left-aligned text objects and add intentional line breaks so body text remains comfortably readable; do not place it in tiny label boxes.",
 		"Represent repeated structures semantically: one grid object for a table or Sudoku, not dozens of unrelated line objects.",
+		"Use arc for circular or elliptical portions, quadratic for one smooth bend, and cubic for S-curves or other smooth paths. Do not approximate them with hand-authored polyline segments.",
 		"Use ordinary Unicode characters for common mathematical, directional, musical, and board-game symbols; the local renderer provides a generic symbol font.",
 		"Give diagram annotations generous text boxes. Long prose belongs in flow layout rather than a tiny positioned label.",
 		"Use a scene canvas whose aspect ratio matches the intended output. Coordinates and object extents must remain inside that canvas.",

@@ -19,6 +19,7 @@ const MAX_VECTOR_PATH_POINTS = 64;
 const MAX_VECTOR_LABEL_CHARS = 240;
 const MAX_VECTOR_ESTIMATED_STROKES = 512;
 const MAX_VECTOR_ESTIMATED_POINTS = 24_000;
+const MAX_ADAPTIVE_CURVE_POINTS = 257;
 
 function fenceStart(line) {
   const match = line.match(/^ {0,3}(`{3,}|~{3,})\s*([^\s`]*)\s*$/u);
@@ -80,6 +81,12 @@ export function validateVectorBody(body, limits = {}) {
     }
     return values.map(Number);
   };
+  const boundedSignedIntegers = (command, values, maximum, kind) => {
+    if (!values.every((value) => /^-?\d{1,4}$/u.test(value) && Math.abs(Number(value)) <= maximum)) {
+      throw new Error(`vector command '${command}' has a ${kind} outside -${maximum}..=${maximum}`);
+    }
+    return values.map(Number);
+  };
   const boundedPath = (command, values, minimum) => {
     const pointCount = values.length / 2;
     if (pointCount < minimum || pointCount > MAX_VECTOR_PATH_POINTS) {
@@ -111,6 +118,7 @@ export function validateVectorBody(body, limits = {}) {
     const command = fields[0];
     let coordinates = [];
     let angles = [];
+    let signedAngles = [];
     let commandStrokes = 1;
     let commandPoints = 2;
     if (command === "line" || command === "arrow") {
@@ -163,16 +171,22 @@ export function validateVectorBody(body, limits = {}) {
         throw new Error("malformed vector curve command");
       }
       coordinates = fields.slice(1);
-      commandPoints = fields.length === 7 ? 33 : 41;
+      commandPoints = MAX_ADAPTIVE_CURVE_POINTS;
     } else if (command === "arc" || command === "wedge") {
       if (fields.length !== 6) throw new Error(`malformed vector ${command} command`);
       coordinates = fields.slice(1, 4);
       angles = fields.slice(4);
-      commandPoints = 65;
+      commandPoints = MAX_ADAPTIVE_CURVE_POINTS;
       if (command === "wedge") {
         commandStrokes = 33;
-        commandPoints += 66;
+        commandPoints += MAX_ADAPTIVE_CURVE_POINTS + 1;
       }
+    } else if (command === "ellarc") {
+      if (fields.length !== 7) throw new Error("malformed vector ellarc command");
+      coordinates = fields.slice(1, 5);
+      angles = fields.slice(5, 6);
+      signedAngles = fields.slice(6);
+      commandPoints = MAX_ADAPTIVE_CURVE_POINTS;
     } else if (command === "dot") {
       if (fields.length !== 3) throw new Error("malformed vector dot command");
       coordinates = fields.slice(1);
@@ -193,6 +207,7 @@ export function validateVectorBody(body, limits = {}) {
 
     const values = boundedIntegers(command, coordinates);
     const angleValues = boundedIntegers(command, angles, 360, "angle");
+    const signedAngleValues = boundedSignedIntegers(command, signedAngles, 360, "sweep angle");
     if (["rect", "box", "rrect", "label"].includes(command)) {
       validateRect(command, values);
     }
@@ -204,11 +219,14 @@ export function validateVectorBody(body, limits = {}) {
     }
     if (["circle", "disc", "arc", "wedge"].includes(command)) {
       validateEllipse(command, values.slice(0, 3));
-    } else if (["ellipse", "fillellipse"].includes(command)) {
+    } else if (["ellipse", "fillellipse", "ellarc"].includes(command)) {
       validateEllipse(command, values);
     }
     if ((command === "arc" || command === "wedge") && angleValues[0] === angleValues[1]) {
       throw new Error(`vector ${command} angle sweep must be nonzero`);
+    }
+    if (command === "ellarc" && signedAngleValues[0] === 0) {
+      throw new Error("vector ellarc sweep angle must be nonzero");
     }
 
     estimatedStrokes += commandStrokes;

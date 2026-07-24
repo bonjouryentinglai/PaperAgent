@@ -84,6 +84,7 @@ test("accepts the expanded bounded curve, shape, and hatch primitives", () => {
     "curve 100 300 200 100 300 500 400 300",
     "rrect 100 100 300 200 40",
     "arc 500 500 120 0 180",
+    "ellarc 500 500 200 120 180 180",
     "wedge 500 500 120 180 360",
     "dot 500 500",
     "fillpoly 100 500 250 400 400 500",
@@ -105,6 +106,10 @@ test("bounds expanded vectors before native rendering", () => {
   assert.throws(
     () => validateVectorBody("paper-agent-vector 1\narc 500 500 100 0 361"),
     /angle outside/u,
+  );
+  assert.throws(
+    () => validateVectorBody("paper-agent-vector 1\nellarc 500 500 100 80 180 0"),
+    /nonzero|non-zero/u,
   );
   assert.throws(
     () => validateVectorBody("paper-agent-vector 1\nrrect 900 900 200 100 20"),

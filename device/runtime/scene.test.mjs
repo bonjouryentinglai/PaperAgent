@@ -63,6 +63,41 @@ test("contain mapping preserves a circle inside a portrait destination", () => {
   assert.ok(Math.abs(physicalRx - physicalRy) <= 2);
 });
 
+test("semantic arcs and Bezier curves compile without model-authored polyline points", () => {
+  const runs = compileScene({
+    version: 1,
+    canvas: { width: 1_000, height: 1_000 },
+    objects: [
+      {
+        type: "arc",
+        cx: 500, cy: 500, rx: 300, ry: 300,
+        startAngle: 180, sweepAngle: 180,
+        strokeWidth: "thick",
+      },
+      {
+        type: "quadratic",
+        start: { x: 100, y: 700 },
+        control: { x: 500, y: 200 },
+        end: { x: 900, y: 700 },
+        color: "blue",
+      },
+      {
+        type: "cubic",
+        start: { x: 100, y: 800 },
+        control1: { x: 300, y: 300 },
+        control2: { x: 700, y: 900 },
+        end: { x: 900, y: 400 },
+      },
+    ],
+  }, { width: 600, height: 1_200 });
+  assert.ok(runs.some((run) => /ellarc 500 500 300 147 180 180/u.test(run.body)));
+  assert.ok(runs.some((run) => /curve \d+ \d+ \d+ \d+ \d+ \d+$/mu.test(run.body)));
+  assert.ok(runs.some((run) => /curve \d+ \d+ \d+ \d+ \d+ \d+ \d+ \d+$/mu.test(run.body)));
+  assert.ok(runs.some((run) => run.style.width === "thick"));
+  assert.ok(runs.some((run) => run.style.color === "blue"));
+  assert.ok(runs.every((run) => !/polyline/u.test(run.body)));
+});
+
 test("unknown fields, duplicate cells, and out-of-bounds shapes fail closed", () => {
   const base = { version: 1, canvas: { width: 500, height: 500 } };
   assert.throws(() => validateSceneToolCall({
@@ -80,6 +115,22 @@ test("unknown fields, duplicate cells, and out-of-bounds shapes fail closed", ()
     ...base,
     objects: [{ type: "circle", cx: 20, cy: 20, radius: 40 }],
   }), /outside/u);
+  assert.throws(() => validateSceneToolCall({
+    ...base,
+    objects: [{
+      type: "arc", cx: 250, cy: 250, rx: 200, ry: 200,
+      startAngle: 180, sweepAngle: 0,
+    }],
+  }), /non-zero/u);
+  assert.throws(() => validateSceneToolCall({
+    ...base,
+    objects: [{
+      type: "quadratic",
+      start: { x: 0, y: 0 },
+      control: { x: 250, y: 501 },
+      end: { x: 500, y: 0 },
+    }],
+  }), /within 0..=500/u);
 });
 
 test("a safe shallow text Scene is accepted", () => {
@@ -248,7 +299,7 @@ test("expanded Scene totals are bounded before native writeback", () => {
       type: "polyline",
       points: path,
     })),
-  }), /4096 polyline points/u);
+  }), /4096 path control points/u);
 });
 
 test("long spatial labels remain bounded Scene labels for native wrapping", () => {

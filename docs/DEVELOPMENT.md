@@ -53,6 +53,10 @@ After an install, verify separately:
    cell is horizontally and vertically centered.
 4. Lines, arrows, open/closed polylines, quadratic/cubic curves, rounded
    rectangles, arcs, dots and hatch-filled polygon/ellipse/pie shapes.
+   For semantic Scene acceptance, draw a large circular or elliptical arc plus
+   quadratic and cubic paths; confirm they remain smooth at normal viewing
+   distance, preserve their intended proportions and join adjacent lines
+   without visible gaps.
 5. Phase 2A Scene: a 9x9 Sudoku grid must have square cells, stronger 3x3
    boundaries and centered digits; repeat in both a portrait and a wide output
    box and confirm circles/squares keep their proportions.

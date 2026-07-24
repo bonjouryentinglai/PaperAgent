@@ -36,9 +36,10 @@ const MAX_VECTOR_PATH_STEPS: usize = 400_000;
 const MAX_SCENE_OUTPUT_STROKES: usize = MAX_OUTPUT_STROKES;
 const MAX_SCENE_OUTPUT_POINTS: usize = 96_000;
 const MAX_SCENE_PATH_STEPS: usize = 400_000;
-const QUADRATIC_SAMPLES: usize = 32;
-const CUBIC_SAMPLES: usize = 40;
 const MAX_ARC_SAMPLES: usize = 64;
+const CURVE_FLATNESS_PX: f32 = 0.35;
+const MAX_CURVE_SUBDIVISION_DEPTH: usize = 10;
+const MAX_ADAPTIVE_CURVE_POINTS: usize = 257;
 const HATCH_SPACING: i32 = 45;
 const MAX_HATCH_STROKES_PER_SHAPE: usize = 32;
 const DOT_RADIUS: i32 = 9;
@@ -351,11 +352,11 @@ fn vector_to_job_with_text_scale(
             Some("curve") if fields.len() == 7 || fields.len() == 9 => {
                 let values = parse_vector_numbers(&fields[1..])?;
                 let points = if values.len() == 6 {
-                    quadratic_points(&values, QUADRATIC_SAMPLES)
+                    adaptive_quadratic_points(&values, target)
                 } else {
-                    cubic_points(&values, CUBIC_SAMPLES)
+                    adaptive_cubic_points(&values, target)
                 };
-                strokes.push(map_polyline(&points, target));
+                strokes.push(points);
             }
             Some("rect") if fields.len() == 5 => {
                 let values = parse_vector_numbers(&fields[1..])?;
@@ -420,9 +421,21 @@ fn vector_to_job_with_text_scale(
                 let values = parse_arc_values(&fields[1..], "arc")?;
                 validate_ellipse_geometry(values[0], values[1], values[2], values[2], "arc")?;
                 validate_nonzero_sweep(values[3], values[4], "arc")?;
-                strokes.push(map_polyline(
-                    &arc_points(values[0], values[1], values[2], values[3], values[4]),
+                strokes.push(adaptive_arc_points(
+                    values[0],
+                    values[1],
+                    values[2],
+                    values[2],
+                    values[3],
+                    values[4] - values[3],
                     target,
+                ));
+            }
+            Some("ellarc") if fields.len() == 7 => {
+                let values = parse_ellarc_values(&fields[1..])?;
+                validate_ellipse_geometry(values[0], values[1], values[2], values[3], "ellarc")?;
+                strokes.push(adaptive_arc_points(
+                    values[0], values[1], values[2], values[3], values[4], values[5], target,
                 ));
             }
             Some("wedge") if fields.len() == 6 => {
@@ -1667,6 +1680,33 @@ fn parse_arc_values(fields: &[&str], command: &str) -> Result<Vec<i32>, String> 
     Ok(values)
 }
 
+fn parse_ellarc_values(fields: &[&str]) -> Result<Vec<i32>, String> {
+    if fields.len() != 6 {
+        return Err("malformed vector ellarc command".into());
+    }
+    let mut values = parse_vector_numbers(&fields[..4])?;
+    let start = fields[4]
+        .parse::<i32>()
+        .map_err(|_| format!("invalid vector angle '{}'", fields[4]))?;
+    if !(0..VECTOR_ANGLE_MAX).contains(&start) {
+        return Err(format!(
+            "vector angle {start} is outside 0..{}",
+            VECTOR_ANGLE_MAX - 1
+        ));
+    }
+    let sweep = fields[5]
+        .parse::<i32>()
+        .map_err(|_| format!("invalid vector sweep angle '{}'", fields[5]))?;
+    if sweep == 0 || !(-VECTOR_ANGLE_MAX..=VECTOR_ANGLE_MAX).contains(&sweep) {
+        return Err(format!(
+            "vector ellarc sweep {sweep} must be non-zero within -{VECTOR_ANGLE_MAX}..={VECTOR_ANGLE_MAX}"
+        ));
+    }
+    values.push(start);
+    values.push(sweep);
+    Ok(values)
+}
+
 fn vector_pairs(
     values: &[i32],
     minimum_points: usize,
@@ -1775,50 +1815,128 @@ fn validate_nonzero_sweep(start: i32, end: i32, command: &str) -> Result<(), Str
     Ok(())
 }
 
-fn quadratic_points(values: &[i32], samples: usize) -> Vec<(i32, i32)> {
-    let (p0, control, p1) = (
-        (values[0] as f32, values[1] as f32),
-        (values[2] as f32, values[3] as f32),
-        (values[4] as f32, values[5] as f32),
-    );
-    (0..=samples)
-        .map(|step| {
-            let t = step as f32 / samples as f32;
-            let u = 1.0 - t;
-            (
-                (u * u * p0.0 + 2.0 * u * t * control.0 + t * t * p1.0).round() as i32,
-                (u * u * p0.1 + 2.0 * u * t * control.1 + t * t * p1.1).round() as i32,
-            )
-        })
-        .collect()
+#[derive(Clone, Copy)]
+struct FloatPoint {
+    x: f32,
+    y: f32,
 }
 
-fn cubic_points(values: &[i32], samples: usize) -> Vec<(i32, i32)> {
-    let (p0, control0, control1, p1) = (
-        (values[0] as f32, values[1] as f32),
-        (values[2] as f32, values[3] as f32),
-        (values[4] as f32, values[5] as f32),
-        (values[6] as f32, values[7] as f32),
-    );
-    (0..=samples)
-        .map(|step| {
-            let t = step as f32 / samples as f32;
-            let u = 1.0 - t;
-            let (u2, t2) = (u * u, t * t);
-            (
-                (u2 * u * p0.0
-                    + 3.0 * u2 * t * control0.0
-                    + 3.0 * u * t2 * control1.0
-                    + t2 * t * p1.0)
-                    .round() as i32,
-                (u2 * u * p0.1
-                    + 3.0 * u2 * t * control0.1
-                    + 3.0 * u * t2 * control1.1
-                    + t2 * t * p1.1)
-                    .round() as i32,
-            )
-        })
-        .collect()
+fn midpoint(left: FloatPoint, right: FloatPoint) -> FloatPoint {
+    FloatPoint {
+        x: (left.x + right.x) * 0.5,
+        y: (left.y + right.y) * 0.5,
+    }
+}
+
+fn distance_to_line(point: FloatPoint, start: FloatPoint, end: FloatPoint) -> f32 {
+    let dx = end.x - start.x;
+    let dy = end.y - start.y;
+    let length = (dx * dx + dy * dy).sqrt();
+    if length <= f32::EPSILON {
+        return ((point.x - start.x).powi(2) + (point.y - start.y).powi(2)).sqrt();
+    }
+    ((dy * point.x - dx * point.y + end.x * start.y - end.y * start.x).abs()) / length
+}
+
+fn map_vector_float_point(x: f32, y: f32, target: Target) -> FloatPoint {
+    let margin = 10.0;
+    let width = (target.width as f32 - margin * 2.0 - 1.0).max(1.0);
+    let height = (target.height as f32 - margin * 2.0 - 1.0).max(1.0);
+    FloatPoint {
+        x: target.x as f32
+            + margin
+            + x.clamp(0.0, VECTOR_COORD_MAX as f32) * width / VECTOR_COORD_MAX as f32,
+        y: target.y as f32
+            + margin
+            + y.clamp(0.0, VECTOR_COORD_MAX as f32) * height / VECTOR_COORD_MAX as f32,
+    }
+}
+
+fn push_float_point(points: &mut Vec<Point>, point: FloatPoint) {
+    let point = Point {
+        x: point.x.round() as i32,
+        y: point.y.round() as i32,
+    };
+    if points.last() != Some(&point) {
+        points.push(point);
+    }
+}
+
+fn subdivide_quadratic(
+    start: FloatPoint,
+    control: FloatPoint,
+    end: FloatPoint,
+    depth: usize,
+    points: &mut Vec<Point>,
+) {
+    if depth >= MAX_CURVE_SUBDIVISION_DEPTH
+        || points.len() >= MAX_ADAPTIVE_CURVE_POINTS - 1
+        || distance_to_line(control, start, end) <= CURVE_FLATNESS_PX
+    {
+        push_float_point(points, end);
+        return;
+    }
+    let start_control = midpoint(start, control);
+    let control_end = midpoint(control, end);
+    let middle = midpoint(start_control, control_end);
+    subdivide_quadratic(start, start_control, middle, depth + 1, points);
+    subdivide_quadratic(middle, control_end, end, depth + 1, points);
+}
+
+fn adaptive_quadratic_points(values: &[i32], target: Target) -> Vec<Point> {
+    let start = map_vector_float_point(values[0] as f32, values[1] as f32, target);
+    let control = map_vector_float_point(values[2] as f32, values[3] as f32, target);
+    let end = map_vector_float_point(values[4] as f32, values[5] as f32, target);
+    let mut points = Vec::with_capacity(65);
+    push_float_point(&mut points, start);
+    subdivide_quadratic(start, control, end, 0, &mut points);
+    points[0] = map_polyline(&[(values[0], values[1])], target)[0];
+    if let Some(last) = points.last_mut() {
+        *last = map_polyline(&[(values[4], values[5])], target)[0];
+    }
+    points
+}
+
+fn subdivide_cubic(
+    start: FloatPoint,
+    control0: FloatPoint,
+    control1: FloatPoint,
+    end: FloatPoint,
+    depth: usize,
+    points: &mut Vec<Point>,
+) {
+    let flatness =
+        distance_to_line(control0, start, end).max(distance_to_line(control1, start, end));
+    if depth >= MAX_CURVE_SUBDIVISION_DEPTH
+        || points.len() >= MAX_ADAPTIVE_CURVE_POINTS - 1
+        || flatness <= CURVE_FLATNESS_PX
+    {
+        push_float_point(points, end);
+        return;
+    }
+    let p01 = midpoint(start, control0);
+    let p12 = midpoint(control0, control1);
+    let p23 = midpoint(control1, end);
+    let p012 = midpoint(p01, p12);
+    let p123 = midpoint(p12, p23);
+    let middle = midpoint(p012, p123);
+    subdivide_cubic(start, p01, p012, middle, depth + 1, points);
+    subdivide_cubic(middle, p123, p23, end, depth + 1, points);
+}
+
+fn adaptive_cubic_points(values: &[i32], target: Target) -> Vec<Point> {
+    let start = map_vector_float_point(values[0] as f32, values[1] as f32, target);
+    let control0 = map_vector_float_point(values[2] as f32, values[3] as f32, target);
+    let control1 = map_vector_float_point(values[4] as f32, values[5] as f32, target);
+    let end = map_vector_float_point(values[6] as f32, values[7] as f32, target);
+    let mut points = Vec::with_capacity(97);
+    push_float_point(&mut points, start);
+    subdivide_cubic(start, control0, control1, end, 0, &mut points);
+    points[0] = map_polyline(&[(values[0], values[1])], target)[0];
+    if let Some(last) = points.last_mut() {
+        *last = map_polyline(&[(values[6], values[7])], target)[0];
+    }
+    points
 }
 
 fn fixed_arc_points(
@@ -1844,6 +1962,40 @@ fn fixed_arc_points(
 fn arc_points(cx: i32, cy: i32, radius: i32, start: i32, end: i32) -> Vec<(i32, i32)> {
     let samples = (((end - start).unsigned_abs() as usize + 5) / 6).clamp(4, MAX_ARC_SAMPLES);
     fixed_arc_points(cx, cy, radius, start, end, samples)
+}
+
+fn adaptive_arc_points(
+    cx: i32,
+    cy: i32,
+    rx: i32,
+    ry: i32,
+    start: i32,
+    sweep: i32,
+    target: Target,
+) -> Vec<Point> {
+    let center = map_vector_float_point(cx as f32, cy as f32, target);
+    let radius_x = (map_vector_float_point((cx + rx) as f32, cy as f32, target).x - center.x).abs();
+    let radius_y = (map_vector_float_point(cx as f32, (cy + ry) as f32, target).y - center.y).abs();
+    let maximum_radius = radius_x.max(radius_y).max(1.0);
+    let cosine = (1.0 - CURVE_FLATNESS_PX / maximum_radius).clamp(-1.0, 1.0);
+    let maximum_step = (2.0 * cosine.acos()).max(PI / 180.0);
+    let sweep_radians = sweep as f32 * PI / 180.0;
+    let samples = ((sweep_radians.abs() / maximum_step).ceil() as usize)
+        .clamp(4, MAX_ADAPTIVE_CURVE_POINTS - 1);
+    let mut points = Vec::with_capacity(samples + 1);
+    for step in 0..=samples {
+        let degrees = start as f32 + sweep as f32 * step as f32 / samples as f32;
+        let angle = degrees * PI / 180.0;
+        push_float_point(
+            &mut points,
+            map_vector_float_point(
+                cx as f32 + rx as f32 * angle.cos(),
+                cy as f32 + ry as f32 * angle.sin(),
+                target,
+            ),
+        );
+    }
+    points
 }
 
 fn ellipse_points(cx: i32, cy: i32, rx: i32, ry: i32) -> Vec<(i32, i32)> {
@@ -2343,6 +2495,37 @@ mod tests {
     }
 
     #[test]
+    fn semantic_arc_and_bezier_paths_are_adaptively_sampled() {
+        let rendered_target = supersampled_target(target()).unwrap();
+        let arc = adaptive_arc_points(500, 500, 300, 180, 180, 180, rendered_target);
+        let quadratic = adaptive_quadratic_points(&[100, 800, 500, 100, 900, 800], rendered_target);
+        let cubic =
+            adaptive_cubic_points(&[100, 800, 300, 100, 700, 900, 900, 200], rendered_target);
+        assert!(arc.len() > 32);
+        assert!(quadratic.len() > 16);
+        assert!(cubic.len() > 16);
+        assert!(arc.len() <= MAX_ADAPTIVE_CURVE_POINTS);
+        assert!(quadratic.len() <= MAX_ADAPTIVE_CURVE_POINTS);
+        assert!(cubic.len() <= MAX_ADAPTIVE_CURVE_POINTS);
+        assert_eq!(
+            quadratic.first(),
+            Some(&map_polyline(&[(100, 800)], rendered_target)[0])
+        );
+        assert_eq!(
+            quadratic.last(),
+            Some(&map_polyline(&[(900, 800)], rendered_target)[0])
+        );
+    }
+
+    #[test]
+    fn scene_renderer_accepts_an_elliptical_arc_command() {
+        let scene = "paper-agent-vector 1\nellarc 500 500 300 180 180 180";
+        let job = scene_vector_to_job(scene, target(), 954, 1696).unwrap();
+        assert_eq!(job.strokes.len(), 1);
+        assert!(job.strokes[0].len() > 32);
+    }
+
+    #[test]
     fn phase_2a_scene_labels_honor_horizontal_alignment_without_rewrapping() {
         let box_target = Target {
             x: 100,
@@ -2366,7 +2549,7 @@ mod tests {
 
     #[test]
     fn accepts_only_the_bounded_vector_language() {
-        let vector = "paper-agent-vector 1\nrect 100 100 300 200\narrow 400 200 800 700\ncircle 500 500 120\nlabel 100 50 300 100 Start\nlabelleft 20 850 220 80 Left\nlabelright 760 850 220 80 Right\npolygon 100 400 250 300 400 400\ncurve 100 500 250 350 400 500\ncurve 450 500 550 350 650 650 750 500\nrrect 500 100 300 200 40\narc 500 500 120 0 180\nwedge 500 500 120 180 360\ndot 500 500\nfillpoly 100 700 250 550 400 700\nbox 600 700 200 150\ndisc 700 500 80\nfillellipse 300 800 160 80";
+        let vector = "paper-agent-vector 1\nrect 100 100 300 200\narrow 400 200 800 700\ncircle 500 500 120\nlabel 100 50 300 100 Start\nlabelleft 20 850 220 80 Left\nlabelright 760 850 220 80 Right\npolygon 100 400 250 300 400 400\ncurve 100 500 250 350 400 500\ncurve 450 500 550 350 650 650 750 500\nrrect 500 100 300 200 40\narc 500 500 120 0 180\nellarc 500 500 160 80 180 180\nwedge 500 500 120 180 360\ndot 500 500\nfillpoly 100 700 250 550 400 700\nbox 600 700 200 150\ndisc 700 500 80\nfillellipse 300 800 160 80";
         let job = vector_to_job(vector, target(), 954, 1696).unwrap();
         assert!(job.strokes.len() >= 30);
         assert!(job

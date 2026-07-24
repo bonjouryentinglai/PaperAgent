@@ -13,6 +13,8 @@ description: Design readable native-ink scenes without game-specific templates.
   labels centered in generous boxes, and margins consistent.
 - Use thin lines for subdivisions, medium lines for ordinary outlines, and thick
   lines only for boundaries or emphasis.
+- Use semantic arcs and quadratic or cubic curves for smooth geometry. Do not
+  approximate them with a short hand-authored polyline.
 - Use supported colors sparingly. Black must remain readable without color.
 - Use ordinary Unicode for common symbols. The local renderer supplies a
   generic symbol face, so do not redraw chess pieces, arrows, mathematics or

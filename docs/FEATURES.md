@@ -11,7 +11,7 @@ The public project owns only the native Xochitl selection workflow.
 | Formatted text | Headings, paragraphs, ordered/unordered lists, bold and inline code with the same body-size policy as plain text | Pending combined-build acceptance |
 | Code blocks | Preserved verbatim, wrapped and drawn in a smaller framed style; never executed | Pending combined-build acceptance |
 | Tables and regular grids | One semantic grid object with local cell layout, centered labels, major/minor line weights and bounded native ink | Phase 2A physical acceptance pending |
-| Scene drawings | Lines, arrows, polylines, rectangles, circles, ellipses, wrapping text and grids with contain-fit proportions, supported colors, three line weights, alignment, logical groups and a generic common-symbol font | Phase 2A physical acceptance pending |
+| Scene drawings | Lines, arrows, polylines, semantic arcs and Bezier curves, rectangles, circles, ellipses, wrapping text and grids with contain-fit proportions, supported colors, three line weights, alignment, logical groups and a generic common-symbol font | Arc and curve physical acceptance pending |
 | GPT raster images | ChatGPT OAuth to `gpt-image-2` at the low-latency `low` quality setting, strict PNG validation, bounded RGBA normalization and guarded Xochitl 3.27 image insertion; images move to a new page rather than covering the source when they do not fit below | End-to-end physical acceptance pending |
 | Mixed documents | Text, code, tables and vector blocks keep their original order in one result | Pending combined-build acceptance |
 

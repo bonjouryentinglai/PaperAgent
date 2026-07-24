@@ -65,7 +65,10 @@ group. A Scene canvas has an explicit aspect ratio. The local contain mapping
 letterboxes it into the available notebook destination, so a circle remains a
 circle and a square remains a square in both portrait and landscape boxes.
 Regular grids are expanded locally with separate major and minor weights; GPT
-does not need to draw each Sudoku line independently.
+does not need to draw each Sudoku line independently. Circular and elliptical
+arcs plus quadratic and cubic Bezier paths are also semantic Scene objects.
+Their native-ink points are sampled locally according to rendered size, rather
+than being guessed as short polylines by the model.
 Compiled scenes are split into bounded native-command batches and have
 aggregate cell, text, path-point and command budgets. Common Unicode symbols
 use the embedded Noto Sans Symbols 2 face before the visible `?` fallback.

@@ -36,7 +36,8 @@ const WIDTHS = new Set(["thin", "medium", "thick"]);
 const ALIGNS = new Set(["left", "center", "right"]);
 const LAYOUTS = new Set(["auto", "flow", "spatial"]);
 const OBJECT_TYPES = new Set([
-  "text", "line", "arrow", "rect", "ellipse", "circle", "polyline", "grid",
+  "text", "line", "arrow", "rect", "ellipse", "circle", "polyline",
+  "arc", "quadratic", "cubic", "grid",
 ]);
 
 const DEFAULT_STYLE = Object.freeze({ color: "black", width: "medium" });
@@ -313,6 +314,49 @@ function validateSceneObject(raw, canvas, index, fallbackStyle) {
     };
   }
 
+  if (value.type === "arc") {
+    exactKeys(
+      value,
+      new Set([...shared, "cx", "cy", "rx", "ry", "startAngle", "sweepAngle"]),
+      label,
+    );
+    const cx = integer(value.cx, `${label}.cx`, 0, canvas.width);
+    const cy = integer(value.cy, `${label}.cy`, 0, canvas.height);
+    const rx = integer(value.rx, `${label}.rx`, 1, canvas.width);
+    const ry = integer(value.ry, `${label}.ry`, 1, canvas.height);
+    if (cx - rx < 0 || cy - ry < 0 || cx + rx > canvas.width || cy + ry > canvas.height) {
+      throw new Error(`${label} extends outside the scene canvas`);
+    }
+    const startAngle = integer(value.startAngle, `${label}.startAngle`, 0, 359);
+    const sweepAngle = integer(value.sweepAngle, `${label}.sweepAngle`, -360, 360);
+    if (sweepAngle === 0) throw new Error(`${label}.sweepAngle must be non-zero`);
+    return { type: "arc", cx, cy, rx, ry, startAngle, sweepAngle, ...base };
+  }
+
+  if (value.type === "quadratic" || value.type === "cubic") {
+    const keys = value.type === "quadratic"
+      ? new Set([...shared, "start", "control", "end"])
+      : new Set([...shared, "start", "control1", "control2", "end"]);
+    exactKeys(value, keys, label);
+    if (value.type === "quadratic") {
+      return {
+        type: "quadratic",
+        start: validatePoint(value.start, canvas, `${label}.start`),
+        control: validatePoint(value.control, canvas, `${label}.control`),
+        end: validatePoint(value.end, canvas, `${label}.end`),
+        ...base,
+      };
+    }
+    return {
+      type: "cubic",
+      start: validatePoint(value.start, canvas, `${label}.start`),
+      control1: validatePoint(value.control1, canvas, `${label}.control1`),
+      control2: validatePoint(value.control2, canvas, `${label}.control2`),
+      end: validatePoint(value.end, canvas, `${label}.end`),
+      ...base,
+    };
+  }
+
   exactKeys(value, new Set([
     ...shared, "x", "y", "width", "height", "rows", "columns", "majorEvery",
     "majorStrokeWidth", "cells",
@@ -371,11 +415,17 @@ export function validateSceneToolCall(raw, action = "ai") {
     throw new Error(`scene contains more than ${MAX_TOTAL_CELLS} populated grid cells`);
   }
   const totalPathPoints = objects.reduce(
-    (sum, item) => sum + (item.type === "polyline" ? item.points.length : 0),
+    (sum, item) => {
+      if (item.type === "polyline") return sum + item.points.length;
+      if (item.type === "quadratic") return sum + 3;
+      if (item.type === "cubic") return sum + 4;
+      if (item.type === "arc") return sum + 4;
+      return sum;
+    },
     0,
   );
   if (totalPathPoints > MAX_TOTAL_PATH_POINTS) {
-    throw new Error(`scene contains more than ${MAX_TOTAL_PATH_POINTS} polyline points`);
+    throw new Error(`scene contains more than ${MAX_TOTAL_PATH_POINTS} path control points`);
   }
   const totalTextChars = objects.reduce((sum, item) => {
     if (item.type === "text") return sum + [...item.text].length;
@@ -514,6 +564,37 @@ function compileObject(runs, item, map) {
     const points = item.points.flatMap((point) => [map.x(point.x), map.y(point.y)]).join(" ");
     const command = item.filled ? "fillpoly" : (item.closed ? "polygon" : "polyline");
     pushCommand(runs, item.style, `${command} ${points}`, item.group);
+    return;
+  }
+  if (item.type === "arc") {
+    const cx = map.x(item.cx);
+    const cy = map.y(item.cy);
+    const rx = Math.max(1, Math.abs(map.x(item.cx + item.rx) - cx));
+    const ry = Math.max(1, Math.abs(map.y(item.cy + item.ry) - cy));
+    pushCommand(
+      runs,
+      item.style,
+      `ellarc ${cx} ${cy} ${rx} ${ry} ${item.startAngle} ${item.sweepAngle}`,
+      item.group,
+    );
+    return;
+  }
+  if (item.type === "quadratic") {
+    pushCommand(
+      runs,
+      item.style,
+      `curve ${map.x(item.start.x)} ${map.y(item.start.y)} ${map.x(item.control.x)} ${map.y(item.control.y)} ${map.x(item.end.x)} ${map.y(item.end.y)}`,
+      item.group,
+    );
+    return;
+  }
+  if (item.type === "cubic") {
+    pushCommand(
+      runs,
+      item.style,
+      `curve ${map.x(item.start.x)} ${map.y(item.start.y)} ${map.x(item.control1.x)} ${map.y(item.control1.y)} ${map.x(item.control2.x)} ${map.y(item.control2.y)} ${map.x(item.end.x)} ${map.y(item.end.y)}`,
+      item.group,
+    );
     return;
   }
   const left = map.x(item.x);
