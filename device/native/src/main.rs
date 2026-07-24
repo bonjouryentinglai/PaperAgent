@@ -24,6 +24,7 @@ USAGE:
   paper-agent-native render-table INPUT JOB X Y WIDTH HEIGHT [CANVAS_WIDTH CANVAS_HEIGHT]
   paper-agent-native render-table-scaled INPUT JOB X Y WIDTH HEIGHT SCALE_PERCENT [CANVAS_WIDTH CANVAS_HEIGHT]
   paper-agent-native render-vector INPUT JOB X Y WIDTH HEIGHT [CANVAS_WIDTH CANVAS_HEIGHT]
+  paper-agent-native render-scene INPUT JOB X Y WIDTH HEIGHT [CANVAS_WIDTH CANVAS_HEIGHT]
   paper-agent-native prepare-image INPUT OUTPUT MAX_WIDTH MAX_HEIGHT
   paper-agent-native write JOB --confirm PAPER_AGENT_NATIVE_WRITE_V1
   paper-agent-native write-stream --confirm PAPER_AGENT_NATIVE_WRITE_V1
@@ -54,6 +55,7 @@ fn dispatch() -> Result<(), String> {
         Some("render-table") => render_structured(&args[2..], "table"),
         Some("render-table-scaled") => render_structured_scaled(&args[2..], "table"),
         Some("render-vector") => render_structured(&args[2..], "vector"),
+        Some("render-scene") => render_structured(&args[2..], "scene"),
         Some("prepare-image") => prepare_image(&args[2..]),
         Some("write") => write(&args[2..]),
         Some("write-stream") => write_stream(&args[2..]),
@@ -189,6 +191,7 @@ fn render_structured(args: &[String], kind: &str) -> Result<(), String> {
         "document" => renderer::document_to_job(&input, target, canvas_width, canvas_height)?,
         "table" => renderer::table_to_job(&input, target, canvas_width, canvas_height)?,
         "vector" => renderer::vector_to_job(&input, target, canvas_width, canvas_height)?,
+        "scene" => renderer::scene_vector_to_job(&input, target, canvas_width, canvas_height)?,
         _ => return Err(format!("unsupported renderer '{kind}'")),
     };
     job.write_to(Path::new(&args[1]))?;
@@ -198,7 +201,11 @@ fn render_structured(args: &[String], kind: &str) -> Result<(), String> {
     println!("canvas={}x{}", job.canvas_width, job.canvas_height);
     println!("strokes={}", job.strokes.len());
     println!("points={}", job.point_count());
-    let (min_x, min_y, max_x, max_y) = job_bounds(&job);
+    let (min_x, min_y, max_x, max_y) = if kind == "scene" {
+        physical_job_bounds(&job, canvas_width, canvas_height)
+    } else {
+        job_bounds(&job)
+    };
     println!("pixel_bounds={min_x},{min_y}..{max_x},{max_y}");
     Ok(())
 }

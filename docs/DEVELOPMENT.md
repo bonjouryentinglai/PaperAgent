@@ -53,40 +53,54 @@ After an install, verify separately:
    cell is horizontally and vertically centered.
 4. Lines, arrows, open/closed polylines, quadratic/cubic curves, rounded
    rectangles, arcs, dots and hatch-filled polygon/ellipse/pie shapes.
-5. One mixed answer containing a heading, list, bold and inline code, fenced
+   For semantic Scene acceptance, draw a large circular or elliptical arc plus
+   quadratic and cubic paths; confirm they remain smooth at normal viewing
+   distance, preserve their intended proportions and join adjacent lines
+   without visible gaps.
+5. Phase 2A Scene: a 9x9 Sudoku grid must have square cells, stronger 3x3
+   boundaries and centered digits; repeat in both a portrait and a wide output
+   box and confirm circles/squares keep their proportions.
+6. Phase 2A styles: exercise black, gray, blue, red, green, yellow, cyan and
+   magenta plus thin, medium and thick lines. Confirm the user's original pen
+   palette and thickness are restored after success, failure and cancellation.
+7. Phase 2A alignment and text: compare left, centered and right labels; repeat
+   Chinese and Latin glyphs at equal sizes and confirm Beautify keeps one
+   output line per source line.
+8. One mixed answer containing a heading, list, bold and inline code, fenced
    code, a table and a vector block in the expected order.
-6. Beautify text does not answer a question embedded in the selection; it
+9. Beautify text does not answer a question embedded in the selection; it
    preserves the selected source and writes the transcription below it at
    approximately the lasso's original width, height and visual scale.
-7. Beautify a deliberately rough circle/box/arrow mind map. Confirm the result
+10. Beautify a deliberately rough circle/box/arrow mind map. Confirm the result
    preserves labels and connections while making circles round, boxes level,
    connectors straight and repeated nodes consistent.
-8. Test an offline or forced-error Beautify request and confirm the source
+11. Test an offline or forced-error Beautify request and confirm the source
    remains unchanged.
-9. Test Undo/Redo after both Beautify routes.
-10. Thinking, writing, success, cancellation and error notifications. Start a
+12. Test Undo/Redo after both Beautify routes.
+13. Thinking, writing, success, cancellation and error notifications. Start a
     slow request, press Cancel while it is thinking, then confirm no ink is
     written and the next request starts immediately.
-11. A GPT photo or ordinary illustration appears as a native image object; move
+14. A GPT photo or ordinary illustration appears as a native image object; move
    and resize it, then test Undo/Redo, close/reopen, reboot, export and sync.
-12. Start a GPT image request and change pages before it finishes; Paper Agent
+15. Start a GPT image request and change pages before it finishes; Paper Agent
     must reject the stale insertion and remove its temporary artifact.
     Also request a portrait image near the page bottom and confirm it is placed
     at the top of a newly created page instead of covering the selection.
-13. AI adaptive layout: verify a short answer remains at 100%, a longer answer
+16. AI adaptive layout: verify a short answer remains at 100%, a longer answer
     fits between 60% and 99%, and a result that cannot fit at 60% creates a new
-    native page and returns to 100% there.
-14. Beautify a lasso near the page bottom whose same-size result cannot fit;
+    native page that repeats the same 100%-to-60% fit policy. If it still needs
+    multiple pages at 60%, confirm every page keeps the same 60% scale.
+17. Beautify a lasso near the page bottom whose same-size result cannot fit;
     confirm Xochitl creates a new page and preserves the lasso-based visual size.
-15. Undo, move, resize, page save, reopen and sync behavior for native ink.
-16. Restart Xochitl during selection capture or before writeback. The old
+18. Undo, move, resize, page save, reopen and sync behavior for native ink.
+19. Restart Xochitl during selection capture or before writeback. The old
     request must stop, `scripts/doctor.sh` must report `coordinator_lock=clear`,
     and the next AI/Beautify request must start normally.
 
 Vector acceptance should also confirm that hatch density remains readable at
-small and large placements. Paper Agent deliberately keeps the active Xochitl
-ink color; per-command color, stroke width and dash state are not part of the
-current native vector format.
+small and large placements. Legacy vector results keep the active Xochitl ink
+style. Phase 2A Scene objects can request supported palette colors and three
+bounded pen widths; dash state is not implemented.
 
 Image generation can take substantially longer than text even with Pi thinking
 set to `off`. The default GPT Image quality is `low` to prioritize latency; it

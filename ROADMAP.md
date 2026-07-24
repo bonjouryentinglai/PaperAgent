@@ -11,30 +11,49 @@ release dates.
 - [x] Native text, tables, structured documents, and vector drawings.
 - [x] GPT-generated pictures inserted as notebook images.
 - [x] Traditional Chinese and Latin handwriting output.
-- [x] Progress, cancellation, new-page fallback, install, and rollback support.
+- [x] Progress, cancellation, adaptive multi-page text, install, and rollback
+  support.
 - [ ] Broader device, software, and physical acceptance coverage.
 
-## Phase 2A: drawing foundation — next
+## Phase 2A: drawing foundation — complete for developer preview
 
-- [ ] Introduce the first Paper Agent skills and tools.
-- [ ] Improve Chinese and Latin text consistency.
-- [ ] Preserve proportions for grids, circles, squares, and diagrams.
-- [ ] Support varied line weights, supported colors, alignment, and grouping.
-- [ ] Improve tables, Sudoku, mind maps, flowcharts, and charts.
-- [ ] Keep native ink as the default, with native images when appropriate.
+- [x] Introduce the first Paper Agent skills and two bounded output tools.
+- [x] Add a semantic Scene format for text, grids, diagrams, and charts.
+- [x] Preserve proportions for grids, circles, squares, and diagrams.
+- [x] Add varied line weights, supported colors, alignment, and logical-group
+  metadata for future native grouping.
+- [x] Keep native ink as the default, with native images when appropriate.
+- [ ] Continue release hardening on Move for palette colors, pen restoration,
+  lifecycle behavior, export, and sync.
 
-## Phase 2B: current-page agent
+## Phase 2A.1: current-page closed loop — deferred
 
-- [ ] Understand the selected content and available page space.
-- [ ] Choose the output type and placement automatically.
-- [ ] Combine text, tables, diagrams, and images in one response.
-- [ ] Verify, revise, or undo content created by Paper Agent.
-- [ ] Preserve original content unless a confirmed reversible action says
-  otherwise.
+- [x] Add and physically validate smooth semantic arcs and Bezier curves.
+- [ ] Plan and execute multiple tool outputs, such as native ink plus a GPT
+  image, in one request.
+- [ ] Verify and revise content after it is written to the page.
+- [ ] Treat one Paper Agent result as one reversible operation.
+- [ ] Support confirmed, undo-safe replacement of original content.
+
+Phase 2A already covers most everyday selection-assistant use. This long-tail
+follow-up is intentionally deferred.
+
+## Phase 2B: easy installation and onboarding
+
+- [ ] Ship one guided setup tool for macOS, Windows, and Linux.
+- [ ] Discover a connected Move and check developer mode, model, OS, storage,
+  and required dependencies before making changes.
+- [ ] Reuse the remagic installation stack for SSH, XOVI, and AppLoad instead
+  of rebuilding those foundations.
+- [ ] Download a checksum-verified Paper Agent release and install it with
+  automatic backup and rollback.
+- [ ] Guide ChatGPT subscription login while keeping OAuth credentials only on
+  the Move.
+- [ ] Verify the installation, then offer repair, update, and uninstall paths.
 
 ## Phase 3: multi-page creation
 
-- [ ] Continue long results across pages.
+- [x] Continue long text results across pages.
 - [ ] Create and navigate multiple pages for one task.
 - [ ] Apply suitable page templates and layouts.
 - [ ] Build calendars, planners, study packs, meeting notes, and workbooks.
@@ -57,6 +76,7 @@ release dates.
 - [ ] Build optional review, learning, and meeting workflows with clear privacy
   boundaries.
 
-The immediate contribution focus is **Phase 2A**. See
+The immediate contribution focus is **Phase 2B: easy installation and
+onboarding**. Phase 2A release hardening can continue in parallel. See
 [CONTRIBUTING.md](CONTRIBUTING.md) and [DEVELOPMENT.md](docs/DEVELOPMENT.md)
 before working on device integration.

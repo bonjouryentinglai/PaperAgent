@@ -29,12 +29,17 @@ const VECTOR_ANGLE_MAX: i32 = 360;
 const MAX_VECTOR_COMMANDS: usize = 256;
 const MAX_VECTOR_PATH_POINTS: usize = 64;
 const MAX_VECTOR_LABEL_CHARS: usize = 240;
+const MAX_SCENE_LABEL_CHARS: usize = 1_200;
 const MAX_VECTOR_OUTPUT_STROKES: usize = 512;
 const MAX_VECTOR_OUTPUT_POINTS: usize = 24_000;
 const MAX_VECTOR_PATH_STEPS: usize = 400_000;
-const QUADRATIC_SAMPLES: usize = 32;
-const CUBIC_SAMPLES: usize = 40;
+const MAX_SCENE_OUTPUT_STROKES: usize = MAX_OUTPUT_STROKES;
+const MAX_SCENE_OUTPUT_POINTS: usize = 96_000;
+const MAX_SCENE_PATH_STEPS: usize = 400_000;
 const MAX_ARC_SAMPLES: usize = 64;
+const CURVE_FLATNESS_PX: f32 = 0.35;
+const MAX_CURVE_SUBDIVISION_DEPTH: usize = 10;
+const MAX_ADAPTIVE_CURVE_POINTS: usize = 257;
 const HATCH_SPACING: i32 = 45;
 const MAX_HATCH_STROKES_PER_SHAPE: usize = 32;
 const DOT_RADIUS: i32 = 9;
@@ -55,6 +60,13 @@ enum DocumentBlockKind {
     Rich,
     Table,
     Vector,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum LabelAlignment {
+    Left,
+    Center,
+    Right,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -273,6 +285,30 @@ pub fn vector_to_job(
     canvas_width: u32,
     canvas_height: u32,
 ) -> Result<StrokeJob, String> {
+    vector_to_job_with_text_scale(
+        text,
+        target,
+        canvas_width,
+        canvas_height,
+        1,
+        MAX_VECTOR_OUTPUT_STROKES,
+        MAX_VECTOR_OUTPUT_POINTS,
+        MAX_VECTOR_PATH_STEPS,
+        MAX_VECTOR_LABEL_CHARS,
+    )
+}
+
+fn vector_to_job_with_text_scale(
+    text: &str,
+    target: Target,
+    canvas_width: u32,
+    canvas_height: u32,
+    text_scale: i32,
+    max_output_strokes: usize,
+    max_output_points: usize,
+    max_path_steps: usize,
+    max_label_chars: usize,
+) -> Result<StrokeJob, String> {
     validate_target(target, canvas_width, canvas_height)?;
     if text.chars().count() > MAX_INPUT_CHARS {
         return Err("vector input is too large".into());
@@ -316,11 +352,11 @@ pub fn vector_to_job(
             Some("curve") if fields.len() == 7 || fields.len() == 9 => {
                 let values = parse_vector_numbers(&fields[1..])?;
                 let points = if values.len() == 6 {
-                    quadratic_points(&values, QUADRATIC_SAMPLES)
+                    adaptive_quadratic_points(&values, target)
                 } else {
-                    cubic_points(&values, CUBIC_SAMPLES)
+                    adaptive_cubic_points(&values, target)
                 };
-                strokes.push(map_polyline(&points, target));
+                strokes.push(points);
             }
             Some("rect") if fields.len() == 5 => {
                 let values = parse_vector_numbers(&fields[1..])?;
@@ -385,9 +421,21 @@ pub fn vector_to_job(
                 let values = parse_arc_values(&fields[1..], "arc")?;
                 validate_ellipse_geometry(values[0], values[1], values[2], values[2], "arc")?;
                 validate_nonzero_sweep(values[3], values[4], "arc")?;
-                strokes.push(map_polyline(
-                    &arc_points(values[0], values[1], values[2], values[3], values[4]),
+                strokes.push(adaptive_arc_points(
+                    values[0],
+                    values[1],
+                    values[2],
+                    values[2],
+                    values[3],
+                    values[4] - values[3],
                     target,
+                ));
+            }
+            Some("ellarc") if fields.len() == 7 => {
+                let values = parse_ellarc_values(&fields[1..])?;
+                validate_ellipse_geometry(values[0], values[1], values[2], values[3], "ellarc")?;
+                strokes.push(adaptive_arc_points(
+                    values[0], values[1], values[2], values[3], values[4], values[5], target,
                 ));
             }
             Some("wedge") if fields.len() == 6 => {
@@ -416,25 +464,34 @@ pub fn vector_to_job(
                     strokes.push(map_polyline(&[(x1, y1), (head_x, head_y)], target));
                 }
             }
-            Some("label") if fields.len() >= 6 => {
+            Some("label" | "labelleft" | "labelright") if fields.len() >= 6 => {
                 let values = parse_vector_numbers(&fields[1..5])?;
                 if values[2] == 0 || values[3] == 0 {
                     return Err("vector label width and height must be positive".into());
                 }
                 validate_rect_geometry(values[0], values[1], values[2], values[3], "label")?;
                 let raw_text = fields[5..].join(" ");
-                if raw_text.chars().count() > MAX_VECTOR_LABEL_CHARS {
-                    return Err(format!(
-                        "vector label exceeds {MAX_VECTOR_LABEL_CHARS} characters"
-                    ));
+                if raw_text.chars().count() > max_label_chars {
+                    return Err(format!("vector label exceeds {max_label_chars} characters"));
                 }
                 let text = traditional::for_display(&raw_text);
                 let label_target =
                     map_vector_target(values[0], values[1], values[2], values[3], target)?;
                 let label_target =
                     expand_vector_label_target(label_target, target, text.chars().count());
-                let mut label_strokes = render_text_box(&text, label_target, 26, 72, 3, false)?;
-                center_strokes_in_target(&mut label_strokes, label_target);
+                let alignment = match fields[0] {
+                    "labelleft" => LabelAlignment::Left,
+                    "labelright" => LabelAlignment::Right,
+                    _ => LabelAlignment::Center,
+                };
+                let mut label_strokes = render_label_text_box(
+                    &text,
+                    label_target,
+                    26 * text_scale,
+                    72 * text_scale,
+                    3 * text_scale,
+                    alignment,
+                )?;
                 strokes.append(&mut label_strokes);
             }
             Some(command) => {
@@ -448,8 +505,39 @@ pub fn vector_to_job(
     if strokes.is_empty() {
         return Err("vector data contains no drawable commands".into());
     }
-    validate_vector_complexity(&strokes)?;
+    validate_vector_complexity(
+        &strokes,
+        max_output_strokes,
+        max_output_points,
+        max_path_steps,
+    )?;
     build_job(strokes, canvas_width, canvas_height)
+}
+
+/// Phase 2A scenes use the same bounded vector parser, but rasterize their
+/// labels and curves on the existing 2x logical canvas. The Marker writer maps
+/// that canvas back to the physical device, preserving half-pixel decisions
+/// without exposing a second model-facing drawing language.
+pub fn scene_vector_to_job(
+    text: &str,
+    target: Target,
+    canvas_width: u32,
+    canvas_height: u32,
+) -> Result<StrokeJob, String> {
+    validate_target(target, canvas_width, canvas_height)?;
+    let target = supersampled_target(target)?;
+    let (canvas_width, canvas_height) = supersampled_canvas(canvas_width, canvas_height)?;
+    vector_to_job_with_text_scale(
+        text,
+        target,
+        canvas_width,
+        canvas_height,
+        TEXT_SUPERSAMPLE,
+        MAX_SCENE_OUTPUT_STROKES,
+        MAX_SCENE_OUTPUT_POINTS,
+        MAX_SCENE_PATH_STEPS,
+        MAX_SCENE_LABEL_CHARS,
+    )
 }
 
 pub fn document_to_job(
@@ -1120,6 +1208,83 @@ fn normalized_input(text: &str) -> Result<String, String> {
     Ok(traditional::for_display(text))
 }
 
+fn render_label_text_box(
+    text: &str,
+    target: Target,
+    min_px: i32,
+    max_px: i32,
+    margin: i32,
+    alignment: LabelAlignment,
+) -> Result<Vec<Vec<Point>>, String> {
+    let available_width = target.width as i32 - margin * 2;
+    let available_height = target.height as i32 - margin * 2;
+    if available_width <= 0 || available_height <= 0 {
+        return Err("vector label placement has no usable area".into());
+    }
+    let text = text.trim();
+    if text.is_empty() || text.contains('\r') || text.contains('\n') {
+        return Err("vector label must contain exactly one non-empty line".into());
+    }
+
+    let mut selected = None;
+    for px in (min_px..=max_px).rev() {
+        let lines = handwriting::wrap(text, px as f32, available_width as f32);
+        let line_height = (px * 5 / 4).max(1);
+        let Some(block_height) = line_height.checked_mul(lines.len() as i32) else {
+            continue;
+        };
+        let raster_bounds_fit = lines.iter().all(|line| {
+            let raster = handwriting::rasterize_line(line, px as f32);
+            match raster_ink_bounds(&raster) {
+                Some((_, _, width, height)) => width <= available_width && height <= line_height,
+                None => false,
+            }
+        });
+        if !lines.is_empty() && block_height <= available_height && raster_bounds_fit {
+            selected = Some((px, line_height, lines));
+            break;
+        }
+    }
+    let Some((px, line_height, lines)) = selected else {
+        return Err("vector label does not fit its requested box".into());
+    };
+    let block_height = line_height * lines.len() as i32;
+    let mut line_top = target.y + margin + (available_height - block_height) / 2;
+    let mut strokes = Vec::new();
+    for line in lines {
+        let raster = handwriting::rasterize_line(&line, px as f32);
+        let Some((min_x, min_y, width, height)) = raster_ink_bounds(&raster) else {
+            line_top += line_height;
+            continue;
+        };
+        if width > available_width || height > line_height {
+            return Err("vector label does not fit its requested box".into());
+        }
+        let x = match alignment {
+            LabelAlignment::Left => target.x + margin,
+            LabelAlignment::Center => target.x + margin + (available_width - width) / 2,
+            LabelAlignment::Right => target.x + target.width as i32 - margin - width,
+        };
+        let y = line_top + (line_height - height) / 2;
+        for stroke in handwriting::trace_line(raster) {
+            let mapped = stroke
+                .into_iter()
+                .map(|(point_x, point_y)| Point {
+                    x: x + point_x - min_x,
+                    y: y + point_y - min_y,
+                })
+                .filter(|point| contains(target, *point))
+                .collect();
+            add_stroke(&mut strokes, mapped, target, false);
+        }
+        line_top += line_height;
+    }
+    if strokes.is_empty() {
+        return Err("vector label produced no drawable strokes".into());
+    }
+    Ok(strokes)
+}
+
 fn render_text_box(
     text: &str,
     target: Target,
@@ -1515,6 +1680,33 @@ fn parse_arc_values(fields: &[&str], command: &str) -> Result<Vec<i32>, String> 
     Ok(values)
 }
 
+fn parse_ellarc_values(fields: &[&str]) -> Result<Vec<i32>, String> {
+    if fields.len() != 6 {
+        return Err("malformed vector ellarc command".into());
+    }
+    let mut values = parse_vector_numbers(&fields[..4])?;
+    let start = fields[4]
+        .parse::<i32>()
+        .map_err(|_| format!("invalid vector angle '{}'", fields[4]))?;
+    if !(0..VECTOR_ANGLE_MAX).contains(&start) {
+        return Err(format!(
+            "vector angle {start} is outside 0..{}",
+            VECTOR_ANGLE_MAX - 1
+        ));
+    }
+    let sweep = fields[5]
+        .parse::<i32>()
+        .map_err(|_| format!("invalid vector sweep angle '{}'", fields[5]))?;
+    if sweep == 0 || !(-VECTOR_ANGLE_MAX..=VECTOR_ANGLE_MAX).contains(&sweep) {
+        return Err(format!(
+            "vector ellarc sweep {sweep} must be non-zero within -{VECTOR_ANGLE_MAX}..={VECTOR_ANGLE_MAX}"
+        ));
+    }
+    values.push(start);
+    values.push(sweep);
+    Ok(values)
+}
+
 fn vector_pairs(
     values: &[i32],
     minimum_points: usize,
@@ -1623,50 +1815,128 @@ fn validate_nonzero_sweep(start: i32, end: i32, command: &str) -> Result<(), Str
     Ok(())
 }
 
-fn quadratic_points(values: &[i32], samples: usize) -> Vec<(i32, i32)> {
-    let (p0, control, p1) = (
-        (values[0] as f32, values[1] as f32),
-        (values[2] as f32, values[3] as f32),
-        (values[4] as f32, values[5] as f32),
-    );
-    (0..=samples)
-        .map(|step| {
-            let t = step as f32 / samples as f32;
-            let u = 1.0 - t;
-            (
-                (u * u * p0.0 + 2.0 * u * t * control.0 + t * t * p1.0).round() as i32,
-                (u * u * p0.1 + 2.0 * u * t * control.1 + t * t * p1.1).round() as i32,
-            )
-        })
-        .collect()
+#[derive(Clone, Copy)]
+struct FloatPoint {
+    x: f32,
+    y: f32,
 }
 
-fn cubic_points(values: &[i32], samples: usize) -> Vec<(i32, i32)> {
-    let (p0, control0, control1, p1) = (
-        (values[0] as f32, values[1] as f32),
-        (values[2] as f32, values[3] as f32),
-        (values[4] as f32, values[5] as f32),
-        (values[6] as f32, values[7] as f32),
-    );
-    (0..=samples)
-        .map(|step| {
-            let t = step as f32 / samples as f32;
-            let u = 1.0 - t;
-            let (u2, t2) = (u * u, t * t);
-            (
-                (u2 * u * p0.0
-                    + 3.0 * u2 * t * control0.0
-                    + 3.0 * u * t2 * control1.0
-                    + t2 * t * p1.0)
-                    .round() as i32,
-                (u2 * u * p0.1
-                    + 3.0 * u2 * t * control0.1
-                    + 3.0 * u * t2 * control1.1
-                    + t2 * t * p1.1)
-                    .round() as i32,
-            )
-        })
-        .collect()
+fn midpoint(left: FloatPoint, right: FloatPoint) -> FloatPoint {
+    FloatPoint {
+        x: (left.x + right.x) * 0.5,
+        y: (left.y + right.y) * 0.5,
+    }
+}
+
+fn distance_to_line(point: FloatPoint, start: FloatPoint, end: FloatPoint) -> f32 {
+    let dx = end.x - start.x;
+    let dy = end.y - start.y;
+    let length = (dx * dx + dy * dy).sqrt();
+    if length <= f32::EPSILON {
+        return ((point.x - start.x).powi(2) + (point.y - start.y).powi(2)).sqrt();
+    }
+    ((dy * point.x - dx * point.y + end.x * start.y - end.y * start.x).abs()) / length
+}
+
+fn map_vector_float_point(x: f32, y: f32, target: Target) -> FloatPoint {
+    let margin = 10.0;
+    let width = (target.width as f32 - margin * 2.0 - 1.0).max(1.0);
+    let height = (target.height as f32 - margin * 2.0 - 1.0).max(1.0);
+    FloatPoint {
+        x: target.x as f32
+            + margin
+            + x.clamp(0.0, VECTOR_COORD_MAX as f32) * width / VECTOR_COORD_MAX as f32,
+        y: target.y as f32
+            + margin
+            + y.clamp(0.0, VECTOR_COORD_MAX as f32) * height / VECTOR_COORD_MAX as f32,
+    }
+}
+
+fn push_float_point(points: &mut Vec<Point>, point: FloatPoint) {
+    let point = Point {
+        x: point.x.round() as i32,
+        y: point.y.round() as i32,
+    };
+    if points.last() != Some(&point) {
+        points.push(point);
+    }
+}
+
+fn subdivide_quadratic(
+    start: FloatPoint,
+    control: FloatPoint,
+    end: FloatPoint,
+    depth: usize,
+    points: &mut Vec<Point>,
+) {
+    if depth >= MAX_CURVE_SUBDIVISION_DEPTH
+        || points.len() >= MAX_ADAPTIVE_CURVE_POINTS - 1
+        || distance_to_line(control, start, end) <= CURVE_FLATNESS_PX
+    {
+        push_float_point(points, end);
+        return;
+    }
+    let start_control = midpoint(start, control);
+    let control_end = midpoint(control, end);
+    let middle = midpoint(start_control, control_end);
+    subdivide_quadratic(start, start_control, middle, depth + 1, points);
+    subdivide_quadratic(middle, control_end, end, depth + 1, points);
+}
+
+fn adaptive_quadratic_points(values: &[i32], target: Target) -> Vec<Point> {
+    let start = map_vector_float_point(values[0] as f32, values[1] as f32, target);
+    let control = map_vector_float_point(values[2] as f32, values[3] as f32, target);
+    let end = map_vector_float_point(values[4] as f32, values[5] as f32, target);
+    let mut points = Vec::with_capacity(65);
+    push_float_point(&mut points, start);
+    subdivide_quadratic(start, control, end, 0, &mut points);
+    points[0] = map_polyline(&[(values[0], values[1])], target)[0];
+    if let Some(last) = points.last_mut() {
+        *last = map_polyline(&[(values[4], values[5])], target)[0];
+    }
+    points
+}
+
+fn subdivide_cubic(
+    start: FloatPoint,
+    control0: FloatPoint,
+    control1: FloatPoint,
+    end: FloatPoint,
+    depth: usize,
+    points: &mut Vec<Point>,
+) {
+    let flatness =
+        distance_to_line(control0, start, end).max(distance_to_line(control1, start, end));
+    if depth >= MAX_CURVE_SUBDIVISION_DEPTH
+        || points.len() >= MAX_ADAPTIVE_CURVE_POINTS - 1
+        || flatness <= CURVE_FLATNESS_PX
+    {
+        push_float_point(points, end);
+        return;
+    }
+    let p01 = midpoint(start, control0);
+    let p12 = midpoint(control0, control1);
+    let p23 = midpoint(control1, end);
+    let p012 = midpoint(p01, p12);
+    let p123 = midpoint(p12, p23);
+    let middle = midpoint(p012, p123);
+    subdivide_cubic(start, p01, p012, middle, depth + 1, points);
+    subdivide_cubic(middle, p123, p23, end, depth + 1, points);
+}
+
+fn adaptive_cubic_points(values: &[i32], target: Target) -> Vec<Point> {
+    let start = map_vector_float_point(values[0] as f32, values[1] as f32, target);
+    let control0 = map_vector_float_point(values[2] as f32, values[3] as f32, target);
+    let control1 = map_vector_float_point(values[4] as f32, values[5] as f32, target);
+    let end = map_vector_float_point(values[6] as f32, values[7] as f32, target);
+    let mut points = Vec::with_capacity(97);
+    push_float_point(&mut points, start);
+    subdivide_cubic(start, control0, control1, end, 0, &mut points);
+    points[0] = map_polyline(&[(values[0], values[1])], target)[0];
+    if let Some(last) = points.last_mut() {
+        *last = map_polyline(&[(values[6], values[7])], target)[0];
+    }
+    points
 }
 
 fn fixed_arc_points(
@@ -1692,6 +1962,40 @@ fn fixed_arc_points(
 fn arc_points(cx: i32, cy: i32, radius: i32, start: i32, end: i32) -> Vec<(i32, i32)> {
     let samples = (((end - start).unsigned_abs() as usize + 5) / 6).clamp(4, MAX_ARC_SAMPLES);
     fixed_arc_points(cx, cy, radius, start, end, samples)
+}
+
+fn adaptive_arc_points(
+    cx: i32,
+    cy: i32,
+    rx: i32,
+    ry: i32,
+    start: i32,
+    sweep: i32,
+    target: Target,
+) -> Vec<Point> {
+    let center = map_vector_float_point(cx as f32, cy as f32, target);
+    let radius_x = (map_vector_float_point((cx + rx) as f32, cy as f32, target).x - center.x).abs();
+    let radius_y = (map_vector_float_point(cx as f32, (cy + ry) as f32, target).y - center.y).abs();
+    let maximum_radius = radius_x.max(radius_y).max(1.0);
+    let cosine = (1.0 - CURVE_FLATNESS_PX / maximum_radius).clamp(-1.0, 1.0);
+    let maximum_step = (2.0 * cosine.acos()).max(PI / 180.0);
+    let sweep_radians = sweep as f32 * PI / 180.0;
+    let samples = ((sweep_radians.abs() / maximum_step).ceil() as usize)
+        .clamp(4, MAX_ADAPTIVE_CURVE_POINTS - 1);
+    let mut points = Vec::with_capacity(samples + 1);
+    for step in 0..=samples {
+        let degrees = start as f32 + sweep as f32 * step as f32 / samples as f32;
+        let angle = degrees * PI / 180.0;
+        push_float_point(
+            &mut points,
+            map_vector_float_point(
+                cx as f32 + rx as f32 * angle.cos(),
+                cy as f32 + ry as f32 * angle.sin(),
+                target,
+            ),
+        );
+    }
+    points
 }
 
 fn ellipse_points(cx: i32, cy: i32, rx: i32, ry: i32) -> Vec<(i32, i32)> {
@@ -1823,28 +2127,29 @@ fn append_dot(strokes: &mut Vec<Vec<Point>>, x: i32, y: i32, target: Target) {
     strokes.push(map_polyline(&[(x, top), (x, bottom)], target));
 }
 
-fn validate_vector_complexity(strokes: &[Vec<Point>]) -> Result<(), String> {
-    if strokes.len() > MAX_VECTOR_OUTPUT_STROKES {
-        return Err(format!(
-            "vector expands past {MAX_VECTOR_OUTPUT_STROKES} strokes"
-        ));
+fn validate_vector_complexity(
+    strokes: &[Vec<Point>],
+    max_strokes: usize,
+    max_points: usize,
+    max_path_steps: usize,
+) -> Result<(), String> {
+    if strokes.len() > max_strokes {
+        return Err(format!("vector expands past {max_strokes} strokes"));
     }
     let mut points = 0usize;
     let mut path_steps = strokes.len();
     for stroke in strokes {
         points = points.saturating_add(stroke.len());
-        if points > MAX_VECTOR_OUTPUT_POINTS {
-            return Err(format!(
-                "vector expands past {MAX_VECTOR_OUTPUT_POINTS} source points"
-            ));
+        if points > max_points {
+            return Err(format!("vector expands past {max_points} source points"));
         }
         for pair in stroke.windows(2) {
             let dx = (pair[1].x - pair[0].x).unsigned_abs() as usize;
             let dy = (pair[1].y - pair[0].y).unsigned_abs() as usize;
             path_steps = path_steps.saturating_add(dx.max(dy).max(1));
-            if path_steps > MAX_VECTOR_PATH_STEPS {
+            if path_steps > max_path_steps {
                 return Err(format!(
-                    "vector expands past {MAX_VECTOR_PATH_STEPS} planned path points"
+                    "vector expands past {max_path_steps} planned path points"
                 ));
             }
         }
@@ -1894,6 +2199,11 @@ fn map_vector_target(
 }
 
 fn expand_vector_label_target(label: Target, container: Target, characters: usize) -> Target {
+    // Tiny node labels need a minimum drawing area, but prose belongs inside
+    // the model-provided box so it wraps instead of widening across a diagram.
+    if characters > 12 {
+        return label;
+    }
     let container_right = container.x + container.width as i32;
     let container_bottom = container.y + container.height as i32;
     let maximum_width = (container.width as i32 - 8).max(24);
@@ -2171,8 +2481,75 @@ mod tests {
     }
 
     #[test]
+    fn phase_2a_scene_uses_the_supersampled_native_canvas() {
+        let scene = "paper-agent-vector 1\ncircle 500 500 240\nlabel 300 420 400 160 月月";
+        let job = scene_vector_to_job(scene, target(), 954, 1696).unwrap();
+        assert_eq!((job.canvas_width, job.canvas_height), (1907, 3391));
+        assert!(!job.strokes.is_empty());
+        let rendered_target = supersampled_target(target()).unwrap();
+        assert!(job
+            .strokes
+            .iter()
+            .flatten()
+            .all(|point| contains(rendered_target, *point)));
+    }
+
+    #[test]
+    fn semantic_arc_and_bezier_paths_are_adaptively_sampled() {
+        let rendered_target = supersampled_target(target()).unwrap();
+        let arc = adaptive_arc_points(500, 500, 300, 180, 180, 180, rendered_target);
+        let quadratic = adaptive_quadratic_points(&[100, 800, 500, 100, 900, 800], rendered_target);
+        let cubic =
+            adaptive_cubic_points(&[100, 800, 300, 100, 700, 900, 900, 200], rendered_target);
+        assert!(arc.len() > 32);
+        assert!(quadratic.len() > 16);
+        assert!(cubic.len() > 16);
+        assert!(arc.len() <= MAX_ADAPTIVE_CURVE_POINTS);
+        assert!(quadratic.len() <= MAX_ADAPTIVE_CURVE_POINTS);
+        assert!(cubic.len() <= MAX_ADAPTIVE_CURVE_POINTS);
+        assert_eq!(
+            quadratic.first(),
+            Some(&map_polyline(&[(100, 800)], rendered_target)[0])
+        );
+        assert_eq!(
+            quadratic.last(),
+            Some(&map_polyline(&[(900, 800)], rendered_target)[0])
+        );
+    }
+
+    #[test]
+    fn scene_renderer_accepts_an_elliptical_arc_command() {
+        let scene = "paper-agent-vector 1\nellarc 500 500 300 180 180 180";
+        let job = scene_vector_to_job(scene, target(), 954, 1696).unwrap();
+        assert_eq!(job.strokes.len(), 1);
+        assert!(job.strokes[0].len() > 32);
+    }
+
+    #[test]
+    fn phase_2a_scene_labels_honor_horizontal_alignment_without_rewrapping() {
+        let box_target = Target {
+            x: 100,
+            y: 300,
+            width: 500,
+            height: 120,
+        };
+        let left =
+            render_label_text_box("Paper Agent", box_target, 26, 72, 6, LabelAlignment::Left)
+                .unwrap();
+        let right =
+            render_label_text_box("Paper Agent", box_target, 26, 72, 6, LabelAlignment::Right)
+                .unwrap();
+        let (left_min, _, left_max, _) = stroke_bounds(&left).unwrap();
+        let (right_min, _, right_max, _) = stroke_bounds(&right).unwrap();
+        assert!((left_min - (box_target.x + 6)).abs() <= 3);
+        assert!((right_max - (box_target.x + box_target.width as i32 - 7)).abs() <= 3);
+        assert!(right_min > left_min);
+        assert!(right_max > left_max);
+    }
+
+    #[test]
     fn accepts_only_the_bounded_vector_language() {
-        let vector = "paper-agent-vector 1\nrect 100 100 300 200\narrow 400 200 800 700\ncircle 500 500 120\nlabel 100 50 300 100 Start\npolygon 100 400 250 300 400 400\ncurve 100 500 250 350 400 500\ncurve 450 500 550 350 650 650 750 500\nrrect 500 100 300 200 40\narc 500 500 120 0 180\nwedge 500 500 120 180 360\ndot 500 500\nfillpoly 100 700 250 550 400 700\nbox 600 700 200 150\ndisc 700 500 80\nfillellipse 300 800 160 80";
+        let vector = "paper-agent-vector 1\nrect 100 100 300 200\narrow 400 200 800 700\ncircle 500 500 120\nlabel 100 50 300 100 Start\nlabelleft 20 850 220 80 Left\nlabelright 760 850 220 80 Right\npolygon 100 400 250 300 400 400\ncurve 100 500 250 350 400 500\ncurve 450 500 550 350 650 650 750 500\nrrect 500 100 300 200 40\narc 500 500 120 0 180\nellarc 500 500 160 80 180 180\nwedge 500 500 120 180 360\ndot 500 500\nfillpoly 100 700 250 550 400 700\nbox 600 700 200 150\ndisc 700 500 80\nfillellipse 300 800 160 80";
         let job = vector_to_job(vector, target(), 954, 1696).unwrap();
         assert!(job.strokes.len() >= 30);
         assert!(job
@@ -2181,6 +2558,53 @@ mod tests {
             .flatten()
             .all(|point| contains(target(), *point)));
         assert!(vector_to_job("<svg><script/></svg>", target(), 954, 1696).is_err());
+    }
+
+    #[test]
+    fn scene_labels_wrap_beyond_the_legacy_vector_label_limit() {
+        let long_label = "Paper Agent wraps long diagram annotations inside the model-provided label box without treating ordinary prose as a tiny one-line caption. ".repeat(3);
+        assert!(long_label.chars().count() > MAX_VECTOR_LABEL_CHARS);
+        let scene = format!(
+            "{VECTOR_HEADER}\nrect 20 20 960 960\nlabelleft 50 50 900 900 {}",
+            long_label.trim()
+        );
+        let job = scene_vector_to_job(&scene, target(), 954, 1696).unwrap();
+        assert!(!job.strokes.is_empty());
+        assert!(vector_to_job(&scene, target(), 954, 1696)
+            .unwrap_err()
+            .contains("240 characters"));
+    }
+
+    #[test]
+    fn sentence_labels_wrap_inside_their_provided_box() {
+        let label = Target {
+            x: 100,
+            y: 100,
+            width: 220,
+            height: 260,
+        };
+        assert_eq!(expand_vector_label_target(label, target(), 64), label);
+        let strokes = render_label_text_box(
+            "This complete sentence should wrap inside a diagram box at a readable size.",
+            label,
+            26,
+            72,
+            6,
+            LabelAlignment::Center,
+        )
+        .unwrap();
+        let (_, min_y, _, max_y) = stroke_bounds(&strokes).unwrap();
+        assert!(
+            max_y - min_y > 72,
+            "the sentence should occupy multiple lines"
+        );
+    }
+
+    #[test]
+    fn scene_labels_render_common_unicode_symbols() {
+        let scene = format!("{VECTOR_HEADER}\nlabel 50 50 900 900 ♔ ♕ ♖ ♗ ♘ ♙");
+        let job = scene_vector_to_job(&scene, target(), 954, 1696).unwrap();
+        assert!(!job.strokes.is_empty());
     }
 
     #[test]

@@ -28,10 +28,12 @@ Paper Pro Move. Lasso something in your notebook, then choose one of two actions
   </tr>
 </table>
 
-Text, tables, and vector drawings are written back as native ink, so they remain
-selectable, movable, resizable, and undoable. Generated pictures are inserted
-as native notebook images. Long-running thinking and image-generation requests
-can be cancelled from the on-device status bar.
+Text, tables, Sudoku grids, diagrams, and charts are described as semantic
+Scenes and written back as native ink, so they remain selectable, movable,
+resizable, and undoable. Scene geometry preserves proportions and can use the
+normal Xochitl palette plus thin, medium, and thick lines. Generated pictures
+are inserted as native notebook images. Long-running thinking and
+image-generation requests can be cancelled from the on-device status bar.
 
 > [!WARNING]
 > Paper Agent is a developer preview for the Paper Pro Move (`chiappa`). It
@@ -152,6 +154,7 @@ communities. Special thanks to:
   image-paste foundations adapted by Paper Agent.
 - [alefaraci/xovi-qmd-extensions](https://github.com/alefaraci/xovi-qmd-extensions)
   and
+  [FouzR/xovi-extensions](https://github.com/FouzR/xovi-extensions), plus
   [StarNumber12046/xovi-qmd-extensions](https://github.com/StarNumber12046/xovi-qmd-extensions)
   for QMD techniques used in pen restoration and native page creation.
 - [smart_remarkable](https://github.com/yangg1224/smart_remarkable) by Brock

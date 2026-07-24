@@ -303,15 +303,30 @@ async function generatePng(prompt, credential) {
   }
   const encoded = imagePayloadFromSse(await readLimitedText(response));
   if (encoded.length > MAX_PNG_BYTES * 2) throw new Error("generated image exceeded the size limit");
-  if (
-    encoded.length % 4 !== 0 ||
-    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(encoded)
-  ) {
-    throw new Error("ChatGPT returned malformed image data");
-  }
-  const png = Buffer.from(encoded, "base64");
+  const png = decodeBase64Image(encoded);
   validatePng(png);
   return png;
+}
+
+function decodeBase64Image(encoded) {
+  if (typeof encoded !== "string" || encoded.length === 0 || encoded.length % 4 !== 0) {
+    throw new Error("ChatGPT returned malformed image data");
+  }
+  let contentLength = encoded.length;
+  if (encoded.endsWith("==")) contentLength -= 2;
+  else if (encoded.endsWith("=")) contentLength -= 1;
+  for (let index = 0; index < encoded.length; index += 1) {
+    const code = encoded.charCodeAt(index);
+    const base64 = (code >= 65 && code <= 90)
+      || (code >= 97 && code <= 122)
+      || (code >= 48 && code <= 57)
+      || code === 43
+      || code === 47;
+    if (index < contentLength ? !base64 : code !== 61) {
+      throw new Error("ChatGPT returned malformed image data");
+    }
+  }
+  return Buffer.from(encoded, "base64");
 }
 
 function crc32(buffer) {
@@ -441,6 +456,7 @@ async function writePng(path, png) {
 export {
   accountIdFor,
   buildRequestBody,
+  decodeBase64Image,
   imagePayloadFromSse,
   validateCredential,
   validatePng,

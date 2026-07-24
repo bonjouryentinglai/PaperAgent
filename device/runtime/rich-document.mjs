@@ -19,6 +19,7 @@ const MAX_VECTOR_PATH_POINTS = 64;
 const MAX_VECTOR_LABEL_CHARS = 240;
 const MAX_VECTOR_ESTIMATED_STROKES = 512;
 const MAX_VECTOR_ESTIMATED_POINTS = 24_000;
+const MAX_ADAPTIVE_CURVE_POINTS = 257;
 
 function fenceStart(line) {
   const match = line.match(/^ {0,3}(`{3,}|~{3,})\s*([^\s`]*)\s*$/u);
@@ -58,12 +59,18 @@ function isTableStart(lines, index) {
     && secondLine.startsWith("|") && secondLine.endsWith("|");
 }
 
-export function validateVectorBody(body) {
+export function validateVectorBody(body, limits = {}) {
+  const maxCommands = limits.maxCommands ?? MAX_VECTOR_COMMANDS;
+  const maxLabelChars = limits.maxLabelChars ?? MAX_VECTOR_LABEL_CHARS;
+  const maxEstimatedStrokes = limits.maxEstimatedStrokes ?? MAX_VECTOR_ESTIMATED_STROKES;
+  const maxEstimatedPoints = limits.maxEstimatedPoints ?? MAX_VECTOR_ESTIMATED_POINTS;
+  const labelStrokesPerCharacter = limits.labelStrokesPerCharacter ?? 0;
+  const labelPointsPerCharacter = limits.labelPointsPerCharacter ?? 0;
   const lines = body.split("\n").map((line) => line.trim()).filter(Boolean);
   if (lines.shift() !== VECTOR_HEADER) throw new Error(`vector block must start with '${VECTOR_HEADER}'`);
   if (lines.length === 0) throw new Error("vector block contains no commands");
-  if (lines.length > MAX_VECTOR_COMMANDS) {
-    throw new Error(`vector block exceeds ${MAX_VECTOR_COMMANDS} commands`);
+  if (lines.length > maxCommands) {
+    throw new Error(`vector block exceeds ${maxCommands} commands`);
   }
 
   let estimatedStrokes = 0;
@@ -71,6 +78,12 @@ export function validateVectorBody(body) {
   const boundedIntegers = (command, values, maximum = 1000, kind = "coordinate") => {
     if (!values.every((value) => /^\d{1,4}$/u.test(value) && Number(value) <= maximum)) {
       throw new Error(`vector command '${command}' has a ${kind} outside 0..=${maximum}`);
+    }
+    return values.map(Number);
+  };
+  const boundedSignedIntegers = (command, values, maximum, kind) => {
+    if (!values.every((value) => /^-?\d{1,4}$/u.test(value) && Math.abs(Number(value)) <= maximum)) {
+      throw new Error(`vector command '${command}' has a ${kind} outside -${maximum}..=${maximum}`);
     }
     return values.map(Number);
   };
@@ -105,6 +118,7 @@ export function validateVectorBody(body) {
     const command = fields[0];
     let coordinates = [];
     let angles = [];
+    let signedAngles = [];
     let commandStrokes = 1;
     let commandPoints = 2;
     if (command === "line" || command === "arrow") {
@@ -157,35 +171,43 @@ export function validateVectorBody(body) {
         throw new Error("malformed vector curve command");
       }
       coordinates = fields.slice(1);
-      commandPoints = fields.length === 7 ? 33 : 41;
+      commandPoints = MAX_ADAPTIVE_CURVE_POINTS;
     } else if (command === "arc" || command === "wedge") {
       if (fields.length !== 6) throw new Error(`malformed vector ${command} command`);
       coordinates = fields.slice(1, 4);
       angles = fields.slice(4);
-      commandPoints = 65;
+      commandPoints = MAX_ADAPTIVE_CURVE_POINTS;
       if (command === "wedge") {
         commandStrokes = 33;
-        commandPoints += 66;
+        commandPoints += MAX_ADAPTIVE_CURVE_POINTS + 1;
       }
+    } else if (command === "ellarc") {
+      if (fields.length !== 7) throw new Error("malformed vector ellarc command");
+      coordinates = fields.slice(1, 5);
+      angles = fields.slice(5, 6);
+      signedAngles = fields.slice(6);
+      commandPoints = MAX_ADAPTIVE_CURVE_POINTS;
     } else if (command === "dot") {
       if (fields.length !== 3) throw new Error("malformed vector dot command");
       coordinates = fields.slice(1);
       commandStrokes = 2;
       commandPoints = 4;
-    } else if (command === "label") {
+    } else if (["label", "labelleft", "labelright"].includes(command)) {
       if (fields.length < 6) throw new Error("malformed vector label command");
       coordinates = fields.slice(1, 5);
-      if ([...fields.slice(5).join(" ")].length > MAX_VECTOR_LABEL_CHARS) {
-        throw new Error(`vector label exceeds ${MAX_VECTOR_LABEL_CHARS} characters`);
+      const labelCharacters = [...fields.slice(5).join(" ")].length;
+      if (labelCharacters > maxLabelChars) {
+        throw new Error(`vector label exceeds ${maxLabelChars} characters`);
       }
-      commandStrokes = 1;
-      commandPoints = 2;
+      commandStrokes = Math.max(1, labelCharacters * labelStrokesPerCharacter);
+      commandPoints = Math.max(2, labelCharacters * labelPointsPerCharacter);
     } else {
       throw new Error(`unsupported vector command '${command}'`);
     }
 
     const values = boundedIntegers(command, coordinates);
     const angleValues = boundedIntegers(command, angles, 360, "angle");
+    const signedAngleValues = boundedSignedIntegers(command, signedAngles, 360, "sweep angle");
     if (["rect", "box", "rrect", "label"].includes(command)) {
       validateRect(command, values);
     }
@@ -197,22 +219,30 @@ export function validateVectorBody(body) {
     }
     if (["circle", "disc", "arc", "wedge"].includes(command)) {
       validateEllipse(command, values.slice(0, 3));
-    } else if (["ellipse", "fillellipse"].includes(command)) {
+    } else if (["ellipse", "fillellipse", "ellarc"].includes(command)) {
       validateEllipse(command, values);
     }
     if ((command === "arc" || command === "wedge") && angleValues[0] === angleValues[1]) {
       throw new Error(`vector ${command} angle sweep must be nonzero`);
     }
+    if (command === "ellarc" && signedAngleValues[0] === 0) {
+      throw new Error("vector ellarc sweep angle must be nonzero");
+    }
 
     estimatedStrokes += commandStrokes;
     estimatedPoints += commandPoints;
-    if (estimatedStrokes > MAX_VECTOR_ESTIMATED_STROKES) {
-      throw new Error(`vector expands past ${MAX_VECTOR_ESTIMATED_STROKES} strokes`);
+    if (estimatedStrokes > maxEstimatedStrokes) {
+      throw new Error(`vector expands past ${maxEstimatedStrokes} strokes`);
     }
-    if (estimatedPoints > MAX_VECTOR_ESTIMATED_POINTS) {
-      throw new Error(`vector expands past ${MAX_VECTOR_ESTIMATED_POINTS} source points`);
+    if (estimatedPoints > maxEstimatedPoints) {
+      throw new Error(`vector expands past ${maxEstimatedPoints} source points`);
     }
   }
+  limits.onStats?.({
+    commands: lines.length,
+    estimatedStrokes,
+    estimatedPoints,
+  });
   return body.trim();
 }
 

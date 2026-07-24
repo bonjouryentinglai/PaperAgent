@@ -21,7 +21,10 @@ PaperAgent/
 │   │   └── Cargo.toml
 │   ├── qmd/
 │   │   └── paper-agent-selection.qmd # Xochitl AI and Beautify menu actions
-│   ├── runtime/                      # Local model, parser and orchestration code
+│   ├── runtime/                      # Local model, Scene parser and orchestration code
+│   │   ├── paper-agent-tools.ts      # Two terminating Pi tool schemas
+│   │   ├── scene.mjs                 # Scene v1 validation and compilation
+│   │   └── skills/                   # Fixed AI, drawing and Beautify policies
 │   └── systemd/                      # On-device Paper Agent service definition
 ├── docs/
 │   ├── assets/

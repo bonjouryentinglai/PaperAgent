@@ -747,10 +747,10 @@ AFFECT [[1224665461898798997]]
 	END TRAVERSE
 END AFFECT
 
-; Restore the primary pen through Xochitl's own toolbar model. This is adapted
-; from the 3.27 gestik implementation in alefaraci/xovi-qmd-extensions, which
-; uses selectPen("primary") plus documentViewTools.activeTool instead of a
-; device-specific synthetic tap.
+; Restore and temporarily style the primary pen through Xochitl's own toolbar
+; model. The color/thickness fields are adapted from FouzR/xovi-extensions
+; 3.27 at c49e4654d33e5d8b65ce1a8c5eef45454a19a999. The whole QMD remains
+; GPL-3.0-only; see THIRD_PARTY_NOTICES.md.
 AFFECT [[11313888899523275277]]
 	IMPORT net.asivery.XoviMessageBroker [[180923.180921]]
 	IMPORT net.asivery.CommandExecutor [[180922.180921]]
@@ -760,12 +760,31 @@ AFFECT [[11313888899523275277]]
 		XoviMessageBroker {
 			id: paperAgentToolBroker
 			listeningFor: ["paper-agent$tool"]
+			property bool paperAgentStyleSaved: false
+			property var paperAgentOriginalPalette: 0
+			property var paperAgentOriginalRgb: 0
+			property var paperAgentOriginalThickness: 0
+			function paperAgentRestoreStyle() {
+				if (!paperAgentStyleSaved) return
+				~&7842069035455457876&~.~&254522140932088040&~.~&254525455067777027&~ =
+					paperAgentOriginalRgb
+				~&7842069035455457876&~.~&254522140932088040&~.~&214622605608&~ =
+					paperAgentOriginalPalette
+				~&7842069035455457876&~.~&254522140932088040&~.~&254549061334391125&~ =
+					paperAgentOriginalThickness
+				paperAgentStyleSaved = false
+			}
 			function onSignalReceived(signal, message) {
 				if (signal !== "paper-agent$tool") return
 				var fields = String(message).split(",")
-				if (fields[0] !== "primary" || (fields.length !== 1 && fields.length !== 3)) return
-				var requestId = fields.length === 3 ? fields[1] : ""
-				var sequence = fields.length === 3 ? fields[2] : ""
+				var operation = fields[0]
+				if ((operation !== "primary" && operation !== "restore")
+						|| (operation === "primary" && fields.length !== 1
+							&& fields.length !== 3 && fields.length !== 5)
+						|| (operation === "restore" && fields.length !== 1
+							&& fields.length !== 3)) return
+				var requestId = fields.length >= 3 ? fields[1] : ""
+				var sequence = fields.length >= 3 ? fields[2] : ""
 				if (requestId && (!/^[0-9]{10,20}$/.test(requestId)
 						|| !/^[0-9]{1,4}$/.test(sequence))) return
 				try {
@@ -789,10 +808,31 @@ AFFECT [[11313888899523275277]]
 					}
 					if (~&7842069035455457876&~.~&8399230650759060099&~ !== "primary")
 						throw new Error("Xochitl active tool did not become primary")
+					if (operation === "restore") {
+						paperAgentRestoreStyle()
+					} else if (fields.length === 5) {
+						var palette = Number(fields[3])
+						var thickness = Number(fields[4])
+						if (!isFinite(palette) || palette < 0 || palette > 13
+								|| !isFinite(thickness) || thickness < 0.5 || thickness > 5)
+							throw new Error("Paper Agent pen style is outside safe bounds")
+						if (!paperAgentStyleSaved) {
+							paperAgentOriginalPalette =
+								~&7842069035455457876&~.~&254522140932088040&~.~&214622605608&~
+							paperAgentOriginalRgb =
+								~&7842069035455457876&~.~&254522140932088040&~.~&254525455067777027&~
+							paperAgentOriginalThickness =
+								~&7842069035455457876&~.~&254522140932088040&~.~&254549061334391125&~
+							paperAgentStyleSaved = true
+						}
+						~&7842069035455457876&~.~&254522140932088040&~.~&214622605608&~ = palette
+						~&7842069035455457876&~.~&254522140932088040&~.~&254549061334391125&~ =
+							thickness
+					}
 					if (requestId)
 						paperAgentToolCommandExecutor.executeCommand("/usr/bin/touch",
 							["/run/paper-agent-tool-" + requestId + "-" + sequence + ".ack"])
-					console.log("paper-agent restored primary pen", requestId, sequence)
+					console.log("paper-agent pen operation", operation, requestId, sequence)
 				} catch (error) {
 					console.log("paper-agent primary pen restore failed", String(error))
 				}
