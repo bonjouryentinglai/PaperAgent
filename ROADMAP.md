@@ -15,7 +15,7 @@ release dates.
   support.
 - [ ] Broader device, software, and physical acceptance coverage.
 
-## Phase 2A: drawing foundation — in progress
+## Phase 2A: drawing foundation — complete for developer preview
 
 - [x] Introduce the first Paper Agent skills and two bounded output tools.
 - [x] Add a semantic Scene format for text, grids, diagrams, and charts.
@@ -23,8 +23,8 @@ release dates.
 - [x] Add varied line weights, supported colors, alignment, and logical-group
   metadata for future native grouping.
 - [x] Keep native ink as the default, with native images when appropriate.
-- [ ] Complete physical Move acceptance for text quality, palette colors, pen
-  widths, placement, Undo/Redo, reopen, export, and sync.
+- [ ] Continue release hardening on Move for palette colors, pen restoration,
+  lifecycle behavior, export, and sync.
 
 ## Phase 2A.1: current-page closed loop — deferred
 
@@ -76,6 +76,7 @@ follow-up is intentionally deferred.
 - [ ] Build optional review, learning, and meeting workflows with clear privacy
   boundaries.
 
-The immediate contribution focus is **Phase 2A**. See
+The immediate contribution focus is **Phase 2B: easy installation and
+onboarding**. Phase 2A release hardening can continue in parallel. See
 [CONTRIBUTING.md](CONTRIBUTING.md) and [DEVELOPMENT.md](docs/DEVELOPMENT.md)
 before working on device integration.
