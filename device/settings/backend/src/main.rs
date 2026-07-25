@@ -122,7 +122,11 @@ fn receive_message(fd: i32) -> io::Result<Option<(u32, String)>> {
         ));
     }
     let mut body = vec![0; header.length as usize];
-    if !body.is_empty() && receive_packet(fd, &mut body)? != body.len() {
+    // AppLoad sends the header and body as separate SOCK_SEQPACKET records,
+    // including a zero-length body record for an empty message. Consume that
+    // record as the upstream Rust client does; otherwise it is mistaken for a
+    // closed socket on the next loop iteration.
+    if receive_packet(fd, &mut body)? != body.len() {
         return Err(io::Error::new(
             io::ErrorKind::UnexpectedEof,
             "incomplete AppLoad message",
@@ -215,5 +219,49 @@ fn main() {
     if let Err(error) = run() {
         eprintln!("{error}");
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn send_server_message(fd: i32, msg_type: u32, contents: &str) {
+        let data = contents.as_bytes();
+        let header = MessageHeader {
+            msg_type,
+            length: data.len() as u32,
+        };
+        let header_bytes = unsafe {
+            std::slice::from_raw_parts(
+                &header as *const _ as *const u8,
+                mem::size_of::<MessageHeader>(),
+            )
+        };
+        send_packet(fd, header_bytes).unwrap();
+        // AppLoad sends this second record even when the body is empty.
+        send_packet(fd, data).unwrap();
+    }
+
+    #[test]
+    fn consumes_empty_body_record_before_the_next_message() {
+        let mut sockets = [-1; 2];
+        let result = unsafe {
+            libc::socketpair(AF_UNIX, SOCK_SEQPACKET, 0, sockets.as_mut_ptr())
+        };
+        assert_eq!(result, 0);
+
+        send_server_message(sockets[0], MSG_REFRESH, "");
+        send_server_message(sockets[0], MSG_APPLY, "{}");
+
+        let first = receive_message(sockets[1]).unwrap().unwrap();
+        assert_eq!(first, (MSG_REFRESH, String::new()));
+        let second = receive_message(sockets[1]).unwrap().unwrap();
+        assert_eq!(second, (MSG_APPLY, "{}".to_string()));
+
+        unsafe {
+            libc::close(sockets[0]);
+            libc::close(sockets[1]);
+        }
     }
 }
