@@ -246,9 +246,7 @@ mod tests {
     #[test]
     fn consumes_empty_body_record_before_the_next_message() {
         let mut sockets = [-1; 2];
-        let result = unsafe {
-            libc::socketpair(AF_UNIX, SOCK_SEQPACKET, 0, sockets.as_mut_ptr())
-        };
+        let result = unsafe { libc::socketpair(AF_UNIX, SOCK_SEQPACKET, 0, sockets.as_mut_ptr()) };
         assert_eq!(result, 0);
 
         send_server_message(sockets[0], MSG_REFRESH, "");
