@@ -1,0 +1,8 @@
+{
+  "name": "Paper Agent Settings",
+  "loadsBackend": true,
+  "entry": "/ui/Main.qml",
+  "id": "paper-agent-settings",
+  "supportsScaling": true,
+  "canHaveMultipleFrontends": false
+}

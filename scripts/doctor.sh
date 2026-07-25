@@ -20,6 +20,8 @@ echo "icons=$([ -f /home/root/paper-agent/assets/icons/paper-agent-ai.svg ] && [
 echo "image_plugin=$([ -f /home/root/xovi/extensions.d/paper-agent-image.so ] && echo present || echo missing)"
 echo "phase_2a_runtime=$([ -f /home/root/paper-agent/native/scene.mjs ] && [ -f /home/root/paper-agent/native/paper-agent-tools.ts ] && echo present || echo missing)"
 echo "phase_2a_skills=$([ -f /home/root/paper-agent/native/skills/ai-selection/SKILL.md ] && [ -f /home/root/paper-agent/native/skills/structured-drawing/SKILL.md ] && [ -f /home/root/paper-agent/native/skills/beautify-selection/SKILL.md ] && echo present || echo missing)"
+echo "settings_controller=$([ -f /home/root/paper-agent/native/settings-controller.mjs ] && echo present || echo missing)"
+echo "settings_app=$([ -f /home/root/xovi/exthome/appload/paper-agent-settings/manifest.json ] && [ -x /home/root/xovi/exthome/appload/paper-agent-settings/backend/entry ] && echo present || echo missing)"
 echo "credential=$([ -f /home/root/.pi/agent/auth.json ] && echo present || echo missing)"
 echo "socket_mode=$(stat -c %a /run/paper-agent-native-oracle.sock 2>/dev/null || echo missing)"
 echo "coordinator_lock=$([ -d /run/paper-agent-native-coordinator.lock ] && echo active || echo clear)"
@@ -38,7 +40,7 @@ else
   echo "qmd_runtime=unavailable"
 fi
 if [ -f /home/root/paper-agent/config.env ]; then
-  grep -E '^PAPER_AGENT_(PROVIDER|MODEL|THINKING|CJK_SCALE|IMAGE_(RESPONSES_MODEL|MODEL|SIZE|QUALITY|MAX_WIDTH|MAX_HEIGHT))=' /home/root/paper-agent/config.env || true
+  grep -E '^PAPER_AGENT_(PROVIDER|MODEL|THINKING|TEXT_SCALE_PERCENT|MIN_AUTO_SCALE_PERCENT|CJK_SCALE|IMAGE_(RESPONSES_MODEL|MODEL|SIZE|QUALITY|MAX_WIDTH|MAX_HEIGHT))=' /home/root/paper-agent/config.env || true
 fi
 if [ -x /home/root/paper-agent/native/paper-agent-native ]; then
   /home/root/paper-agent/native/paper-agent-native --version

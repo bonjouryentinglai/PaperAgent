@@ -54,6 +54,8 @@ file "$IMAGE_PLUGIN" | grep -Eq 'ARM aarch64|ARM64' || {
 "$NODE_CHECK" --test "$ROOT/device/runtime/image-generate.test.mjs"
 "$NODE_CHECK" --check "$ROOT/device/runtime/layout-policy.mjs"
 "$NODE_CHECK" --test "$ROOT/device/runtime/layout-policy.test.mjs"
+"$NODE_CHECK" --check "$ROOT/device/runtime/settings-controller.mjs"
+"$NODE_CHECK" --test "$ROOT/device/runtime/settings-controller.test.mjs"
 sh -n "$ROOT/device/runtime/native-oracle-service.sh"
 sh -n "$ROOT/device/runtime/native-selection-prepare.sh"
 sh -n "$ROOT/device/runtime/native-selection-write.sh"
@@ -93,7 +95,7 @@ STATE_ROOT="$BASE/backups"
 STAMP=$(date +%Y%m%d-%H%M%S)
 BACKUP="$STATE_ROOT/install-$STAMP"
 INCOMING="$BASE/.install-incoming.$$"
-FILES='paper-agent-native broker-signal.mjs native-oracle-client.mjs native-oracle-server.mjs native-oracle-service.sh native-selection-prepare.sh native-selection-write.sh rich-document.mjs rich-document.test.mjs image-generate.mjs image-generate.test.mjs layout-policy.mjs layout-policy.test.mjs scene.mjs scene.test.mjs paper-agent-tools.ts'
+FILES='paper-agent-native broker-signal.mjs native-oracle-client.mjs native-oracle-server.mjs native-oracle-service.sh native-selection-prepare.sh native-selection-write.sh rich-document.mjs rich-document.test.mjs image-generate.mjs image-generate.test.mjs layout-policy.mjs layout-policy.test.mjs settings-controller.mjs settings-controller.test.mjs scene.mjs scene.test.mjs paper-agent-tools.ts'
 SKILLS='ai-selection structured-drawing beautify-selection'
 
 test -x /home/root/node/bin/node
@@ -181,7 +183,7 @@ cp "$INCOMING/assets/icons/paper-agent-ai.svg" "$ICONS/paper-agent-ai.svg"
 cp "$INCOMING/assets/icons/paper-agent-beautify.svg" "$ICONS/paper-agent-beautify.svg"
 grep -q '<svg' "$ICONS/paper-agent-ai.svg"
 grep -q '<svg' "$ICONS/paper-agent-beautify.svg"
-for name in broker-signal.mjs native-oracle-client.mjs native-oracle-server.mjs native-oracle-service.sh native-selection-prepare.sh native-selection-write.sh rich-document.mjs rich-document.test.mjs image-generate.mjs image-generate.test.mjs layout-policy.mjs layout-policy.test.mjs scene.mjs scene.test.mjs paper-agent-tools.ts; do
+for name in broker-signal.mjs native-oracle-client.mjs native-oracle-server.mjs native-oracle-service.sh native-selection-prepare.sh native-selection-write.sh rich-document.mjs rich-document.test.mjs image-generate.mjs image-generate.test.mjs layout-policy.mjs layout-policy.test.mjs settings-controller.mjs settings-controller.test.mjs scene.mjs scene.test.mjs paper-agent-tools.ts; do
   cp "$INCOMING/runtime/$name" "$NATIVE/$name"
 done
 for skill in $SKILLS; do

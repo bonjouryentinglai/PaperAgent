@@ -13,7 +13,6 @@ import { fileURLToPath } from "node:url";
 import { compileRichDocument, parseRichDocument, validateVectorBody } from "./rich-document.mjs";
 import {
   chooseLargestFittingScale,
-  MIN_SCALE_PERCENT,
   safePagePlacement,
 } from "./layout-policy.mjs";
 import { compileScene, validateSceneToolCall } from "./scene.mjs";
@@ -33,6 +32,16 @@ const PROVIDER = process.env.PAPER_AGENT_PROVIDER || "openai-codex";
 const MODEL = process.env.PAPER_AGENT_MODEL || "gpt-5.6-sol";
 const THINKING = process.env.PAPER_AGENT_THINKING || "off";
 const CJK_SCALE = process.env.PAPER_AGENT_CJK_SCALE || "0.70";
+const TEXT_SCALE_PERCENT = boundedEnvironmentInteger(
+  "PAPER_AGENT_TEXT_SCALE_PERCENT", 100, 70, 160,
+);
+const MIN_AUTO_SCALE_PERCENT = boundedEnvironmentInteger(
+  "PAPER_AGENT_MIN_AUTO_SCALE_PERCENT", 60, 40, 100,
+);
+const MIN_TEXT_SCALE_PERCENT = Math.max(
+  1,
+  Math.round(TEXT_SCALE_PERCENT * MIN_AUTO_SCALE_PERCENT / 100),
+);
 const MAX_IMAGE = 4 * 1024 * 1024;
 const REQUEST_TIMEOUT_MS = 300_000;
 const IMAGE_HELPER_TIMEOUT_MS = 220_000;
@@ -51,6 +60,8 @@ const MAX_TEXT_PAGES = 8;
 const IMAGE_MAX_WIDTH = boundedEnvironmentInteger("PAPER_AGENT_IMAGE_MAX_WIDTH", 620, 128, 800);
 const IMAGE_MAX_HEIGHT = boundedEnvironmentInteger("PAPER_AGENT_IMAGE_MAX_HEIGHT", 620, 128, 800);
 const LINE_GAP = 24;
+const SETTINGS_APPLY_LOCK = process.env.PAPER_AGENT_SETTINGS_APPLY_LOCK
+  || "/run/paper-agent-settings-apply.lock";
 
 const ACTIONS = new Set(["ai", "beautify"]);
 const RESULT_KINDS = new Set(["text", "document", "table", "vector", "image"]);
@@ -227,6 +238,9 @@ function selfTest() {
     throw new Error("Beautify typed text envelope failed");
   }
   if (resultEnvelope("plain fallback", true, "ai").kind !== "text") throw new Error("AI fallback failed");
+  if (MIN_TEXT_SCALE_PERCENT < 1 || MIN_TEXT_SCALE_PERCENT > TEXT_SCALE_PERCENT) {
+    throw new Error("configured text scale range is invalid");
+  }
   const prepared = parsePreparedImageSize("image_size=620x311\n");
   if (prepared.width !== 620 || prepared.height !== 311) throw new Error("prepared image size failed");
   let malformedImageSizeRejected = false;
@@ -897,16 +911,22 @@ async function requestNewPage(turn) {
 async function renderAiTextualResult(turn, body, kind) {
   const freshPage = turn.pageCount > 0 && turn.nextY === turn.request.y;
   const renderedByScale = new Map();
-  const scale = await chooseLargestFittingScale(async (candidate) => {
-    try {
-      const rendered = await renderJob(turn, body, kind, candidate);
-      renderedByScale.set(candidate, rendered);
-      return true;
-    } catch (error) {
-      if (isLayoutMiss(error)) return false;
-      throw error;
-    }
-  });
+  const scale = await chooseLargestFittingScale(
+    async (candidate) => {
+      try {
+        const rendered = await renderJob(turn, body, kind, candidate);
+        renderedByScale.set(candidate, rendered);
+        return true;
+      } catch (error) {
+        if (isLayoutMiss(error)) return false;
+        throw error;
+      }
+    },
+    {
+      defaultScale: TEXT_SCALE_PERCENT,
+      minimumScale: MIN_TEXT_SCALE_PERCENT,
+    },
+  );
 
   if (scale !== null) {
     const chosen = renderedByScale.get(scale);
@@ -982,7 +1002,7 @@ async function writePaginatedText(turn, body, writeKind, style = null) {
     if (pagesWritten >= MAX_TEXT_PAGES) {
       throw new Error(`the reply exceeds the ${MAX_TEXT_PAGES}-page safety limit`);
     }
-    const page = await renderLargestTextPage(turn, remaining, MIN_SCALE_PERCENT);
+    const page = await renderLargestTextPage(turn, remaining, MIN_TEXT_SCALE_PERCENT);
     await writeRenderedJob(turn, page.rendered, writeKind, style);
     remaining = page.remainder;
     pagesWritten += 1;
@@ -1363,8 +1383,29 @@ const server = net.createServer((socket) => {
       const request = JSON.parse(buffer.slice(0, newline));
       if (request?.type === "health") {
         send(socket, piReady
-          ? { type: "ready", provider: PROVIDER, model: MODEL, thinking: THINKING }
+          ? {
+              type: "ready",
+              provider: PROVIDER,
+              model: MODEL,
+              thinking: THINKING,
+              textScalePercent: TEXT_SCALE_PERCENT,
+              minAutoScalePercent: MIN_AUTO_SCALE_PERCENT,
+            }
           : { type: "error", code: "warming", error: "Pi RPC is warming" });
+        socket.end();
+        return;
+      }
+      if (request?.type === "state") {
+        send(socket, {
+          type: "state",
+          ready: piReady,
+          active: active !== null,
+          provider: PROVIDER,
+          model: MODEL,
+          thinking: THINKING,
+          textScalePercent: TEXT_SCALE_PERCENT,
+          minAutoScalePercent: MIN_AUTO_SCALE_PERCENT,
+        });
         socket.end();
         return;
       }
@@ -1375,6 +1416,9 @@ const server = net.createServer((socket) => {
         return;
       }
       if (!piReady) throw Object.assign(new Error("Pi RPC is warming"), { code: "warming" });
+      if (fs.existsSync(SETTINGS_APPLY_LOCK)) {
+        throw Object.assign(new Error("Paper Agent settings are being applied"), { code: "busy" });
+      }
       if (active) throw Object.assign(new Error("another native request is active"), { code: "busy" });
       validateRequest(request);
       const id = `${Date.now()}-${nextId++}`;

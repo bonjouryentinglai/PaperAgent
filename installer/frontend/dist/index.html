@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Paper Agent Installer</title>
+    <link rel="stylesheet" href="./style.css">
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="mark">AI✦</div>
+        <div>
+          <p class="eyebrow">reMarkable Paper Pro Move</p>
+          <h1>Paper Agent Installer</h1>
+          <p>Guided setup with device checks, backup, verification, and rollback.</p>
+        </div>
+        <span class="badge">Phase 2B preview</span>
+      </header>
+
+      <section class="card connection">
+        <div>
+          <p class="step">Step 1</p>
+          <h2>Find your Move</h2>
+          <p>Connect it over USB, wake it, and keep Developer Mode enabled.</p>
+        </div>
+        <div class="fields">
+          <label>Address<input id="host" value="10.11.99.1" autocomplete="off"></label>
+          <label>Developer password<input id="password" type="password" autocomplete="off"></label>
+        </div>
+        <div class="actions">
+          <button id="discover" class="secondary">Discover</button>
+          <button id="inspect">Check device</button>
+        </div>
+        <p id="message" class="message">No device checked yet.</p>
+      </section>
+
+      <section class="card">
+        <div class="section-title">
+          <div><p class="step">Step 2</p><h2>Preflight</h2></div>
+          <span id="ready-badge" class="badge muted">Waiting</span>
+        </div>
+        <div id="status-grid" class="status-grid">
+          <div><span>Model</span><strong>—</strong></div>
+          <div><span>OS</span><strong>—</strong></div>
+          <div><span>XOVI</span><strong>—</strong></div>
+          <div><span>AppLoad</span><strong>—</strong></div>
+          <div><span>ChatGPT login</span><strong>—</strong></div>
+          <div><span>Paper Agent</span><strong>—</strong></div>
+        </div>
+      </section>
+
+      <section class="card install-card">
+        <div><p class="step">Step 3</p><h2>Install or maintain</h2></div>
+        <p>The mutation workflow is intentionally disabled in this first preview while transactional install and login are being implemented.</p>
+        <div class="actions">
+          <button disabled>Install</button>
+          <button disabled>Update</button>
+          <button disabled>Repair</button>
+          <button disabled class="danger">Uninstall</button>
+        </div>
+      </section>
+    </main>
+    <script src="./app.js"></script>
+  </body>
+</html>

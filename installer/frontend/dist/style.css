@@ -1,0 +1,56 @@
+:root {
+  color: #20242a;
+  background: #e8e5dc;
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 760px; }
+main { width: min(1040px, calc(100% - 44px)); margin: 28px auto 50px; }
+header { display: flex; align-items: center; gap: 22px; margin-bottom: 22px; }
+header h1 { margin: 3px 0 5px; font-size: 34px; letter-spacing: -0.03em; }
+header p { margin: 0; color: #5d605f; }
+header .badge { margin-left: auto; }
+.mark {
+  display: grid; place-items: center; width: 74px; height: 74px; border-radius: 20px;
+  color: #f8f6ef; background: #20242a; font-size: 26px; font-weight: 800;
+}
+.eyebrow, .step {
+  color: #73736d !important; font-size: 12px; font-weight: 800;
+  letter-spacing: .12em; text-transform: uppercase; margin: 0 0 5px;
+}
+.card {
+  background: #f8f6ef; border: 1px solid #cbc8be; border-radius: 18px;
+  padding: 24px; margin-top: 16px; box-shadow: 0 8px 24px rgb(46 45 40 / 7%);
+}
+.card h2 { margin: 0; font-size: 22px; }
+.card p { color: #686963; }
+.connection { display: grid; grid-template-columns: 1fr 1.3fr; gap: 20px 28px; }
+.fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+label { display: grid; gap: 7px; font-size: 13px; font-weight: 700; }
+input {
+  width: 100%; border: 1px solid #a9a69d; border-radius: 10px; padding: 12px 13px;
+  background: #fffefa; color: #20242a; font: inherit; outline: none;
+}
+input:focus { border-color: #20242a; box-shadow: 0 0 0 3px rgb(32 36 42 / 10%); }
+.actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+button {
+  border: 0; border-radius: 10px; padding: 12px 18px; background: #20242a;
+  color: #fff; font: inherit; font-weight: 800; cursor: pointer;
+}
+button.secondary { background: #ddd9cf; color: #20242a; }
+button.danger { background: #7f302d; }
+button:disabled { opacity: .35; cursor: not-allowed; }
+.message { grid-column: 1 / -1; margin: 0 !important; padding-top: 4px; font-size: 14px; }
+.section-title { display: flex; align-items: center; justify-content: space-between; }
+.badge {
+  display: inline-flex; padding: 7px 10px; border-radius: 999px; background: #d9eadc;
+  color: #245633; font-size: 12px; font-weight: 800;
+}
+.badge.muted { background: #e1ded5; color: #696963; }
+.status-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 18px; }
+.status-grid div { display: grid; gap: 5px; padding: 13px; background: #eeebe3; border-radius: 10px; }
+.status-grid span { font-size: 12px; color: #75756f; }
+.status-grid strong { font-size: 15px; }
+.install-card { display: grid; grid-template-columns: 1fr 1.5fr; gap: 18px 28px; align-items: center; }
+.install-card .actions { grid-column: 1 / -1; }

@@ -6,15 +6,18 @@ import net from "node:net";
 const SOCKET = process.env.PAPER_AGENT_NATIVE_SOCKET || "/run/paper-agent-native-oracle.sock";
 const args = process.argv.slice(2);
 const health = args.length === 1 && args[0] === "--health";
+const state = args.length === 1 && args[0] === "--state";
 const cancel = args.length === 1 && args[0] === "--cancel";
 
-if (!health && !cancel && args.length !== 7 && args.length !== 15) {
-  console.error("usage: native-oracle-client.mjs ACTION PNG X Y WIDTH HEIGHT NEW_PAGE_REQUIRED [SCENE_X SCENE_Y SCENE_WIDTH SCENE_HEIGHT PAPER_X PAPER_Y PAPER_WIDTH PAPER_HEIGHT] | --health | --cancel");
+if (!health && !state && !cancel && args.length !== 7 && args.length !== 15) {
+  console.error("usage: native-oracle-client.mjs ACTION PNG X Y WIDTH HEIGHT NEW_PAGE_REQUIRED [SCENE_X SCENE_Y SCENE_WIDTH SCENE_HEIGHT PAPER_X PAPER_Y PAPER_WIDTH PAPER_HEIGHT] | --health | --state | --cancel");
   process.exit(2);
 }
 
 const request = health
   ? { version: 1, type: "health" }
+  : state
+    ? { version: 1, type: "state" }
   : cancel
     ? { version: 1, type: "cancel" }
   : {
@@ -72,7 +75,10 @@ socket.on("data", (data) => {
     try { event = JSON.parse(line); }
     catch { finish(accepted ? 1 : 75, "native oracle returned malformed data"); return; }
     if (event.type === "ready") {
-      console.log(`native_oracle=ready provider=${event.provider} model=${event.model} thinking=${event.thinking}`);
+      console.log(`native_oracle=ready provider=${event.provider} model=${event.model} thinking=${event.thinking} text_scale=${event.textScalePercent} min_auto_scale=${event.minAutoScalePercent}`);
+      finish(0);
+    } else if (event.type === "state") {
+      console.log(JSON.stringify(event));
       finish(0);
     } else if (event.type === "accepted") {
       accepted = true;

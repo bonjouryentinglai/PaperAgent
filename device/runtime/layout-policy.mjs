@@ -5,17 +5,31 @@ export const MIN_SCALE_PERCENT = 60;
 
 /**
  * Return the largest whole-percent scale that fits the current placement.
- * A null result means even the 60% floor does not fit and the caller must
- * create a new page, reset to 100%, and lay out there.
+ * A null result means even the configured floor does not fit and the caller
+ * must create a new page, reset to the configured default, and lay out there.
  */
-export async function chooseLargestFittingScale(fits) {
+export async function chooseLargestFittingScale(
+  fits,
+  {
+    defaultScale = DEFAULT_SCALE_PERCENT,
+    minimumScale = MIN_SCALE_PERCENT,
+  } = {},
+) {
   if (typeof fits !== "function") throw new TypeError("fits must be a function");
-  if (await fits(DEFAULT_SCALE_PERCENT)) return DEFAULT_SCALE_PERCENT;
-  if (!(await fits(MIN_SCALE_PERCENT))) return null;
+  if (!Number.isSafeInteger(defaultScale) || defaultScale < 1) {
+    throw new RangeError("defaultScale must be a positive integer");
+  }
+  if (!Number.isSafeInteger(minimumScale)
+      || minimumScale < 1
+      || minimumScale > defaultScale) {
+    throw new RangeError("minimumScale must be between 1 and defaultScale");
+  }
+  if (await fits(defaultScale)) return defaultScale;
+  if (!(await fits(minimumScale))) return null;
 
-  let best = MIN_SCALE_PERCENT;
-  let low = MIN_SCALE_PERCENT + 1;
-  let high = DEFAULT_SCALE_PERCENT - 1;
+  let best = minimumScale;
+  let low = minimumScale + 1;
+  let high = defaultScale - 1;
   while (low <= high) {
     const candidate = low + Math.floor((high - low) / 2);
     if (await fits(candidate)) {

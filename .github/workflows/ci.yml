@@ -25,5 +25,11 @@ jobs:
         with:
           components: rustfmt
 
+      - name: Use Go from installer module
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: installer/go.mod
+          cache-dependency-path: installer/go.sum
+
       - name: Run off-device checks
         run: scripts/check.sh

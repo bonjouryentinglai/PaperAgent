@@ -1,0 +1,15 @@
+[package]
+name = "paper-agent-settings-backend"
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-only"
+description = "AppLoad protocol adapter for Paper Agent Settings"
+
+[dependencies]
+libc = "0.2"
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1
+opt-level = "s"

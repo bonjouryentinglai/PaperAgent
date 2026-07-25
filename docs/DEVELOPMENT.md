@@ -96,6 +96,19 @@ After an install, verify separately:
 19. Restart Xochitl during selection capture or before writeback. The old
     request must stop, `scripts/doctor.sh` must report `coordinator_lock=clear`,
     and the next AI/Beautify request must start normally.
+20. Open Paper Agent Settings from AppLoad. Confirm it loads the active model,
+    thinking level, AI answer size, and minimum auto-scale; Exit must return to
+    AppLoad without stopping the Paper Agent service.
+21. Change all four settings but press Exit before Apply. Verify Apply & Exit,
+    Discard, and Cancel independently, including AppLoad's top-edge close
+    gesture as a fallback.
+22. Apply settings while Paper Agent is idle and verify only
+    `paper-agent-native-oracle.service` restarts. The next AI answer must report
+    the selected model/thinking and use the selected text scale. Start a slow AI
+    request and confirm Apply is unavailable until that request finishes.
+23. Force an invalid model activation in a maintainer test. The Settings app
+    must report failure, restore the previous mode-0600 config, restart the old
+    service successfully, and leave OAuth data untouched.
 
 Vector acceptance should also confirm that hatch density remains readable at
 small and large placements. Legacy vector results keep the active Xochitl ink

@@ -32,6 +32,13 @@ Paper Agent's original code is MIT licensed unless a file says otherwise.
   `third_party/GPL-3.0.txt`.
 - **Pi**, MIT, copyright 2025 Mario Zechner. Pi is installed as an external
   runtime and owns ChatGPT OAuth and RPC transport.
+- **AppLoad**, GPL-3.0-only, copyright AppLoad contributors. The separate
+  `device/settings/backend` protocol adapter is derived from AppLoad's Rust
+  backend client so the Paper Agent Settings QML can communicate with its
+  narrow settings process. The full license is in `third_party/GPL-3.0.txt`.
+- **remagic**, MIT, copyright 2026 Maxime. Phase 2B's desktop installer adapts
+  its pure-Go device discovery, SSH, and AppLoad staging foundations. Its
+  notice is preserved in `third_party/remagic-MIT.txt`.
 - **OpenClaw**, MIT, copyright 2026 OpenClaw Foundation, pinned reference
   `28a3540f3283b0700ffde4ffaa0a5f7303d73a09`. The image helper adapts its
   Responses image-generation request and event extraction.

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Remove Paper Agent's QMD, service, hooks, plugin and native runtime. Pi login,
-# Node, XOVI/AppLoad, optional XOVI dependencies, backups and user configuration
-# are preserved.
+# Remove Paper Agent's QMD, service, Settings app, hooks, plugin and native
+# runtime. Pi login, Node, XOVI/AppLoad, optional XOVI dependencies, backups
+# and user configuration are preserved.
 
 HOST=${PAPER_AGENT_HOST:?Set PAPER_AGENT_HOST to the Move hostname or IP}
 DEVICE_USER=${PAPER_AGENT_DEVICE_USER:-root}
@@ -20,6 +20,7 @@ UNIT_RUN=/run/systemd/system/paper-agent-native-oracle.service
 UNIT_LEGACY=/etc/systemd/system/paper-agent-native-oracle.service
 START_HOOK=/home/root/xovi/scripts/post-start/paper-agent-native-oracle.sh
 IMAGE_PLUGIN=/home/root/xovi/extensions.d/paper-agent-image.so
+SETTINGS_APP=/home/root/xovi/exthome/appload/paper-agent-settings
 STATE_ROOT="$BASE/backups"
 STAMP=$(date +%Y%m%d-%H%M%S)
 BACKUP="$STATE_ROOT/uninstall-$STAMP"
@@ -31,6 +32,7 @@ systemctl disable paper-agent-native-oracle.service >/dev/null 2>&1 || true
 [ -f "$UNIT_SOURCE" ] && cp -p "$UNIT_SOURCE" "$BACKUP/paper-agent-native-oracle.source"
 [ -f "$START_HOOK" ] && cp -p "$START_HOOK" "$BACKUP/paper-agent-native-oracle.hook"
 [ -f "$IMAGE_PLUGIN" ] && cp -p "$IMAGE_PLUGIN" "$BACKUP/paper-agent-image.so"
+[ -d "$SETTINGS_APP" ] && cp -a "$SETTINGS_APP" "$BACKUP/paper-agent-settings"
 if [ -d "$NATIVE" ]; then
   mkdir -p "$BACKUP/native"
   for entry in "$NATIVE"/*; do
@@ -43,10 +45,12 @@ if [ -d "$NATIVE" ]; then
 fi
 [ -d "$BASE/assets" ] && cp -a "$BASE/assets" "$BACKUP/assets"
 rm -f "$QMD" "$UNIT_SOURCE" "$UNIT_RUN" "$UNIT_LEGACY" "$START_HOOK" "$IMAGE_PLUGIN"
+rm -rf "$SETTINGS_APP"
 rm -rf "$NATIVE" "$BASE/assets" "$BASE/selection"
 rmdir "$SYSTEMD_HOME" 2>/dev/null || true
 rm -f /run/paper-agent-native-oracle.sock
 rm -rf /run/paper-agent-native-coordinator.lock
+rm -f /run/paper-agent-settings-apply.lock
 systemctl daemon-reload
 /home/root/xovi/start
 if systemctl is-active --quiet paper-agent-native-oracle.service; then

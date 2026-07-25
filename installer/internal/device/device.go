@@ -1,0 +1,102 @@
+// SPDX-License-Identifier: MIT
+//
+// Adapted from Maxime Rivest's remagic pure-Go device package.
+package device
+
+import (
+	"bytes"
+	"fmt"
+	"io"
+	"net"
+	"os"
+	"path/filepath"
+	"sync"
+	"time"
+
+	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/agent"
+)
+
+const DefaultUSBAddr = "10.11.99.1"
+
+type Device struct {
+	Addr   string
+	client *ssh.Client
+}
+
+func nonInteractiveAuths() []ssh.AuthMethod {
+	var auths []ssh.AuthMethod
+	if socket := os.Getenv("SSH_AUTH_SOCK"); socket != "" {
+		if connection, err := net.Dial("unix", socket); err == nil {
+			auths = append(auths, ssh.PublicKeysCallback(agent.NewClient(connection).Signers))
+		}
+	}
+	home, _ := os.UserHomeDir()
+	for _, name := range []string{"id_ed25519", "id_rsa"} {
+		privateKey, err := os.ReadFile(filepath.Join(home, ".ssh", name))
+		if err != nil {
+			continue
+		}
+		if signer, err := ssh.ParsePrivateKey(privateKey); err == nil {
+			auths = append(auths, ssh.PublicKeys(signer))
+		}
+	}
+	return auths
+}
+
+// Connect uses local SSH keys first and the explicitly supplied developer-mode
+// password second. The password is not persisted. reMarkable regenerates its
+// host key after a factory reset, matching remagic's trust-on-connect policy.
+func Connect(address, password string) (*Device, error) {
+	auths := nonInteractiveAuths()
+	if password != "" {
+		auths = append(auths, ssh.Password(password))
+	}
+	if len(auths) == 0 {
+		return nil, fmt.Errorf("no SSH key or developer-mode password is available")
+	}
+	config := &ssh.ClientConfig{
+		User:            "root",
+		Auth:            auths,
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(), // See comment above.
+		Timeout:         8 * time.Second,
+	}
+	client, err := ssh.Dial("tcp", net.JoinHostPort(address, "22"), config)
+	if err != nil {
+		return nil, fmt.Errorf("root@%s: %w", address, err)
+	}
+	return &Device{Addr: address, client: client}, nil
+}
+
+func (d *Device) Close() {
+	if d.client != nil {
+		_ = d.client.Close()
+	}
+}
+
+func (d *Device) Run(command string) (string, error) {
+	session, err := d.client.NewSession()
+	if err != nil {
+		return "", err
+	}
+	defer session.Close()
+	var output bytes.Buffer
+	writer := &lockedWriter{writer: &output}
+	session.Stdout = writer
+	session.Stderr = writer
+	err = session.Run(command)
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
+	return output.String(), err
+}
+
+type lockedWriter struct {
+	mu     sync.Mutex
+	writer io.Writer
+}
+
+func (w *lockedWriter) Write(value []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.writer.Write(value)
+}

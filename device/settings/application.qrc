@@ -1,0 +1,8 @@
+<RCC>
+  <qresource>
+    <file>ui/ActionButton.qml</file>
+    <file>ui/CycleControl.qml</file>
+    <file>ui/NumberControl.qml</file>
+    <file>ui/Main.qml</file>
+  </qresource>
+</RCC>

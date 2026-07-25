@@ -1,0 +1,9 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "Paper Agent Installer",
+  "outputfilename": "paper-agent-installer",
+  "author": {
+    "name": "Paper Agent contributors",
+    "email": ""
+  }
+}
