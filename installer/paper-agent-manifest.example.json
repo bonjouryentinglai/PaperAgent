@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "version": "0.2.0",
+  "supportedModels": [
+    "chiappa"
+  ],
+  "minimumFreeSpaceKB": 262144,
+  "bundle": {
+    "url": "paper-agent-release.tar.gz",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+    "bytes": 1
+  }
+}

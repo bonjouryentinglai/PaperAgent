@@ -4,16 +4,20 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/bonjouryentinglai/paper-agent/installer/internal/device"
 	"github.com/bonjouryentinglai/paper-agent/installer/internal/maintenance"
 	"github.com/bonjouryentinglai/paper-agent/installer/internal/preflight"
+	"github.com/bonjouryentinglai/paper-agent/installer/internal/releasebundle"
 )
 
 type App struct {
-	ctx context.Context
+	ctx        context.Context
+	httpClient *http.Client
 }
 
 type Candidate struct {
@@ -28,8 +32,18 @@ type OperationResult struct {
 	Summary string           `json:"summary"`
 }
 
+type ReleaseSummary struct {
+	Version            string `json:"version"`
+	MinimumFreeSpaceKB int64  `json:"minimumFreeSpaceKB"`
+	BundleBytes        int64  `json:"bundleBytes"`
+}
+
+const defaultReleaseManifestURL = "https://github.com/bonjouryentinglai/PaperAgent/releases/latest/download/paper-agent-manifest.json"
+
 func NewApp() *App {
-	return &App{}
+	return &App{
+		httpClient: &http.Client{Timeout: 45 * time.Second},
+	}
 }
 
 func (a *App) startup(ctx context.Context) {
@@ -68,6 +82,29 @@ func (a *App) Inspect(host, password string) (preflight.Status, error) {
 	}
 	defer connection.Close()
 	return preflight.Inspect(connection, host)
+}
+
+// CheckRelease downloads only the small release manifest. The actual bundle is
+// not trusted until releasebundle.Download verifies its declared byte length
+// and SHA-256 checksum.
+func (a *App) CheckRelease() (ReleaseSummary, error) {
+	manifestURL := strings.TrimSpace(os.Getenv("PAPER_AGENT_RELEASE_MANIFEST_URL"))
+	if manifestURL == "" {
+		manifestURL = defaultReleaseManifestURL
+	}
+	ctx := a.ctx
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	manifest, err := releasebundle.Fetch(ctx, a.httpClient, manifestURL)
+	if err != nil {
+		return ReleaseSummary{}, err
+	}
+	return ReleaseSummary{
+		Version:            manifest.Version,
+		MinimumFreeSpaceKB: manifest.MinimumFreeSpaceKB,
+		BundleBytes:        manifest.Bundle.Bytes,
+	}, nil
 }
 
 // Uninstall removes Paper Agent only. Shared XOVI/AppLoad components, the
@@ -118,6 +155,7 @@ func (a *App) ImplementationState() map[string]bool {
 	return map[string]bool{
 		"discovery": true,
 		"preflight": true,
+		"release":   true,
 		"install":   false,
 		"update":    false,
 		"repair":    false,
