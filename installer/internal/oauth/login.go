@@ -159,5 +159,20 @@ process.exit(auth && auth.type === "oauth" && auth.access && auth.refresh ? 0 : 
 		manager.finish(false, "Pi finished, but no valid ChatGPT credential was found.", err)
 		return
 	}
+	const markOwnership = `set -eu
+AUTH=/home/root/.pi/agent/auth.json
+OWN=/home/root/paper-agent/installer-owned
+mkdir -p "$OWN"
+sha256sum "$AUTH" | awk '{print $1}' >"$OWN/oauth.sha256"
+chmod 0600 "$OWN/oauth.sha256"
+`
+	if _, err := connection.Run(markOwnership); err != nil {
+		manager.finish(
+			true,
+			"ChatGPT sign-in is ready. Its ownership could not be recorded, so full uninstall will preserve it.",
+			nil,
+		)
+		return
+	}
 	manager.finish(true, "ChatGPT sign-in is ready on the Move.", nil)
 }

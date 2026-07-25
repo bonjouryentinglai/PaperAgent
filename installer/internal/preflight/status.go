@@ -12,24 +12,25 @@ type Runner interface {
 }
 
 type Status struct {
-	Address          string `json:"address"`
-	Model            string `json:"model"`
-	OSVersion        string `json:"osVersion"`
-	FreeSpaceKB      int64  `json:"freeSpaceKB"`
-	InstalledVersion string `json:"installedVersion"`
-	SupportedModel   bool   `json:"supportedModel"`
-	DeveloperMode    bool   `json:"developerMode"`
-	XOVIInstalled    bool   `json:"xoviInstalled"`
-	AppLoadInstalled bool   `json:"appLoadInstalled"`
-	QMLIndex         bool   `json:"qmlIndex"`
-	XOVIPersistence  bool   `json:"xoviPersistence"`
-	NodeInstalled    bool   `json:"nodeInstalled"`
-	PiInstalled      bool   `json:"piInstalled"`
-	NativeDeps       bool   `json:"nativeDeps"`
-	ChatGPTLoggedIn  bool   `json:"chatGPTLoggedIn"`
-	PaperAgent       bool   `json:"paperAgent"`
-	ServiceActive    bool   `json:"serviceActive"`
-	SettingsApp      bool   `json:"settingsApp"`
+	Address          string   `json:"address"`
+	Model            string   `json:"model"`
+	OSVersion        string   `json:"osVersion"`
+	FreeSpaceKB      int64    `json:"freeSpaceKB"`
+	InstalledVersion string   `json:"installedVersion"`
+	SupportedModel   bool     `json:"supportedModel"`
+	DeveloperMode    bool     `json:"developerMode"`
+	XOVIInstalled    bool     `json:"xoviInstalled"`
+	AppLoadInstalled bool     `json:"appLoadInstalled"`
+	QMLIndex         bool     `json:"qmlIndex"`
+	XOVIPersistence  bool     `json:"xoviPersistence"`
+	NodeInstalled    bool     `json:"nodeInstalled"`
+	PiInstalled      bool     `json:"piInstalled"`
+	NativeDeps       bool     `json:"nativeDeps"`
+	ChatGPTLoggedIn  bool     `json:"chatGPTLoggedIn"`
+	PaperAgent       bool     `json:"paperAgent"`
+	ServiceActive    bool     `json:"serviceActive"`
+	SettingsApp      bool     `json:"settingsApp"`
+	InstallerOwned   []string `json:"installerOwned"`
 }
 
 const inspectCommand = `set -u
@@ -63,6 +64,16 @@ fi
 test -x /home/root/paper-agent/native/paper-agent-native && echo 'paper_agent=1' || echo 'paper_agent=0'
 systemctl is-active --quiet paper-agent-native-oracle.service && echo 'service=1' || echo 'service=0'
 test -f /home/root/xovi/exthome/appload/paper-agent-settings/manifest.json && echo 'settings_app=1' || echo 'settings_app=0'
+OWN=/home/root/paper-agent/installer-owned
+owned=
+for component in xovi appload runtime pi-packages persistence oauth \
+  extension-framebuffer-spy extension-qt-command-executor \
+  extension-xovi-message-broker extension-rm-shot; do
+  if test -e "$OWN/$component" || test -e "$OWN/$component.sha256"; then
+    if test -n "$owned"; then owned="$owned,$component"; else owned="$component"; fi
+  fi
+done
+printf 'installer_owned=%s\n' "$owned"
 printf 'installed_version='; cat /home/root/paper-agent/VERSION 2>/dev/null || true; printf '\n'
 `
 
@@ -85,6 +96,13 @@ func parse(output, address string) (Status, error) {
 	freeSpace, _ := strconv.ParseInt(values["free_kb"], 10, 64)
 	model := strings.TrimSpace(values["model"])
 	supported := supportedModel(model)
+	var installerOwned []string
+	for _, component := range strings.Split(values["installer_owned"], ",") {
+		component = strings.TrimSpace(component)
+		if component != "" {
+			installerOwned = append(installerOwned, component)
+		}
+	}
 	return Status{
 		Address:          address,
 		Model:            model,
@@ -104,6 +122,7 @@ func parse(output, address string) (Status, error) {
 		PaperAgent:       values["paper_agent"] == "1",
 		ServiceActive:    values["service"] == "1",
 		SettingsApp:      values["settings_app"] == "1",
+		InstallerOwned:   installerOwned,
 	}, nil
 }
 

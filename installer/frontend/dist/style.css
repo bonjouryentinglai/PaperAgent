@@ -92,6 +92,10 @@ button.compact { padding: 8px 11px; font-size: 12px; }
 .uninstall-card .shared-note {
   padding: 13px 15px; border-radius: 10px; background: #eee8df; color: #555650;
 }
+.uninstall-card .full-cleanup {
+  max-width: none; padding: 13px 15px; border: 1px solid #c9aaa7;
+  border-radius: 10px; background: #fffaf6;
+}
 .danger-label { color: #7f302d !important; }
 @media (max-width: 840px) {
   body { min-width: 0; }

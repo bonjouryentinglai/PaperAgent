@@ -77,3 +77,132 @@ func Uninstall(device Runner) (string, error) {
 	}
 	return output, nil
 }
+
+// FullCleanupCommand removes only components recorded at installation time as
+// created by Paper Agent Installer. It intentionally refuses to infer
+// ownership from file locations alone.
+const FullCleanupCommand = `set -eu
+BASE=/home/root/paper-agent
+OWN="$BASE/installer-owned"
+test -d "$OWN" || {
+  echo "No installer ownership record is available; refusing full cleanup" >&2
+  exit 1
+}
+
+owned=0
+for component in xovi appload runtime pi-packages persistence oauth \
+  extension-framebuffer-spy extension-qt-command-executor \
+  extension-xovi-message-broker extension-rm-shot; do
+  if [ -e "$OWN/$component" ] || [ -e "$OWN/$component.sha256" ]; then
+    owned=1
+  fi
+done
+[ "$owned" -eq 1 ] || {
+  echo "Installer ownership record is empty; refusing full cleanup" >&2
+  exit 1
+}
+
+removed=
+append_removed() {
+  if [ -n "$removed" ]; then removed="$removed,$1"; else removed="$1"; fi
+}
+
+if [ -e "$OWN/oauth.sha256" ] && [ -f /home/root/.pi/agent/auth.json ]; then
+  expected=$(cat "$OWN/oauth.sha256")
+  actual=$(sha256sum /home/root/.pi/agent/auth.json | awk '{print $1}')
+  if [ "$expected" = "$actual" ]; then
+    rm -f /home/root/.pi/agent/auth.json
+    rmdir /home/root/.pi/agent /home/root/.pi 2>/dev/null || true
+    append_removed oauth
+  else
+    echo "preserved_changed_oauth=1"
+  fi
+fi
+
+if [ -e "$OWN/pi-packages" ] && [ ! -e "$OWN/runtime" ] && [ -x /home/root/node/bin/npm ]; then
+  HOME=/home/root PATH="/home/root/node/bin:$PATH" \
+    /home/root/node/bin/npm uninstall --global --prefix /home/root/node \
+    @earendil-works/pi-coding-agent @earendil-works/pi-ai \
+    --no-audit --no-fund >/dev/null 2>&1
+  append_removed pi-packages
+fi
+
+if [ -e "$OWN/runtime" ]; then
+  if [ -L /home/root/node ]; then
+    case "$(readlink /home/root/node)" in
+      "$BASE/runtime/"*) rm -f /home/root/node ;;
+    esac
+  fi
+  rm -rf "$BASE/runtime"
+  append_removed runtime
+fi
+
+if [ -e "$OWN/persistence" ]; then
+  systemctl stop xovi-tripletap 2>/dev/null || true
+  systemctl disable xovi-tripletap >/dev/null 2>&1 || true
+  mount -o remount,rw / 2>/dev/null || true
+  rm -f /etc/systemd/system/xovi-tripletap.service
+  systemctl daemon-reload
+  mount -o remount,ro / 2>/dev/null || true
+  rm -rf /home/root/xovi-tripletap
+  append_removed persistence
+fi
+
+restart_xochitl=0
+if [ -e "$OWN/xovi" ]; then
+  systemctl stop xochitl 2>/dev/null || true
+  rm -rf /home/root/xovi
+  systemctl start xochitl
+  append_removed xovi
+else
+  if [ -e "$OWN/appload" ]; then
+    restart_xochitl=1
+    rm -f /home/root/xovi/extensions.d/appload.so
+    rm -rf /home/root/xovi/exthome/appload
+    append_removed appload
+  fi
+  if [ -e "$OWN/extension-framebuffer-spy" ]; then
+    restart_xochitl=1
+    rm -f /home/root/xovi/extensions.d/framebuffer-spy.so
+    append_removed extension-framebuffer-spy
+  fi
+  if [ -e "$OWN/extension-qt-command-executor" ]; then
+    restart_xochitl=1
+    rm -f /home/root/xovi/extensions.d/qt-command-executor.so
+    append_removed extension-qt-command-executor
+  fi
+  if [ -e "$OWN/extension-xovi-message-broker" ]; then
+    restart_xochitl=1
+    rm -f /home/root/xovi/extensions.d/xovi-message-broker.so
+    append_removed extension-xovi-message-broker
+  fi
+  if [ -e "$OWN/extension-rm-shot" ]; then
+    restart_xochitl=1
+    rm -f /home/root/xovi/extensions.d/rm-shot-aarch64.so
+    append_removed extension-rm-shot
+  fi
+  if [ "$restart_xochitl" -eq 1 ]; then
+    systemctl stop xochitl 2>/dev/null || true
+    if [ -x /home/root/xovi/start ]; then
+      /home/root/xovi/start
+    else
+      systemctl start xochitl
+    fi
+  fi
+fi
+
+rm -rf "$BASE"
+echo "removed_components=$removed"
+echo "full_cleanup=removed"
+`
+
+func FullCleanup(device Runner) (string, error) {
+	output, err := device.Run(FullCleanupCommand)
+	if err != nil {
+		return output, fmt.Errorf("remove installer-managed components: %w: %s", err, strings.TrimSpace(output))
+	}
+	if !strings.Contains(output, "full_cleanup=removed") {
+		return output, fmt.Errorf("remove installer-managed components: device did not confirm cleanup")
+	}
+	return output, nil
+}

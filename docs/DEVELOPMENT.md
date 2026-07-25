@@ -130,6 +130,13 @@ After an install, verify separately:
     Node/Pi, ChatGPT login, `config.env`, the runtime, and backups remain.
     Temporary jobs and generated outputs should be gone. Reinstall without
     repeating ChatGPT login.
+29. On a clean installer-owned stack, confirm Full removal lists only recorded
+    components, warns that installer-owned AppLoad apps will also be removed,
+    and removes the recorded XOVI/AppLoad, persistence, Node/Pi, unchanged
+    ChatGPT sign-in, configuration, runtime, and backups. Repeat with
+    pre-existing XOVI/AppLoad and confirm full removal is not offered for those
+    components. Replace the OAuth credential after installation and confirm
+    full removal preserves the changed credential.
 
 Vector acceptance should also confirm that hatch density remains readable at
 small and large placements. Legacy vector results keep the active Xochitl ink

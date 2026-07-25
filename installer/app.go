@@ -390,13 +390,21 @@ func (a *App) CancelLogin() {
 	a.login.Cancel()
 }
 
-// Uninstall removes Paper Agent only. Shared XOVI/AppLoad components, the
-// Node/Pi runtime, ChatGPT credentials, user configuration, and backups remain
-// on the Move. The explicit acknowledgement is also enforced in the backend so
-// a frontend bug cannot bypass it.
-func (a *App) Uninstall(host, password string, acknowledged bool) (OperationResult, error) {
+func owns(status preflight.Status, component string) bool {
+	for _, current := range status.InstallerOwned {
+		if current == component {
+			return true
+		}
+	}
+	return false
+}
+
+// Uninstall defaults to removing Paper Agent only. Full cleanup is available
+// only when installation-time ownership markers prove which shared components
+// Paper Agent Installer originally created.
+func (a *App) Uninstall(host, password string, acknowledged, full bool) (OperationResult, error) {
 	if !acknowledged {
-		return OperationResult{}, fmt.Errorf("confirm the Paper Agent-only uninstall first")
+		return OperationResult{}, fmt.Errorf("confirm the uninstall first")
 	}
 	if a.GetOperationState().Running || a.login.State().Running {
 		return OperationResult{}, fmt.Errorf("finish the current operation before uninstalling")
@@ -418,11 +426,23 @@ func (a *App) Uninstall(host, password string, acknowledged bool) (OperationResu
 	if !before.SupportedModel {
 		return OperationResult{}, fmt.Errorf("unsupported device: Paper Agent currently supports Paper Pro Move (chiappa) only")
 	}
-	if !before.PaperAgent {
+	if full && len(before.InstallerOwned) == 0 {
+		return OperationResult{}, fmt.Errorf("full cleanup is unavailable because no installer ownership record exists")
+	}
+	if !before.PaperAgent && !full {
 		return OperationResult{Status: before, Summary: "Paper Agent is not installed."}, nil
 	}
-	if _, err := maintenance.Uninstall(connection); err != nil {
-		return OperationResult{}, err
+	if before.PaperAgent {
+		if _, err := maintenance.Uninstall(connection); err != nil {
+			return OperationResult{}, err
+		}
+	}
+	cleanupOutput := ""
+	if full {
+		cleanupOutput, err = maintenance.FullCleanup(connection)
+		if err != nil {
+			return OperationResult{}, err
+		}
 	}
 	after, err := preflight.Inspect(connection, host)
 	if err != nil {
@@ -430,6 +450,28 @@ func (a *App) Uninstall(host, password string, acknowledged bool) (OperationResu
 	}
 	if after.PaperAgent || after.ServiceActive || after.SettingsApp {
 		return OperationResult{}, fmt.Errorf("uninstall verification failed: Paper Agent components remain")
+	}
+	if full {
+		if len(after.InstallerOwned) != 0 {
+			return OperationResult{}, fmt.Errorf("full cleanup verification failed: ownership records remain")
+		}
+		if owns(before, "xovi") && after.XOVIInstalled {
+			return OperationResult{}, fmt.Errorf("full cleanup verification failed: installer-managed XOVI remains")
+		}
+		if owns(before, "appload") && after.AppLoadInstalled {
+			return OperationResult{}, fmt.Errorf("full cleanup verification failed: installer-managed AppLoad remains")
+		}
+		if owns(before, "runtime") && (after.NodeInstalled || after.PiInstalled) {
+			return OperationResult{}, fmt.Errorf("full cleanup verification failed: installer-managed runtime remains")
+		}
+		if owns(before, "pi-packages") && !owns(before, "runtime") && after.PiInstalled {
+			return OperationResult{}, fmt.Errorf("full cleanup verification failed: installer-managed Pi packages remain")
+		}
+		summary := "Paper Agent and all components proven to be installed by Paper Agent Installer were removed."
+		if strings.Contains(cleanupOutput, "preserved_changed_oauth=1") {
+			summary += " ChatGPT sign-in was preserved because it changed after the installer recorded it."
+		}
+		return OperationResult{Status: after, Summary: summary}, nil
 	}
 	return OperationResult{
 		Status:  after,

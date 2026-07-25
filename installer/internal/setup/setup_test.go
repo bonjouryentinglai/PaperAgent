@@ -36,7 +36,7 @@ func TestRepairPreservesDetectedSharedComponents(t *testing.T) {
 	if plan.appLoad {
 		t.Fatal("repair would refresh an already detected AppLoad installation")
 	}
-	if !plan.nativeBridge || !plan.qmlIndex {
-		t.Fatal("repair must still refresh Paper Agent's bridge and QML index")
+	if plan.nativeBridge || !plan.qmlIndex {
+		t.Fatal("repair must preserve shared native files and rebuild only Paper Agent's QML index")
 	}
 }

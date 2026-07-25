@@ -54,6 +54,7 @@
           <div><span>ChatGPT login</span><strong>—</strong></div>
           <div><span>Paper Agent</span><strong>—</strong></div>
           <div><span>Settings app</span><strong>—</strong></div>
+          <div><span>Installer-managed</span><strong>—</strong></div>
           <div><span>Free storage</span><strong>—</strong></div>
         </div>
       </section>
@@ -107,10 +108,15 @@
           user settings, and backups are preserved.</p>
         <p class="shared-note">XOVI and AppLoad are never removed here because
           other reMarkable tools may depend on them, including copies installed
-          before Paper Agent.</p>
+          before Paper Agent. Full removal is offered only for components whose
+          installation source was recorded by Paper Agent Installer.</p>
+        <label class="check full-cleanup">
+          <input id="full-uninstall" type="checkbox" disabled>
+          <span id="full-uninstall-copy">No installer-managed components were recorded for this installation.</span>
+        </label>
         <label class="check">
           <input id="uninstall-confirm" type="checkbox">
-          <span>I understand this removes Paper Agent but keeps the shared components and saved data listed above.</span>
+          <span id="uninstall-confirm-copy">I understand this removes Paper Agent but keeps the shared components and saved data listed above.</span>
         </label>
         <div class="actions">
           <button id="uninstall" disabled class="danger">Uninstall Paper Agent</button>

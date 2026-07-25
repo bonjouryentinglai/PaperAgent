@@ -38,11 +38,11 @@ type prerequisitePlan struct {
 func planPrerequisites(status preflight.Status, forceRepair bool) prerequisitePlan {
 	return prerequisitePlan{
 		// XOVI and AppLoad are shared with other reMarkable tools. Repair
-		// refreshes Paper Agent's own bridge and index, but never overwrites a
+		// refreshes Paper Agent's release and index, but never overwrites a
 		// detected shared installation just because Repair was selected.
 		xoviArchive:  !status.XOVIInstalled || !status.NativeDeps,
 		appLoad:      !status.AppLoadInstalled,
-		nativeBridge: forceRepair || !status.NativeDeps,
+		nativeBridge: !status.NativeDeps,
 		qmlIndex:     forceRepair || !status.QMLIndex,
 	}
 }
@@ -177,8 +177,15 @@ func Ensure(
 			return status, err
 		}
 		command := `set -eu
+OWN=/home/root/paper-agent/installer-owned
+mark_owned() {
+  mkdir -p "$OWN"
+  : >"$OWN/$1"
+  chmod 0600 "$OWN/$1"
+}
 if [ ! -d /home/root/xovi ]; then
   tar -xzf /tmp/paper-agent-xovi.tar.gz -C /home/root
+  mark_owned xovi
 fi
 EXT=/home/root/xovi/extensions.d
 INACTIVE=/home/root/xovi/inactive-extensions
@@ -190,6 +197,10 @@ for name in framebuffer-spy.so qt-command-executor.so; do
     else
       tar -xOzf /tmp/paper-agent-xovi.tar.gz "xovi/inactive-extensions/$name" >"$EXT/$name"
     fi
+    case "$name" in
+      framebuffer-spy.so) mark_owned extension-framebuffer-spy ;;
+      qt-command-executor.so) mark_owned extension-qt-command-executor ;;
+    esac
   fi
   chmod 0755 "$EXT/$name"
 done
@@ -201,6 +212,7 @@ if [ ! -f "$EXT/xovi-message-broker.so" ]; then
       xovi/inactive-extensions/xovi-message-broker.so >"$EXT/xovi-message-broker.so"
   fi
   chmod 0755 "$EXT/xovi-message-broker.so"
+  mark_owned extension-xovi-message-broker
 fi
 rm -f /tmp/paper-agent-xovi.tar.gz
 `
@@ -215,6 +227,10 @@ rm -f /tmp/paper-agent-xovi.tar.gz
 			return status, err
 		}
 		command := `set -eu
+OWN=/home/root/paper-agent/installer-owned
+mkdir -p "$OWN"
+: >"$OWN/appload"
+chmod 0600 "$OWN/appload"
 cd /tmp
 rm -rf paper-agent-appload
 mkdir paper-agent-appload
@@ -241,8 +257,15 @@ rm -rf paper-agent-appload paper-agent-appload.zip
 			return status, err
 		}
 		if err := runChecked(connection, "install rm-shot", `set -eu
-cp /tmp/paper-agent-rm-shot.so /home/root/xovi/extensions.d/rm-shot-aarch64.so
-chmod 0755 /home/root/xovi/extensions.d/rm-shot-aarch64.so
+TARGET=/home/root/xovi/extensions.d/rm-shot-aarch64.so
+if [ ! -f "$TARGET" ]; then
+  cp /tmp/paper-agent-rm-shot.so "$TARGET"
+  chmod 0755 "$TARGET"
+  OWN=/home/root/paper-agent/installer-owned
+  mkdir -p "$OWN"
+  : >"$OWN/extension-rm-shot"
+  chmod 0600 "$OWN/extension-rm-shot"
+fi
 rm -f /tmp/paper-agent-rm-shot.so
 `); err != nil {
 			return status, err
@@ -260,6 +283,12 @@ rm -f /tmp/paper-agent-rm-shot.so
 		command := fmt.Sprintf(`set -eu
 umask 022
 RUNTIME=/home/root/paper-agent/runtime
+OWN=/home/root/paper-agent/installer-owned
+mark_owned() {
+  mkdir -p "$OWN"
+  : >"$OWN/$1"
+  chmod 0600 "$OWN/$1"
+}
 NODE_DIR="$RUNTIME/node-v%s"
 if [ ! -x "$NODE_DIR/bin/node" ]; then
   test -f /tmp/paper-agent-node.tar.gz
@@ -267,6 +296,7 @@ if [ ! -x "$NODE_DIR/bin/node" ]; then
   mkdir -p "$NODE_DIR.staging"
   tar -xzf /tmp/paper-agent-node.tar.gz -C "$NODE_DIR.staging" --strip-components=1
   mv "$NODE_DIR.staging" "$NODE_DIR"
+  mark_owned runtime
 fi
 rm -f /tmp/paper-agent-node.tar.gz
 if [ -e /home/root/node ] && [ ! -L /home/root/node ]; then
@@ -281,7 +311,10 @@ HOME=/home/root PATH="/home/root/node/bin:$PATH" \
 test -x /home/root/node/bin/node
 test -x /home/root/node/bin/pi
 test -x /home/root/node/bin/pi-ai
-`, nodeVersion, piVersion, piVersion)
+if [ "%t" = true ]; then
+  mark_owned pi-packages
+fi
+`, nodeVersion, piVersion, piVersion, !status.PiInstalled)
 		if err := runChecked(connection, "install Node.js and Pi", command); err != nil {
 			return status, err
 		}
@@ -313,6 +346,7 @@ test -x /home/root/node/bin/pi-ai
 SOURCE=/tmp/paper-agent-tripletap-source
 ARCHIVE=/tmp/paper-agent-tripletap.tar.gz
 INSTALL=/home/root/xovi-tripletap
+OWN=/home/root/paper-agent/installer-owned
 rm -rf "$SOURCE"
 mkdir -p "$SOURCE" "$INSTALL"
 tar -xzf "$ARCHIVE" -C "$SOURCE" --strip-components=1
@@ -333,6 +367,9 @@ cp "$SOURCE/xovi-tripletap.service" "$INSTALL/xovi-tripletap.service"
 printf '%s\n' 869497aa61435448bf0077fbf75fb264dcba92c5 >"$INSTALL/version.txt"
 rm -rf "$SOURCE" "$ARCHIVE"
 "$INSTALL/enable.sh"
+mkdir -p "$OWN"
+: >"$OWN/persistence"
+chmod 0600 "$OWN/persistence"
 `
 		output, installErr := connection.Run(installTripleTap)
 		if installErr != nil {

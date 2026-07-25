@@ -23,6 +23,9 @@ const operationMessage = document.querySelector("#operation-message");
 const uninstallButton = document.querySelector("#uninstall");
 const uninstallConfirm = document.querySelector("#uninstall-confirm");
 const uninstallMessage = document.querySelector("#uninstall-message");
+const fullUninstall = document.querySelector("#full-uninstall");
+const fullUninstallCopy = document.querySelector("#full-uninstall-copy");
+const uninstallConfirmCopy = document.querySelector("#uninstall-confirm-copy");
 let lastStatus = null;
 let operationTimer = null;
 let loginTimer = null;
@@ -35,6 +38,34 @@ function api(name, ...args) {
 
 function yes(value, positive = "Ready", negative = "Missing") {
   return value ? positive : negative;
+}
+
+function managedDescription(status) {
+  const owned = status?.installerOwned || [];
+  const labels = [];
+  if (owned.includes("xovi")) labels.push("XOVI");
+  if (owned.includes("appload")) labels.push("AppLoad + its apps");
+  if (owned.includes("runtime")) labels.push("Node/Pi runtime");
+  else if (owned.includes("pi-packages")) labels.push("Pi packages");
+  if (owned.includes("persistence")) labels.push("XOVI persistence");
+  if (owned.includes("oauth")) labels.push("ChatGPT sign-in");
+  if (!owned.includes("xovi") && owned.some((name) => name.startsWith("extension-"))) {
+    labels.push("added XOVI extensions");
+  }
+  return labels.join(", ");
+}
+
+function updateUninstallOption() {
+  const description = managedDescription(lastStatus);
+  const available = description.length > 0;
+  fullUninstall.disabled = !available;
+  if (!available) fullUninstall.checked = false;
+  fullUninstallCopy.textContent = available
+    ? `Also remove installer-managed components: ${description}. This can remove every app inside an installer-managed AppLoad.`
+    : "No installer-managed components were recorded for this installation. Safe Paper Agent-only uninstall remains available.";
+  uninstallConfirmCopy.textContent = fullUninstall.checked
+    ? "I understand this permanently removes Paper Agent, its saved data, and the installer-managed components listed above."
+    : "I understand this removes Paper Agent but keeps shared components, sign-in, settings, runtime, and backups.";
 }
 
 function render(status) {
@@ -52,6 +83,7 @@ function render(status) {
       "Not installed",
     )],
     ["Settings app", yes(status.settingsApp, "Installed")],
+    ["Installer-managed", managedDescription(status) || "None recorded"],
     ["Free storage", `${Math.max(0, status.freeSpaceKB / 1024).toFixed(0)} MiB`],
   ];
   const cards = values.map(([label, value]) => {
@@ -75,6 +107,7 @@ function render(status) {
   } else {
     loginMessage.textContent = "Run Install once to add the runtime before signing in.";
   }
+  updateUninstallOption();
   updateActions();
 }
 
@@ -95,7 +128,7 @@ function updateActions() {
   );
   uninstallButton.disabled = !(
     ready &&
-    lastStatus?.paperAgent &&
+    (lastStatus?.paperAgent || (fullUninstall.checked && (lastStatus?.installerOwned || []).length > 0)) &&
     uninstallConfirm.checked &&
     !operationRunning &&
     !loginRunning
@@ -132,6 +165,11 @@ connectButton.addEventListener("click", () => busy(connectButton, async () => {
 }));
 
 uninstallConfirm.addEventListener("change", updateActions);
+fullUninstall.addEventListener("change", () => {
+  uninstallConfirm.checked = false;
+  updateUninstallOption();
+  updateActions();
+});
 changeConfirm.addEventListener("change", updateActions);
 
 checkReleaseButton.addEventListener("click", () => busy(checkReleaseButton, async () => {
@@ -249,8 +287,15 @@ cancelLoginButton.addEventListener("click", async () => {
 
 uninstallButton.addEventListener("click", () => busy(uninstallButton, async () => {
   uninstallMessage.textContent = "Backing up and removing Paper Agent…";
-  const result = await api("Uninstall", host.value, password.value, uninstallConfirm.checked);
+  const result = await api(
+    "Uninstall",
+    host.value,
+    password.value,
+    uninstallConfirm.checked,
+    fullUninstall.checked,
+  );
   uninstallConfirm.checked = false;
+  fullUninstall.checked = false;
   render(result.status);
   uninstallMessage.textContent = result.summary;
 }, uninstallMessage));

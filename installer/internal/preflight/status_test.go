@@ -3,6 +3,7 @@ package preflight
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -30,6 +31,7 @@ login=1
 paper_agent=1
 service=1
 settings_app=0
+installer_owned=xovi,appload,runtime,oauth
 installed_version=0.2.0
 `}, "10.11.99.1")
 	if err != nil {
@@ -49,6 +51,9 @@ installed_version=0.2.0
 	}
 	if status.InstalledVersion != "0.2.0" {
 		t.Fatalf("installed version = %q", status.InstalledVersion)
+	}
+	if got := strings.Join(status.InstallerOwned, ","); got != "xovi,appload,runtime,oauth" {
+		t.Fatalf("installer-owned components = %q", got)
 	}
 }
 

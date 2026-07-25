@@ -16,8 +16,8 @@ guided workflow on macOS, Windows, and Linux:
    backup, health checks, QMD verification, and automatic rollback.
 7. Use the same verified transaction for Install, Update, or Repair.
 
-Uninstall removes only Paper Agent's executable integration and Settings app.
-It preserves shared XOVI/AppLoad components, Node/Pi, ChatGPT credentials,
+Safe uninstall removes only Paper Agent's executable integration and Settings
+app. It preserves shared XOVI/AppLoad components, Node/Pi, ChatGPT credentials,
 `config.env`, the runtime, and backups. Temporary jobs and generated outputs
 inside the removed native runtime are deleted. The confirmation is enforced in
 both the UI and Go backend.
@@ -25,8 +25,16 @@ both the UI and Go backend.
 Existing XOVI and AppLoad installations are detected and reused. Paper Agent
 does not claim ownership of those shared components and never removes them;
 another reMarkable tool may depend on the same installation. Repair refreshes
-Paper Agent and its own native bridge, while an already detected XOVI/AppLoad
-installation remains in place.
+Paper Agent and rebuilds its QML index, while an already detected
+XOVI/AppLoad installation remains in place.
+
+New installations record which prerequisites the installer actually creates.
+When that record exists, the uninstall card offers an explicit full-removal
+option for only those recorded components. This can include XOVI, AppLoad and
+all of its apps, Node/Pi, XOVI persistence, the ChatGPT sign-in created through
+the installer, settings, runtime, and backups. A credential that changed after
+the installer recorded it is preserved. Older or externally managed
+installations without ownership evidence remain limited to safe uninstall.
 
 ## Security boundaries
 
