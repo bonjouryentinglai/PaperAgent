@@ -30,8 +30,7 @@ installation remains in place.
 
 ## Security boundaries
 
-- Developer passwords exist only in memory until the installer closes or the
-  user clicks **Forget password**.
+- Developer passwords exist only in memory until the installer closes.
 - The installer never reads or copies OAuth access or refresh tokens.
 - Published manifests and artifacts must use HTTPS.
 - Release bundles and pinned dependencies are rejected on size or checksum

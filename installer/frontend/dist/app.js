@@ -4,7 +4,6 @@ const message = document.querySelector("#message");
 const grid = document.querySelector("#status-grid");
 const readyBadge = document.querySelector("#ready-badge");
 const connectButton = document.querySelector("#connect");
-const forgetPasswordButton = document.querySelector("#forget-password");
 const loginButton = document.querySelector("#login");
 const cancelLoginButton = document.querySelector("#cancel-login");
 const loginGuide = document.querySelector("#login-guide");
@@ -101,7 +100,6 @@ function updateActions() {
     !operationRunning &&
     !loginRunning
   );
-  forgetPasswordButton.disabled = password.value.length === 0;
 }
 
 async function busy(button, action, errorTarget = message) {
@@ -133,13 +131,6 @@ connectButton.addEventListener("click", () => busy(connectButton, async () => {
     : "Device check complete. You can install Paper Agent below; no changes have been made yet.";
 }));
 
-password.addEventListener("input", updateActions);
-forgetPasswordButton.addEventListener("click", () => {
-  password.value = "";
-  password.focus();
-  message.textContent = "Developer password forgotten for this installer session.";
-  updateActions();
-});
 uninstallConfirm.addEventListener("change", updateActions);
 changeConfirm.addEventListener("change", updateActions);
 
