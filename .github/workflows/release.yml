@@ -1,0 +1,185 @@
+name: Build release artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version label for an unsigned preview build
+        required: true
+        default: preview
+  push:
+    tags:
+      - "v*"
+  pull_request:
+    paths:
+      - ".github/workflows/release.yml"
+      - "device/native/**"
+      - "device/release/**"
+      - "device/settings/**"
+      - "installer/**"
+      - "scripts/build-image-plugin.sh"
+      - "scripts/package-release.sh"
+
+permissions:
+  contents: read
+
+jobs:
+  device:
+    name: ARM64 device release
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Use stable Rust with ARM64 target
+        uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable, pinned 2026-07-20
+        with:
+          targets: aarch64-unknown-linux-gnu
+
+      - name: Install ARM64 and Qt build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu qtbase5-dev-tools librsvg2-bin
+
+      - name: Build ARM64 native renderer
+        run: |
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc \
+            cargo build --release --locked --target aarch64-unknown-linux-gnu \
+            --manifest-path device/native/Cargo.toml
+          mkdir -p dist
+          cp device/native/target/aarch64-unknown-linux-gnu/release/paper-agent-native \
+            dist/paper-agent-native
+
+      - name: Build AppLoad Settings app
+        env:
+          RCC: /usr/lib/qt5/bin/rcc
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+        run: device/settings/build.sh dist/paper-agent-settings
+
+      - name: Build XOVI image bridge
+        run: scripts/build-image-plugin.sh
+
+      - name: Package deterministic release
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            version=${GITHUB_REF_NAME#v}
+          else
+            version=${INPUT_VERSION:-pr-${GITHUB_SHA::12}}
+          fi
+          scripts/package-release.sh "$version" \
+            dist/paper-agent-native \
+            dist/paper-agent-image-aarch64.so \
+            dist/paper-agent-settings
+
+      - name: Upload device release
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: paper-agent-device-release
+          path: dist/release/*
+          if-no-files-found: error
+
+  installer:
+    name: Desktop installer (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            artifact: macos
+          - os: windows-2025
+            artifact: windows
+          - os: ubuntu-22.04
+            artifact: linux
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Use Go from installer module
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: installer/go.mod
+          cache-dependency-path: installer/go.sum
+
+      - name: Install Linux desktop dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libgtk-3-dev libwebkit2gtk-4.0-dev
+
+      - name: Build installer
+        working-directory: installer
+        run: go run github.com/wailsapp/wails/v2/cmd/wails@v2.13.0 build
+
+      - name: Pack macOS installer
+        if: runner.os == 'macOS'
+        run: ditto -c -k --sequesterRsrc --keepParent installer/build/bin/paper-agent-installer.app paper-agent-installer-macos.zip
+
+      - name: Pack Windows installer
+        if: runner.os == 'Windows'
+        shell: bash
+        run: cp installer/build/bin/paper-agent-installer.exe paper-agent-installer-windows.exe
+
+      - name: Pack Linux installer
+        if: runner.os == 'Linux'
+        run: |
+          cp installer/build/bin/paper-agent-installer paper-agent-installer-linux
+          chmod 0755 paper-agent-installer-linux
+
+      - name: Upload desktop installer
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: paper-agent-installer-${{ matrix.artifact }}
+          path: paper-agent-installer-*
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [device, installer]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download all release artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create release and upload assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=$GITHUB_REF_NAME
+          response=$(curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/$GITHUB_REPOSITORY/releases" \
+            -d "$(jq -n --arg tag "$tag" '{
+              tag_name: $tag,
+              name: ("Paper Agent " + $tag),
+              generate_release_notes: true,
+              draft: true
+            }')")
+          release_id=$(jq -r .id <<<"$response")
+          test "$release_id" != null
+          for file in release-assets/*; do
+            name=$(basename "$file")
+            curl --fail-with-body --silent --show-error \
+              -X POST \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Content-Type: application/octet-stream" \
+              --data-binary "@$file" \
+              "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$release_id/assets?name=$name" \
+              >/dev/null
+          done

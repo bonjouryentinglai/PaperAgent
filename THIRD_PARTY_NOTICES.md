@@ -70,6 +70,10 @@ Installation uses but does not redistribute the following binaries:
 - xovi-message-broker (GPL-3.0)
 - qt-resource-rebuilder (GPL-3.0)
 - rm-shot (GPL-3.0)
+- xovi-tripletap, pinned at
+  `869497aa61435448bf0077fbf75fb264dcba92c5` (GPL-3.0-only). The installer
+  checksum-verifies the complete source archive before staging it as an
+  external XOVI persistence service.
 
 Paper Agent does not include smart_remarkable's GPL-2.0 prebuilt kernel
 modules. Its minimal native image plugin is GPL-3.0-only and kept in a separate

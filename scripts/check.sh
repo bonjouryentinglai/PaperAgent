@@ -53,6 +53,7 @@ node --check device/runtime/rich-document.mjs
 node --check device/runtime/image-generate.mjs
 node --check device/runtime/layout-policy.mjs
 node --check device/runtime/settings-controller.mjs
+node --check installer/frontend/dist/app.js
 node --test device/runtime/rich-document.test.mjs
 node --test device/runtime/image-generate.test.mjs
 node --test device/runtime/layout-policy.test.mjs
@@ -71,6 +72,9 @@ for script in device/systemd/*.sh; do
 done
 for script in device/settings/*.sh; do
   bash -n "$script"
+done
+for script in device/release/*.sh; do
+  sh -n "$script"
 done
 
 node -e 'const fs=require("fs"); const m=JSON.parse(fs.readFileSync("device/settings/manifest.json")); if(m.id!=="paper-agent-settings"||m.loadsBackend!==true||m.entry!=="/ui/Main.qml") process.exit(1)'

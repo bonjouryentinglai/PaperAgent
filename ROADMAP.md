@@ -40,25 +40,26 @@ follow-up is intentionally deferred.
 
 ## Phase 2B: easy installation and onboarding
 
-- [ ] Ship one guided setup tool for macOS, Windows, and Linux.
-- [ ] Discover a connected Move and check developer mode, model, OS, storage,
+- [x] Build one guided setup tool for macOS, Windows, and Linux.
+- [x] Discover a connected Move and check developer mode, model, OS, storage,
   and required dependencies before making changes.
-- [ ] Reuse the remagic installation stack for SSH, XOVI, and AppLoad instead
+- [x] Reuse the remagic installation stack for SSH, XOVI, and AppLoad instead
   of rebuilding those foundations.
-- [ ] Download a checksum-verified Paper Agent release and install it with
+- [x] Download a checksum-verified Paper Agent release and install it with
   automatic backup and rollback.
-- [ ] Guide ChatGPT subscription login while keeping OAuth credentials only on
+- [x] Guide ChatGPT subscription login while keeping OAuth credentials only on
   the Move.
-- [ ] Add a Paper Agent Settings app to AppLoad for validated model, thinking,
+- [x] Add a Paper Agent Settings app to AppLoad for validated model, thinking,
   AI answer text-size, and minimum auto-scale controls.
-- [ ] Keep edits pending until the user presses Apply, then validate and write
+- [x] Keep edits pending until the user presses Apply, then validate and write
   them atomically, restart only the Paper Agent service, verify health, and
   restore the previous settings if activation fails.
-- [ ] Verify the installation, then offer install, update, repair, and
+- [x] Verify the installation, then offer install, update, repair, and
   Paper Agent-only uninstall paths from the same tool.
-- [ ] Preserve shared XOVI/AppLoad components and ChatGPT credentials by
-  default, with explicit options for sign-out and complete Paper Agent data
-  cleanup.
+- [x] Preserve shared XOVI/AppLoad components and ChatGPT credentials during
+  the default Paper Agent-only uninstall.
+- [ ] Complete cross-platform artifact, signing, onboarding, and fresh-device
+  physical acceptance before calling the installer a stable release.
 
 ## Phase 3: multi-page creation
 

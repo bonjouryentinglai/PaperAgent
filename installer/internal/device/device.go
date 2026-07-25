@@ -5,11 +5,13 @@ package device
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -75,6 +77,10 @@ func (d *Device) Close() {
 }
 
 func (d *Device) Run(command string) (string, error) {
+	return d.RunIn(command, nil)
+}
+
+func (d *Device) RunIn(command string, input io.Reader) (string, error) {
 	session, err := d.client.NewSession()
 	if err != nil {
 		return "", err
@@ -84,19 +90,92 @@ func (d *Device) Run(command string) (string, error) {
 	writer := &lockedWriter{writer: &output}
 	session.Stdout = writer
 	session.Stderr = writer
+	session.Stdin = input
 	err = session.Run(command)
 	writer.mu.Lock()
 	defer writer.mu.Unlock()
 	return output.String(), err
 }
 
+func (d *Device) RunStreaming(
+	ctx context.Context,
+	command string,
+	input io.Reader,
+	onOutput func(string),
+) (string, error) {
+	session, err := d.client.NewSession()
+	if err != nil {
+		return "", err
+	}
+	defer session.Close()
+	var output bytes.Buffer
+	writer := &lockedWriter{writer: &output, onWrite: onOutput}
+	session.Stdout = writer
+	session.Stderr = writer
+	session.Stdin = input
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = session.Close()
+		case <-done:
+		}
+	}()
+	err = session.Run(command)
+	close(done)
+	writer.mu.Lock()
+	defer writer.mu.Unlock()
+	if ctx.Err() != nil {
+		return output.String(), ctx.Err()
+	}
+	return output.String(), err
+}
+
+func shellQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
+}
+
+// Push streams through cat so the Move does not need an SFTP subsystem.
+func (d *Device) Push(input io.Reader, remotePath string, mode os.FileMode) error {
+	if !strings.HasPrefix(remotePath, "/") {
+		return fmt.Errorf("remote path must be absolute")
+	}
+	parent := filepath.ToSlash(filepath.Dir(remotePath))
+	command := fmt.Sprintf(
+		"mkdir -p %s && cat > %s && chmod %04o %s",
+		shellQuote(parent),
+		shellQuote(remotePath),
+		mode.Perm(),
+		shellQuote(remotePath),
+	)
+	output, err := d.RunIn(command, input)
+	if err != nil {
+		return fmt.Errorf("upload %s: %w: %s", remotePath, err, strings.TrimSpace(output))
+	}
+	return nil
+}
+
+func (d *Device) PushFile(localPath, remotePath string, mode os.FileMode) error {
+	file, err := os.Open(localPath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	return d.Push(file, remotePath, mode)
+}
+
 type lockedWriter struct {
-	mu     sync.Mutex
-	writer io.Writer
+	mu      sync.Mutex
+	writer  io.Writer
+	onWrite func(string)
 }
 
 func (w *lockedWriter) Write(value []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	return w.writer.Write(value)
+	written, err := w.writer.Write(value)
+	if w.onWrite != nil && written > 0 {
+		w.onWrite(string(value[:written]))
+	}
+	return written, err
 }

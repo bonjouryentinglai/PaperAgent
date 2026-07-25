@@ -2,6 +2,23 @@
 
 Paper Agent uses a thin Xochitl integration and a separate local runtime.
 
+## Phase 2B installer
+
+The Wails desktop UI calls a Go backend; it never shells out to a host `ssh`
+binary. Its pure-Go SSH layer is adapted from remagic. Preflight is read-only
+and accepts only the Paper Pro Move model (`chiappa`). Device-changing actions
+download pinned XOVI/AppLoad/runtime dependencies on the desktop, verify their
+HTTPS URL, declared size, and SHA-256, then upload them over the authenticated
+USB connection.
+
+Pi performs OpenAI/Codex device-code login on the Move. The desktop receives
+only the approval URL, user code, and completion state; it does not read or
+copy `auth.json`. A published Paper Agent manifest similarly bounds the device
+bundle by model, size, and checksum. Install, Update, and Repair all call the
+same device-side transaction, which backs up the previous Paper Agent files,
+checks the oracle socket and QMD activation, and restores the backup if either
+activation gate fails.
+
 ## Request path
 
 1. The QMD adds AI and Beautify icons to Xochitl's lasso menu.

@@ -7,7 +7,8 @@ is a separate project and must not be copied into this repository.
 PaperAgent/
 ├── .github/
 │   └── workflows/
-│       └── ci.yml                    # Public CI: Rust, Node and shell checks
+│       ├── ci.yml                    # Public CI: Rust, Node, Go and shell checks
+│       └── release.yml               # ARM64 bundle and desktop installer builds
 ├── config/
 │   └── paper-agent.env.example       # Safe, documented configuration template
 ├── device/
@@ -21,11 +22,17 @@ PaperAgent/
 │   │   └── Cargo.toml
 │   ├── qmd/
 │   │   └── paper-agent-selection.qmd # Xochitl AI and Beautify menu actions
+│   ├── release/
+│   │   └── install.sh                # Transactional release activation/rollback
 │   ├── runtime/                      # Local model, Scene parser and orchestration code
 │   │   ├── paper-agent-tools.ts      # Two terminating Pi tool schemas
 │   │   ├── scene.mjs                 # Scene v1 validation and compilation
 │   │   └── skills/                   # Fixed AI, drawing and Beautify policies
+│   ├── settings/                     # AppLoad Settings QML and narrow backend
 │   └── systemd/                      # On-device Paper Agent service definition
+├── installer/                        # Cross-platform Wails/Go setup tool
+│   ├── frontend/dist/                # Embedded installer UI
+│   └── internal/                     # SSH, preflight, OAuth, release and setup logic
 ├── docs/
 │   ├── assets/
 │   │   ├── icons/                    # Original SVG menu icons and preview
@@ -65,8 +72,8 @@ credentials can appear under unexpected filenames.
 
 ## Release layout
 
-Release archives should be produced from tracked source by a future packaging
-workflow and written under ignored `dist/`. A release should contain only the
-device runtime, native binary, QMD integration, service file, installer and the
-licenses required by those files. It must not contain a developer's Pi credential
-store, SSH configuration or notebook data.
+`scripts/package-release.sh` creates the deterministic device bundle under the
+ignored `dist/` directory. The release workflow builds that bundle plus the
+desktop installers from tracked source and creates a draft GitHub release for
+review. Release output must not contain a developer's Pi credential store, SSH
+configuration, private settings, notebook data, or local paths.

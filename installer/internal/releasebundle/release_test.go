@@ -130,4 +130,13 @@ func TestDownloadVerifiesSizeAndChecksumBeforeActivation(t *testing.T) {
 	if _, err := Download(context.Background(), client, artifact, t.TempDir()); err == nil {
 		t.Fatal("checksum mismatch was accepted")
 	}
+	if _, err := DownloadAs(
+		context.Background(),
+		client,
+		artifact,
+		t.TempDir(),
+		"../escape",
+	); err == nil {
+		t.Fatal("unsafe output filename was accepted")
+	}
 }

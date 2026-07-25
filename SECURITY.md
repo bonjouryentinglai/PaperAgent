@@ -12,6 +12,11 @@ notebook pages, device passwords or account identifiers in an issue.
 - The native writer accepts only validated StrokeJobs and requires explicit
   confirmation.
 - QML actions and runtime result kinds are strict allowlists.
+- The desktop installer keeps the developer password in memory only for the
+  requested SSH operation and never reads or returns Pi OAuth token values.
+- Installer dependencies and Paper Agent releases use pinned or
+  manifest-declared byte sizes and SHA-256 checksums over HTTPS. Device
+  activation remains transactional even after desktop verification.
 
 Developer Mode and XOVI reduce the tablet's default security boundary. Users
 should understand that firmware updates can disable or invalidate installed

@@ -21,10 +21,16 @@ os=3.22.1
 free_kb=123456
 xovi=1
 appload=1
+qml_index=1
+xovi_persistence=1
+node=1
+pi=1
+native_deps=1
 login=1
 paper_agent=1
 service=1
 settings_app=0
+installed_version=0.2.0
 `}, "10.11.99.1")
 	if err != nil {
 		t.Fatal(err)
@@ -34,6 +40,15 @@ settings_app=0
 	}
 	if status.SettingsApp || status.FreeSpaceKB != 123456 {
 		t.Fatalf("unexpected settings/storage status: %#v", status)
+	}
+	if !status.NodeInstalled || !status.PiInstalled || !status.NativeDeps {
+		t.Fatalf("expected runtime and native dependencies: %#v", status)
+	}
+	if !status.QMLIndex || !status.XOVIPersistence {
+		t.Fatalf("expected XOVI QML index and persistence: %#v", status)
+	}
+	if status.InstalledVersion != "0.2.0" {
+		t.Fatalf("installed version = %q", status.InstalledVersion)
 	}
 }
 

@@ -15,7 +15,7 @@
           <h1>Paper Agent Installer</h1>
           <p>Guided setup with device checks, backup, verification, and rollback.</p>
         </div>
-        <span class="badge">Phase 2B preview</span>
+        <span class="badge">Phase 2B</span>
       </header>
 
       <section class="card connection">
@@ -45,18 +45,50 @@
           <div><span>OS</span><strong>—</strong></div>
           <div><span>XOVI</span><strong>—</strong></div>
           <div><span>AppLoad</span><strong>—</strong></div>
+          <div><span>Node + Pi</span><strong>—</strong></div>
           <div><span>ChatGPT login</span><strong>—</strong></div>
           <div><span>Paper Agent</span><strong>—</strong></div>
+          <div><span>Settings app</span><strong>—</strong></div>
+          <div><span>Free storage</span><strong>—</strong></div>
+        </div>
+      </section>
+
+      <section class="card login-card">
+        <div><p class="step">Step 3</p><h2>Sign in to ChatGPT</h2></div>
+        <p>Pi performs device-code login on the Move. The desktop shows only the
+          approval URL and code; OAuth credentials remain on the tablet.</p>
+        <div id="login-guide" class="login-guide hidden">
+          <a id="login-url" target="_blank" rel="noreferrer">Open ChatGPT sign-in</a>
+          <div><span>Code</span><strong id="login-code">Waiting…</strong></div>
+        </div>
+        <p id="login-message" class="message">Install the runtime before signing in.</p>
+        <div class="actions">
+          <button id="login" disabled>Start ChatGPT sign-in</button>
+          <button id="cancel-login" disabled class="secondary">Cancel sign-in</button>
         </div>
       </section>
 
       <section class="card install-card">
-        <div><p class="step">Step 3</p><h2>Install or maintain</h2></div>
-        <p>Install, update, repair, and guided login remain unavailable until release-bundle verification is complete.</p>
+        <div><p class="step">Step 4</p><h2>Install or maintain</h2></div>
+        <div class="release">
+          <span>Published release</span>
+          <strong id="release-version">Not checked</strong>
+          <button id="check-release" class="secondary compact">Check</button>
+        </div>
+        <label class="check change-confirm">
+          <input id="change-confirm" type="checkbox">
+          <span>I understand this modifies Developer Mode software on the Move.
+            Paper Agent backs up its own files and rolls back a failed release.</span>
+        </label>
         <div class="actions">
           <button id="install" disabled>Install</button>
           <button id="update" disabled>Update</button>
           <button id="repair" disabled>Repair</button>
+        </div>
+        <div id="operation-panel" class="operation-panel">
+          <div><strong id="operation-stage">Ready</strong><span id="operation-percent">0%</span></div>
+          <progress id="operation-progress" max="100" value="0"></progress>
+          <p id="operation-message">Check the device, then choose an action.</p>
         </div>
         <div class="uninstall-panel">
           <label class="check">

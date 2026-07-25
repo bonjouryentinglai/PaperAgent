@@ -109,6 +109,26 @@ After an install, verify separately:
 23. Force an invalid model activation in a maintainer test. The Settings app
     must report failure, restore the previous mode-0600 config, restart the old
     service successfully, and leave OAuth data untouched.
+24. On a clean Developer Mode Move, run the desktop installer with only the
+    USB cable and device password. Confirm discovery, the `chiappa` model gate,
+    storage check, pinned XOVI/AppLoad/native dependency install, Node/Pi
+    install, and post-restart SSH recovery.
+25. Start ChatGPT sign-in in the installer. Confirm the URL and device code
+    appear, cancellation leaves no partial credential, successful approval
+    produces a mode-0600 `/home/root/.pi/agent/auth.json`, and no token appears
+    in desktop logs, process output, or the repository.
+26. Install a checksum-verified release. Confirm the reported version, active
+    oracle service, Xochitl selection buttons, native image bridge, and
+    Settings app. Corrupt a maintainer-only test bundle after its manifest is
+    created and confirm the desktop rejects it before upload.
+27. Update to a newer test version, then run Repair at the same version. Force
+    service-health and QMD-validation failures separately; each must restore
+    the previous working version and leave notebook content and OAuth data
+    unchanged.
+28. Use desktop Uninstall. Confirm Paper Agent, its Xochitl selection entry,
+    image bridge, service, and Settings app are gone while XOVI/AppLoad,
+    Node/Pi, ChatGPT login, `config.env`, generated artifacts, and backups
+    remain. Reinstall without repeating ChatGPT login.
 
 Vector acceptance should also confirm that hatch density remains readable at
 small and large placements. Legacy vector results keep the active Xochitl ink

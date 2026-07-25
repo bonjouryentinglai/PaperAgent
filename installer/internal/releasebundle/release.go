@@ -139,8 +139,21 @@ func Fetch(ctx context.Context, client *http.Client, manifestURL string) (Manife
 }
 
 func Download(ctx context.Context, client *http.Client, artifact Artifact, directory string) (string, error) {
+	return DownloadAs(ctx, client, artifact, directory, "paper-agent-release.tar.gz")
+}
+
+func DownloadAs(
+	ctx context.Context,
+	client *http.Client,
+	artifact Artifact,
+	directory string,
+	filename string,
+) (string, error) {
 	if client == nil {
 		return "", fmt.Errorf("HTTP client is required")
+	}
+	if filename == "" || filename != filepath.Base(filename) || filename == "." {
+		return "", fmt.Errorf("invalid release filename")
 	}
 	if _, err := secureURL(artifact.URL); err != nil {
 		return "", fmt.Errorf("release bundle URL: %w", err)
@@ -155,7 +168,7 @@ func Download(ctx context.Context, client *http.Client, artifact Artifact, direc
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		return "", fmt.Errorf("create release staging directory: %w", err)
 	}
-	target := filepath.Join(directory, "paper-agent-release.tar.gz")
+	target := filepath.Join(directory, filename)
 	partial, err := os.CreateTemp(directory, ".paper-agent-release-*.partial")
 	if err != nil {
 		return "", fmt.Errorf("create release staging file: %w", err)

@@ -73,11 +73,34 @@ untouched while the cleaned result is placed below it or on a new page.
 | Rough handwriting, including Traditional Chinese and Latin text | A faithful, more legible handwriting transcription | <a href="docs/assets/demos/beautify-handwriting.gif"><img src="docs/assets/demos/beautify-handwriting.gif" alt="Beautify handwriting demo" width="240"></a> |
 | A rough diagram, flowchart, or labeled sketch | A faithful vector reconstruction with aligned shapes, straight connectors, and consistent labels | <a href="docs/assets/demos/beautify-diagram.gif"><img src="docs/assets/demos/beautify-diagram.gif" alt="Beautify drawing demo" width="240"></a> |
 
-## Install with Claude or Codex
+## Install
 
-The current release is for a Paper Pro Move with Developer Mode, XOVI, and
-AppLoad already available. Instead of copying installation commands by hand,
-open this repository in Claude Code or Codex and give it the following prompt:
+Phase 2B adds a guided desktop installer for macOS, Windows, and Linux. A
+published release provides the installer beside a checksum-verified ARM64
+device bundle.
+
+1. Enable Developer Mode and connect the Paper Pro Move over USB.
+2. Open **Paper Agent Installer**, choose **Discover**, and enter the developer
+   password shown by reMarkable.
+3. Confirm the device changes and choose **Install**. Missing pinned
+   XOVI/AppLoad, native, Node, and Pi prerequisites are installed and verified.
+4. Choose **Start ChatGPT sign-in**, open the displayed URL, and enter its
+   device code. OAuth credentials are written only to the Move.
+5. Choose **Install** again. Paper Agent activates only after its service,
+   Xochitl integration, and Settings app pass verification; otherwise the
+   previous Paper Agent files are restored.
+
+The same desktop tool provides **Update**, **Repair**, and a confirmed
+Paper-Agent-only **Uninstall**. Open **Paper Agent Settings** in AppLoad to
+change the model, thinking level, AI answer size, and minimum automatic scale.
+Tagged builds are created as draft releases for maintainer review; platform
+signing and fresh-device physical acceptance are still required before the
+installer is called stable.
+
+### Maintainer installation with Claude or Codex
+
+Until a reviewed desktop build is published, maintainers can open this
+repository in Claude Code or Codex and use:
 
 ```text
 Install Paper Agent from this repository on my reMarkable Paper Pro Move.
@@ -100,10 +123,9 @@ device-modifying action. When finished, report every check that passed, every
 check that could not be run, and how to uninstall Paper Agent safely.
 ```
 
-The ChatGPT login is interactive and stays on the Move in Pi's private
-credential store. No OpenAI API key is required. Contributors who want the
-individual commands and build details can read
-[Development](docs/DEVELOPMENT.md).
+The ChatGPT login stays on the Move in Pi's private credential store. No OpenAI
+API key is required. Contributors who want the individual commands and build
+details can read [Development](docs/DEVELOPMENT.md).
 
 ### Data and authentication
 

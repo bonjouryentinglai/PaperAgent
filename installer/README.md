@@ -1,39 +1,52 @@
 # Paper Agent Installer
 
-Phase 2B uses a Wails v2 desktop shell with a Go backend. The first
-implementation milestone provides:
+Phase 2B is a Wails v2 desktop application with a Go backend. It provides one
+guided workflow on macOS, Windows, and Linux:
 
-- USB-first and LAN device discovery adapted from remagic;
-- key or password SSH connection without requiring a local `ssh` binary;
-- read-only device, developer-mode, dependency, login, and Paper Agent status;
-- a bounded HTTPS release manifest and bundle verifier that checks declared
-  size and SHA-256 before a download can be activated;
-- a confirmed Paper Agent-only uninstall that preserves shared dependencies,
-  ChatGPT credentials, user configuration, runtime, and backups;
-- a native macOS, Windows, and Linux UI foundation for the guided workflow.
+1. Connect and discover a Developer Mode Paper Pro Move.
+2. Enter the device password for an allowlisted preflight.
+3. Verify model, OS, storage, XOVI/AppLoad, native dependencies, Node/Pi,
+   ChatGPT login, Paper Agent, and the Settings app.
+4. Install any missing prerequisites from pinned HTTPS artifacts whose byte
+   length and SHA-256 are checked before upload.
+5. Run Pi's OpenAI/Codex device-code login on the Move. The desktop displays
+   only the approval URL and code; `auth.json` stays on the tablet.
+6. Download a checksum-verified Paper Agent release and apply it with device
+   backup, health checks, QMD verification, and automatic rollback.
+7. Use the same verified transaction for Install, Update, or Repair.
 
-Install, update, repair, and ChatGPT login mutations are deliberately not
-enabled until checksum-verified release bundles and their transaction paths are
-implemented and tested. The UI reports this clearly instead of exposing
-partial operations.
+Uninstall removes only Paper Agent's executable integration and Settings app.
+It preserves shared XOVI/AppLoad components, Node/Pi, ChatGPT credentials,
+`config.env`, generated artifacts, and backups. The confirmation is enforced
+in both the UI and Go backend.
 
-Run Go tests:
+## Security boundaries
+
+- Developer passwords exist only in memory for the requested operation.
+- The installer never reads or copies OAuth access or refresh tokens.
+- Published manifests and artifacts must use HTTPS.
+- Release bundles and pinned dependencies are rejected on size or checksum
+  mismatch.
+- Only `chiappa` is accepted until other models pass physical validation.
+- QMD and service activation failures trigger the device-side rollback.
+
+The connection code and XOVI/AppLoad setup sequence are adapted from remagic
+under its MIT license. See `third_party/remagic-MIT.txt`.
+
+## Build and test
 
 ```sh
 cd installer
 go test ./...
+go run github.com/wailsapp/wails/v2/cmd/wails@v2.13.0 build
 ```
 
-Build the desktop app with the stable Wails v2 CLI:
+`PAPER_AGENT_RELEASE_MANIFEST_URL` can point a maintainer build at an HTTPS or
+loopback development manifest. Normal builds use the latest published GitHub
+release.
 
-```sh
-wails build
-```
-
-The device and probe code is adapted from remagic under the MIT license. See
-`third_party/remagic-MIT.txt`.
-
-`paper-agent-manifest.example.json` documents release manifest schema 1. The
-published manifest will live beside the release bundle. A relative bundle URL
-is resolved against the HTTPS manifest URL; non-loopback HTTP, unsupported
-models, invalid sizes, and invalid checksums are rejected.
+`paper-agent-manifest.example.json` documents manifest schema 1. A relative
+bundle URL is resolved beside the manifest. GitHub's release workflow builds
+the ARM64 bundle and unsigned desktop binaries; a tagged build creates a draft
+release for maintainer review. Platform code signing/notarization remains a
+release-operations responsibility.
