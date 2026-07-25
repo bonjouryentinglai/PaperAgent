@@ -6,11 +6,14 @@ implementation milestone provides:
 - USB-first and LAN device discovery adapted from remagic;
 - key or password SSH connection without requiring a local `ssh` binary;
 - read-only device, developer-mode, dependency, login, and Paper Agent status;
+- a confirmed Paper Agent-only uninstall that preserves shared dependencies,
+  ChatGPT credentials, user configuration, runtime, and backups;
 - a native macOS, Windows, and Linux UI foundation for the guided workflow.
 
-Install, update, repair, ChatGPT login, and uninstall mutations are deliberately
-not enabled until their transaction and confirmation paths are implemented and
-tested. The UI reports this clearly instead of exposing partial operations.
+Install, update, repair, and ChatGPT login mutations are deliberately not
+enabled until checksum-verified release bundles and their transaction paths are
+implemented and tested. The UI reports this clearly instead of exposing
+partial operations.
 
 Run Go tests:
 

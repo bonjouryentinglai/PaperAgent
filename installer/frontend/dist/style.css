@@ -54,3 +54,9 @@ button:disabled { opacity: .35; cursor: not-allowed; }
 .status-grid strong { font-size: 15px; }
 .install-card { display: grid; grid-template-columns: 1fr 1.5fr; gap: 18px 28px; align-items: center; }
 .install-card .actions { grid-column: 1 / -1; }
+.uninstall-panel {
+  grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between;
+  gap: 18px; border-top: 1px solid #d5d1c7; padding-top: 18px;
+}
+.check { display: flex; align-items: flex-start; gap: 10px; max-width: 650px; line-height: 1.4; }
+.check input { width: 18px; height: 18px; margin: 1px 0 0; flex: 0 0 auto; }

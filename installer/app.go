@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/bonjouryentinglai/paper-agent/installer/internal/device"
+	"github.com/bonjouryentinglai/paper-agent/installer/internal/maintenance"
 	"github.com/bonjouryentinglai/paper-agent/installer/internal/preflight"
 )
 
@@ -20,6 +21,11 @@ type Candidate struct {
 	Banner        string `json:"banner"`
 	DeveloperMode bool   `json:"developerMode"`
 	USB           bool   `json:"usb"`
+}
+
+type OperationResult struct {
+	Status  preflight.Status `json:"status"`
+	Summary string           `json:"summary"`
 }
 
 func NewApp() *App {
@@ -64,6 +70,50 @@ func (a *App) Inspect(host, password string) (preflight.Status, error) {
 	return preflight.Inspect(connection, host)
 }
 
+// Uninstall removes Paper Agent only. Shared XOVI/AppLoad components, the
+// Node/Pi runtime, ChatGPT credentials, user configuration, and backups remain
+// on the Move. The explicit acknowledgement is also enforced in the backend so
+// a frontend bug cannot bypass it.
+func (a *App) Uninstall(host, password string, acknowledged bool) (OperationResult, error) {
+	if !acknowledged {
+		return OperationResult{}, fmt.Errorf("confirm the Paper Agent-only uninstall first")
+	}
+	host = strings.TrimSpace(host)
+	if host == "" {
+		host = device.DefaultUSBAddr
+	}
+	connection, err := device.Connect(host, strings.TrimSpace(password))
+	if err != nil {
+		return OperationResult{}, fmt.Errorf("connect to Move: %w", err)
+	}
+	defer connection.Close()
+
+	before, err := preflight.Inspect(connection, host)
+	if err != nil {
+		return OperationResult{}, err
+	}
+	if !before.SupportedModel {
+		return OperationResult{}, fmt.Errorf("unsupported device: Paper Agent currently supports Paper Pro Move (chiappa) only")
+	}
+	if !before.PaperAgent {
+		return OperationResult{Status: before, Summary: "Paper Agent is not installed."}, nil
+	}
+	if _, err := maintenance.Uninstall(connection); err != nil {
+		return OperationResult{}, err
+	}
+	after, err := preflight.Inspect(connection, host)
+	if err != nil {
+		return OperationResult{}, fmt.Errorf("verify uninstall: %w", err)
+	}
+	if after.PaperAgent || after.ServiceActive || after.SettingsApp {
+		return OperationResult{}, fmt.Errorf("uninstall verification failed: Paper Agent components remain")
+	}
+	return OperationResult{
+		Status:  after,
+		Summary: "Paper Agent was removed. ChatGPT sign-in, XOVI/AppLoad, settings, runtime, and backups were preserved.",
+	}, nil
+}
+
 func (a *App) ImplementationState() map[string]bool {
 	return map[string]bool{
 		"discovery": true,
@@ -72,6 +122,6 @@ func (a *App) ImplementationState() map[string]bool {
 		"update":    false,
 		"repair":    false,
 		"login":     false,
-		"uninstall": false,
+		"uninstall": true,
 	}
 }

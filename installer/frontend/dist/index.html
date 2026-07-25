@@ -52,12 +52,18 @@
 
       <section class="card install-card">
         <div><p class="step">Step 3</p><h2>Install or maintain</h2></div>
-        <p>The mutation workflow is intentionally disabled in this first preview while transactional install and login are being implemented.</p>
+        <p>Install, update, repair, and guided login remain unavailable until release-bundle verification is complete.</p>
         <div class="actions">
-          <button disabled>Install</button>
-          <button disabled>Update</button>
-          <button disabled>Repair</button>
-          <button disabled class="danger">Uninstall</button>
+          <button id="install" disabled>Install</button>
+          <button id="update" disabled>Update</button>
+          <button id="repair" disabled>Repair</button>
+        </div>
+        <div class="uninstall-panel">
+          <label class="check">
+            <input id="uninstall-confirm" type="checkbox">
+            <span>Remove Paper Agent only. Keep ChatGPT sign-in, XOVI/AppLoad, settings, runtime, and backups.</span>
+          </label>
+          <button id="uninstall" disabled class="danger">Uninstall Paper Agent</button>
         </div>
       </section>
     </main>

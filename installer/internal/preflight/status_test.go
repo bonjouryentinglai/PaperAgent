@@ -45,3 +45,19 @@ func TestInspectRejectsMissingModelAndCommandFailure(t *testing.T) {
 		t.Fatal("command failure was accepted")
 	}
 }
+
+func TestInspectDoesNotClaimOtherRemarkableModelsAreSupported(t *testing.T) {
+	for _, model := range []string{
+		"reMarkable Ferrari",
+		"reMarkable Tatsu",
+		"reMarkable Paper Pro",
+	} {
+		status, err := Inspect(fakeRunner{output: "model=" + model + "\nos=3.27\n"}, "device")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if status.SupportedModel {
+			t.Fatalf("%q was reported as supported", model)
+		}
+	}
+}

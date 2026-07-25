@@ -40,12 +40,7 @@ test -f /home/root/xovi/exthome/appload/paper-agent-settings/manifest.json && ec
 
 func supportedModel(model string) bool {
 	lower := strings.ToLower(model)
-	for _, name := range []string{"chiappa", "ferrari", "tatsu", "paper pro"} {
-		if strings.Contains(lower, name) {
-			return true
-		}
-	}
-	return false
+	return strings.Contains(lower, "chiappa")
 }
 
 func parse(output, address string) (Status, error) {

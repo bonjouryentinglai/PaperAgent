@@ -5,6 +5,9 @@ const grid = document.querySelector("#status-grid");
 const readyBadge = document.querySelector("#ready-badge");
 const discoverButton = document.querySelector("#discover");
 const inspectButton = document.querySelector("#inspect");
+const uninstallButton = document.querySelector("#uninstall");
+const uninstallConfirm = document.querySelector("#uninstall-confirm");
+let lastStatus = null;
 
 function api(name, ...args) {
   const fn = window.go?.main?.App?.[name];
@@ -17,6 +20,7 @@ function yes(value, positive = "Ready", negative = "Missing") {
 }
 
 function render(status) {
+  lastStatus = status;
   const values = [
     ["Model", status.model || "Unknown"],
     ["OS", status.osVersion || "Unknown"],
@@ -38,6 +42,15 @@ function render(status) {
   const ready = status.supportedModel && status.developerMode;
   readyBadge.textContent = ready ? "Compatible Move" : "Needs attention";
   readyBadge.className = ready ? "badge" : "badge muted";
+  updateActions();
+}
+
+function updateActions() {
+  uninstallButton.disabled = !(
+    lastStatus?.supportedModel &&
+    lastStatus?.paperAgent &&
+    uninstallConfirm.checked
+  );
 }
 
 async function busy(button, action) {
@@ -48,6 +61,7 @@ async function busy(button, action) {
     message.textContent = error?.message || String(error);
   } finally {
     button.disabled = false;
+    if (button === uninstallButton) updateActions();
   }
 }
 
@@ -66,10 +80,23 @@ discoverButton.addEventListener("click", () => busy(discoverButton, async () => 
 
 inspectButton.addEventListener("click", () => busy(inspectButton, async () => {
   message.textContent = "Checking model, OS, storage, dependencies, and login…";
-  const status = await api("Inspect", host.value, password.value);
+  const suppliedPassword = password.value;
   password.value = "";
+  const status = await api("Inspect", host.value, suppliedPassword);
   render(status);
   message.textContent = status.paperAgent
     ? "Paper Agent installation detected."
     : "Device check complete. No changes were made.";
+}));
+
+uninstallConfirm.addEventListener("change", updateActions);
+
+uninstallButton.addEventListener("click", () => busy(uninstallButton, async () => {
+  message.textContent = "Backing up and removing Paper Agent…";
+  const suppliedPassword = password.value;
+  password.value = "";
+  const result = await api("Uninstall", host.value, suppliedPassword, uninstallConfirm.checked);
+  uninstallConfirm.checked = false;
+  render(result.status);
+  message.textContent = result.summary;
 }));
