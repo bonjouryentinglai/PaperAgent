@@ -89,10 +89,13 @@ jobs:
         include:
           - os: macos-15
             artifact: macos
+            platform: darwin/universal
           - os: windows-2025
             artifact: windows
+            platform: windows/amd64
           - os: ubuntu-22.04
             artifact: linux
+            platform: linux/amd64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     steps:
@@ -113,7 +116,7 @@ jobs:
 
       - name: Build installer
         working-directory: installer
-        run: go run github.com/wailsapp/wails/v2/cmd/wails@v2.13.0 build
+        run: go run github.com/wailsapp/wails/v2/cmd/wails@v2.13.0 build -platform ${{ matrix.platform }}
 
       - name: Pack macOS installer
         if: runner.os == 'macOS'
