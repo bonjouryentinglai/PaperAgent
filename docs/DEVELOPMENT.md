@@ -127,8 +127,9 @@ After an install, verify separately:
     unchanged.
 28. Use desktop Uninstall. Confirm Paper Agent, its Xochitl selection entry,
     image bridge, service, and Settings app are gone while XOVI/AppLoad,
-    Node/Pi, ChatGPT login, `config.env`, generated artifacts, and backups
-    remain. Reinstall without repeating ChatGPT login.
+    Node/Pi, ChatGPT login, `config.env`, the runtime, and backups remain.
+    Temporary jobs and generated outputs should be gone. Reinstall without
+    repeating ChatGPT login.
 
 Vector acceptance should also confirm that hatch density remains readable at
 small and large placements. Legacy vector results keep the active Xochitl ink

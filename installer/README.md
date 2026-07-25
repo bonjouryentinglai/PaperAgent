@@ -4,7 +4,8 @@ Phase 2B is a Wails v2 desktop application with a Go backend. It provides one
 guided workflow on macOS, Windows, and Linux:
 
 1. Connect and discover a Developer Mode Paper Pro Move.
-2. Enter the device password for an allowlisted preflight.
+2. Enter the device password once for the current installer session and run an
+   allowlisted preflight. The password is never saved.
 3. Verify model, OS, storage, XOVI/AppLoad, native dependencies, Node/Pi,
    ChatGPT login, Paper Agent, and the Settings app.
 4. Install any missing prerequisites from pinned HTTPS artifacts whose byte
@@ -17,12 +18,20 @@ guided workflow on macOS, Windows, and Linux:
 
 Uninstall removes only Paper Agent's executable integration and Settings app.
 It preserves shared XOVI/AppLoad components, Node/Pi, ChatGPT credentials,
-`config.env`, generated artifacts, and backups. The confirmation is enforced
-in both the UI and Go backend.
+`config.env`, the runtime, and backups. Temporary jobs and generated outputs
+inside the removed native runtime are deleted. The confirmation is enforced in
+both the UI and Go backend.
+
+Existing XOVI and AppLoad installations are detected and reused. Paper Agent
+does not claim ownership of those shared components and never removes them;
+another reMarkable tool may depend on the same installation. Repair refreshes
+Paper Agent and its own native bridge, while an already detected XOVI/AppLoad
+installation remains in place.
 
 ## Security boundaries
 
-- Developer passwords exist only in memory for the requested operation.
+- Developer passwords exist only in memory until the installer closes or the
+  user clicks **Forget password**.
 - The installer never reads or copies OAuth access or refresh tokens.
 - Published manifests and artifacts must use HTTPS.
 - Release bundles and pinned dependencies are rejected on size or checksum

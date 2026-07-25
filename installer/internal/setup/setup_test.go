@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: MIT
 package setup
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/bonjouryentinglai/paper-agent/installer/internal/preflight"
+)
 
 func TestDeployRejectsUnexpectedBundleNameBeforeDeviceAccess(t *testing.T) {
 	if _, err := Deploy(nil, "/tmp/not-the-release.tar.gz"); err == nil {
@@ -15,5 +19,24 @@ func TestTailBoundsDiagnosticOutput(t *testing.T) {
 	}
 	if got := tail("abcdef", 3); got != "…def" {
 		t.Fatalf("bounded tail = %q", got)
+	}
+}
+
+func TestRepairPreservesDetectedSharedComponents(t *testing.T) {
+	status := preflight.Status{
+		XOVIInstalled:    true,
+		AppLoadInstalled: true,
+		NativeDeps:       true,
+		QMLIndex:         true,
+	}
+	plan := planPrerequisites(status, true)
+	if plan.xoviArchive {
+		t.Fatal("repair would refresh an already detected XOVI installation")
+	}
+	if plan.appLoad {
+		t.Fatal("repair would refresh an already detected AppLoad installation")
+	}
+	if !plan.nativeBridge || !plan.qmlIndex {
+		t.Fatal("repair must still refresh Paper Agent's bridge and QML index")
 	}
 }

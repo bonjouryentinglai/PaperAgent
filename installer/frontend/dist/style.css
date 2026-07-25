@@ -28,6 +28,9 @@ header .badge { margin-left: auto; }
 .connection { display: grid; grid-template-columns: 1fr 1.3fr; gap: 20px 28px; }
 .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 label { display: grid; gap: 7px; font-size: 13px; font-weight: 700; }
+label small {
+  color: #73736d; font-size: 11px; font-weight: 500; line-height: 1.35;
+}
 input {
   width: 100%; border: 1px solid #a9a69d; border-radius: 10px; padding: 12px 13px;
   background: #fffefa; color: #20242a; font: inherit; outline: none;
@@ -52,7 +55,7 @@ button:disabled { opacity: .35; cursor: not-allowed; }
 .status-grid div { display: grid; gap: 5px; padding: 13px; background: #eeebe3; border-radius: 10px; }
 .status-grid span { font-size: 12px; color: #75756f; }
 .status-grid strong { font-size: 15px; }
-.login-card, .install-card { display: grid; grid-template-columns: 1fr 1.5fr; gap: 18px 28px; align-items: center; }
+.login-card, .install-card, .uninstall-card { display: grid; grid-template-columns: 1fr 1.5fr; gap: 18px 28px; align-items: center; }
 .login-card .actions, .login-card .message, .login-guide { grid-column: 1 / -1; }
 .login-guide {
   display: flex; align-items: stretch; gap: 12px; padding: 14px;
@@ -77,19 +80,25 @@ button.compact { padding: 8px 11px; font-size: 12px; }
 .operation-panel > div { display: flex; justify-content: space-between; gap: 12px; }
 .operation-panel progress { width: 100%; accent-color: #20242a; }
 .operation-panel p { margin: 0; font-size: 13px; }
-.uninstall-panel {
-  grid-column: 1 / -1; display: flex; align-items: center; justify-content: space-between;
-  gap: 18px; border-top: 1px solid #d5d1c7; padding-top: 18px;
-}
 .check { display: flex; align-items: flex-start; gap: 10px; max-width: 650px; line-height: 1.4; }
 .check input { width: 18px; height: 18px; margin: 1px 0 0; flex: 0 0 auto; }
+.uninstall-card {
+  border-color: #c9aaa7; background: #fbf5f1;
+}
+.uninstall-card > p, .uninstall-card > label, .uninstall-card > .actions {
+  grid-column: 1 / -1;
+}
+.uninstall-card > p { margin: 0; }
+.uninstall-card .shared-note {
+  padding: 13px 15px; border-radius: 10px; background: #eee8df; color: #555650;
+}
+.danger-label { color: #7f302d !important; }
 @media (max-width: 840px) {
   body { min-width: 0; }
   main { width: min(100% - 24px, 720px); }
-  header, .connection, .login-card, .install-card { grid-template-columns: 1fr; }
+  header, .connection, .login-card, .install-card, .uninstall-card { grid-template-columns: 1fr; }
   header { align-items: flex-start; }
   header .badge { margin-left: 0; }
   .fields { grid-template-columns: 1fr; }
   .status-grid { grid-template-columns: repeat(2, 1fr); }
-  .uninstall-panel { align-items: stretch; flex-direction: column; }
 }

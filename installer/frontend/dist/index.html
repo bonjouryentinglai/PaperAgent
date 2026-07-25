@@ -21,18 +21,24 @@
       <section class="card connection">
         <div>
           <p class="step">Step 1</p>
-          <h2>Find your Move</h2>
-          <p>Connect it over USB, wake it, and keep Developer Mode enabled.</p>
+          <h2>Connect your Move</h2>
+          <p>Connect it over USB, wake it, and keep Developer Mode enabled.
+            The installer will find it and check compatibility in one step.</p>
         </div>
         <div class="fields">
-          <label>Address<input id="host" value="10.11.99.1" autocomplete="off"></label>
-          <label>Developer password<input id="password" type="password" autocomplete="off"></label>
+          <label>Device address
+            <input id="host" value="10.11.99.1" autocomplete="off">
+          </label>
+          <label>Developer password
+            <input id="password" type="password" autocomplete="off">
+            <small>Kept only until this installer closes. Never saved.</small>
+          </label>
         </div>
         <div class="actions">
-          <button id="discover" class="secondary">Discover</button>
-          <button id="inspect">Check device</button>
+          <button id="connect">Find &amp; check Move</button>
+          <button id="forget-password" disabled class="secondary compact">Forget password</button>
         </div>
-        <p id="message" class="message">No device checked yet.</p>
+        <p id="message" class="message">Enter the developer password once, then check the Move.</p>
       </section>
 
       <section class="card">
@@ -69,7 +75,7 @@
       </section>
 
       <section class="card install-card">
-        <div><p class="step">Step 4</p><h2>Install or maintain</h2></div>
+        <div><p class="step">Step 4</p><h2>Install, update, or repair</h2></div>
         <div class="release">
           <span>Published release</span>
           <strong id="release-version">Not checked</strong>
@@ -81,22 +87,36 @@
             Paper Agent backs up its own files and rolls back a failed release.</span>
         </label>
         <div class="actions">
-          <button id="install" disabled>Install</button>
-          <button id="update" disabled>Update</button>
-          <button id="repair" disabled>Repair</button>
+          <button id="install" disabled>Install Paper Agent</button>
+          <button id="update" disabled>Update Paper Agent</button>
+          <button id="repair" disabled>Repair Paper Agent</button>
         </div>
         <div id="operation-panel" class="operation-panel">
           <div><strong id="operation-stage">Ready</strong><span id="operation-percent">0%</span></div>
           <progress id="operation-progress" max="100" value="0"></progress>
           <p id="operation-message">Check the device, then choose an action.</p>
         </div>
-        <div class="uninstall-panel">
-          <label class="check">
-            <input id="uninstall-confirm" type="checkbox">
-            <span>Remove Paper Agent only. Keep ChatGPT sign-in, XOVI/AppLoad, settings, runtime, and backups.</span>
-          </label>
+      </section>
+
+      <section class="card uninstall-card">
+        <div>
+          <p class="eyebrow danger-label">Optional cleanup</p>
+          <h2>Uninstall Paper Agent</h2>
+        </div>
+        <p>Safely removes Paper Agent's notebook integration, background service,
+          and Settings app. Shared XOVI, AppLoad, Node/Pi, ChatGPT sign-in,
+          user settings, and backups are preserved.</p>
+        <p class="shared-note">XOVI and AppLoad are never removed here because
+          other reMarkable tools may depend on them, including copies installed
+          before Paper Agent.</p>
+        <label class="check">
+          <input id="uninstall-confirm" type="checkbox">
+          <span>I understand this removes Paper Agent but keeps the shared components and saved data listed above.</span>
+        </label>
+        <div class="actions">
           <button id="uninstall" disabled class="danger">Uninstall Paper Agent</button>
         </div>
+        <p id="uninstall-message" class="message">No uninstall operation requested.</p>
       </section>
     </main>
     <script src="./app.js"></script>

@@ -128,14 +128,15 @@ Rectangle {
         anchors.top: parent.top
         height: Math.max(130, parent.height * 0.09)
         color: "#f5f3ed"
+        property real sideSlotWidth: Math.min(190, width * 0.20)
 
         ActionButton {
             id: exitButton
             anchors.left: parent.left
-            anchors.leftMargin: 28
+            anchors.leftMargin: 24
             anchors.verticalCenter: parent.verticalCenter
-            width: Math.min(220, parent.width * 0.24)
-            height: 88
+            width: header.sideSlotWidth - 48
+            height: 80
             label: "Exit"
             enabled: !root.applying
             onClicked: {
@@ -147,9 +148,15 @@ Rectangle {
         }
 
         Text {
-            anchors.centerIn: parent
+            anchors.left: parent.left
+            anchors.leftMargin: header.sideSlotWidth
+            anchors.right: parent.right
+            anchors.rightMargin: header.sideSlotWidth
+            anchors.verticalCenter: parent.verticalCenter
             text: "Paper Agent Settings"
-            font.pixelSize: Math.max(34, Math.min(50, parent.height * 0.34))
+            horizontalAlignment: Text.AlignHCenter
+            elide: Text.ElideRight
+            font.pixelSize: Math.max(32, Math.min(44, parent.height * 0.32))
             font.bold: true
             color: "#20242a"
         }

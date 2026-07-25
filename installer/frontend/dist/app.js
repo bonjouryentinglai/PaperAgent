@@ -3,8 +3,8 @@ const password = document.querySelector("#password");
 const message = document.querySelector("#message");
 const grid = document.querySelector("#status-grid");
 const readyBadge = document.querySelector("#ready-badge");
-const discoverButton = document.querySelector("#discover");
-const inspectButton = document.querySelector("#inspect");
+const connectButton = document.querySelector("#connect");
+const forgetPasswordButton = document.querySelector("#forget-password");
 const loginButton = document.querySelector("#login");
 const cancelLoginButton = document.querySelector("#cancel-login");
 const loginGuide = document.querySelector("#login-guide");
@@ -23,6 +23,7 @@ const operationProgress = document.querySelector("#operation-progress");
 const operationMessage = document.querySelector("#operation-message");
 const uninstallButton = document.querySelector("#uninstall");
 const uninstallConfirm = document.querySelector("#uninstall-confirm");
+const uninstallMessage = document.querySelector("#uninstall-message");
 let lastStatus = null;
 let operationTimer = null;
 let loginTimer = null;
@@ -71,7 +72,7 @@ function render(status) {
     loginGuide.classList.add("hidden");
     loginMessage.textContent = "ChatGPT is signed in on this Move.";
   } else if (status.nodeInstalled && status.piInstalled) {
-    loginMessage.textContent = "Re-enter the developer password, then start ChatGPT sign-in.";
+    loginMessage.textContent = "Start ChatGPT sign-in when you are ready.";
   } else {
     loginMessage.textContent = "Run Install once to add the runtime before signing in.";
   }
@@ -100,44 +101,45 @@ function updateActions() {
     !operationRunning &&
     !loginRunning
   );
+  forgetPasswordButton.disabled = password.value.length === 0;
 }
 
-async function busy(button, action) {
+async function busy(button, action, errorTarget = message) {
   button.disabled = true;
   try {
     await action();
   } catch (error) {
-    message.textContent = error?.message || String(error);
+    errorTarget.textContent = error?.message || String(error);
   } finally {
     button.disabled = false;
     updateActions();
   }
 }
 
-discoverButton.addEventListener("click", () => busy(discoverButton, async () => {
-  message.textContent = "Looking on USB and local networks…";
+connectButton.addEventListener("click", () => busy(connectButton, async () => {
+  message.textContent = "Finding and checking your Move…";
   const devices = await api("Discover");
-  if (!devices || devices.length === 0) {
-    message.textContent = "No awake developer-mode reMarkable was found.";
+  if (devices && devices.length > 0) {
+    const selected = devices.find((device) => device.usb) || devices[0];
+    host.value = selected.address;
+  } else if (!host.value.trim()) {
+    message.textContent = "No awake developer-mode reMarkable was found. You can enter its address manually and try again.";
     return;
   }
-  host.value = devices[0].address;
-  message.textContent = devices.length === 1
-    ? `Found ${devices[0].usb ? "USB " : ""}device at ${devices[0].address}.`
-    : `Found ${devices.length} candidates. Using ${devices[0].address}; you can change it above.`;
-}));
-
-inspectButton.addEventListener("click", () => busy(inspectButton, async () => {
-  message.textContent = "Checking model, OS, storage, dependencies, and login…";
-  const suppliedPassword = password.value;
-  password.value = "";
-  const status = await api("Inspect", host.value, suppliedPassword);
+  const status = await api("Inspect", host.value, password.value);
   render(status);
   message.textContent = status.paperAgent
-    ? "Paper Agent installation detected. Re-enter the developer password before maintenance."
-    : "Device check complete. Re-enter the developer password before setup; no changes were made.";
+    ? "Paper Agent installation detected. You can update, repair, or uninstall it below."
+    : "Device check complete. You can install Paper Agent below; no changes have been made yet.";
 }));
 
+password.addEventListener("input", updateActions);
+forgetPasswordButton.addEventListener("click", () => {
+  password.value = "";
+  password.focus();
+  message.textContent = "Developer password forgotten for this installer session.";
+  updateActions();
+});
 uninstallConfirm.addEventListener("change", updateActions);
 changeConfirm.addEventListener("change", updateActions);
 
@@ -155,7 +157,7 @@ function renderOperation(state) {
   operationMessage.textContent = state.error || state.message || "Working…";
   if (state.hasStatus) render(state.status);
   if (state.needsLogin) {
-    loginMessage.textContent = "Runtime ready. Re-enter the developer password and start ChatGPT sign-in.";
+    loginMessage.textContent = "Runtime ready. Start ChatGPT sign-in, then continue installation.";
   }
   updateActions();
 }
@@ -174,9 +176,7 @@ async function pollOperation() {
 }
 
 async function startOperation(name, button) {
-  const suppliedPassword = password.value;
-  password.value = "";
-  await api(name, host.value, suppliedPassword, changeConfirm.checked);
+  await api(name, host.value, password.value, changeConfirm.checked);
   renderOperation({
     running: true,
     stage: "starting",
@@ -234,11 +234,9 @@ async function pollLogin() {
 }
 
 loginButton.addEventListener("click", () => busy(loginButton, async () => {
-  const suppliedPassword = password.value;
-  password.value = "";
   loginGuide.classList.add("hidden");
   loginMessage.textContent = "Starting device-code login on the Move…";
-  await api("StartLogin", host.value, suppliedPassword);
+  await api("StartLogin", host.value, password.value);
   if (loginTimer) clearInterval(loginTimer);
   loginTimer = setInterval(pollLogin, 700);
   await pollLogin();
@@ -259,11 +257,9 @@ cancelLoginButton.addEventListener("click", async () => {
 });
 
 uninstallButton.addEventListener("click", () => busy(uninstallButton, async () => {
-  message.textContent = "Backing up and removing Paper Agent…";
-  const suppliedPassword = password.value;
-  password.value = "";
-  const result = await api("Uninstall", host.value, suppliedPassword, uninstallConfirm.checked);
+  uninstallMessage.textContent = "Backing up and removing Paper Agent…";
+  const result = await api("Uninstall", host.value, password.value, uninstallConfirm.checked);
   uninstallConfirm.checked = false;
   render(result.status);
-  message.textContent = result.summary;
-}));
+  uninstallMessage.textContent = result.summary;
+}, uninstallMessage));

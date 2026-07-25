@@ -1,8 +1,25 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
-  <rect width="256" height="256" rx="44" fill="#f5f3ed"/>
-  <circle cx="128" cy="128" r="70" fill="none" stroke="#20242a" stroke-width="16"/>
-  <circle cx="128" cy="128" r="24" fill="#20242a"/>
-  <path d="M128 32v34M128 190v34M32 128h34M190 128h34M60 60l24 24M172 172l24 24M196 60l-24 24M84 172l-24 24"
-        fill="none" stroke="#20242a" stroke-width="16" stroke-linecap="round"/>
-  <path d="M183 30l7 18 18 7-18 7-7 18-7-18-18-7 18-7z" fill="#20242a"/>
+  <rect x="10" y="10" width="236" height="236" rx="46"
+        fill="#f5f3ed" stroke="#20242a" stroke-width="10"/>
+
+  <!-- Paper Agent monogram -->
+  <path d="M49 145L83 61l34 84M62 113h42"
+        fill="none" stroke="#20242a" stroke-width="13"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M140 65h35M157.5 65v76M140 141h35"
+        fill="none" stroke="#20242a" stroke-width="13"
+        stroke-linecap="round"/>
+
+  <!-- Agent sparkle -->
+  <path d="M203 37l6 16 16 6-16 6-6 16-6-16-16-6 16-6z"
+        fill="#20242a"/>
+
+  <!-- Settings sliders -->
+  <path d="M48 185h160M48 217h160"
+        fill="none" stroke="#20242a" stroke-width="10"
+        stroke-linecap="round"/>
+  <circle cx="91" cy="185" r="15" fill="#f5f3ed"
+          stroke="#20242a" stroke-width="9"/>
+  <circle cx="169" cy="217" r="15" fill="#f5f3ed"
+          stroke="#20242a" stroke-width="9"/>
 </svg>

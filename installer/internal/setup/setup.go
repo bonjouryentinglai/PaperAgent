@@ -28,6 +28,25 @@ const (
 
 type Reporter func(stage, message string, percent int)
 
+type prerequisitePlan struct {
+	xoviArchive  bool
+	appLoad      bool
+	nativeBridge bool
+	qmlIndex     bool
+}
+
+func planPrerequisites(status preflight.Status, forceRepair bool) prerequisitePlan {
+	return prerequisitePlan{
+		// XOVI and AppLoad are shared with other reMarkable tools. Repair
+		// refreshes Paper Agent's own bridge and index, but never overwrites a
+		// detected shared installation just because Repair was selected.
+		xoviArchive:  !status.XOVIInstalled || !status.NativeDeps,
+		appLoad:      !status.AppLoadInstalled,
+		nativeBridge: forceRepair || !status.NativeDeps,
+		qmlIndex:     forceRepair || !status.QMLIndex,
+	}
+}
+
 func report(callback Reporter, stage, message string, percent int) {
 	if callback != nil {
 		callback(stage, message, percent)
@@ -108,23 +127,23 @@ func Ensure(
 	}
 	defer os.RemoveAll(stage)
 
-	needXOVIArchive := forceRepair || !status.XOVIInstalled || !status.NativeDeps
+	plan := planPrerequisites(status, forceRepair)
 	var xoviPath, appLoadPath, rmShotPath, nodePath, tripleTapPath string
-	if needXOVIArchive {
+	if plan.xoviArchive {
 		report(callback, "download", "Downloading and verifying XOVI…", 8)
 		xoviPath, err = fetchDependency(ctx, client, dependencies.XOVI, stage)
 		if err != nil {
 			return status, err
 		}
 	}
-	if forceRepair || !status.AppLoadInstalled {
+	if plan.appLoad {
 		report(callback, "download", "Downloading and verifying AppLoad…", 13)
 		appLoadPath, err = fetchDependency(ctx, client, dependencies.AppLoad, stage)
 		if err != nil {
 			return status, err
 		}
 	}
-	if forceRepair || !status.NativeDeps {
+	if plan.nativeBridge {
 		report(callback, "download", "Downloading and verifying the native selection bridge…", 18)
 		rmShotPath, err = fetchDependency(ctx, client, dependencies.RMShot, stage)
 		if err != nil {
@@ -152,7 +171,7 @@ func Ensure(
 	}
 	defer connection.Close()
 
-	if needXOVIArchive {
+	if plan.xoviArchive {
 		report(callback, "device", "Uploading XOVI components…", 36)
 		if err := connection.PushFile(xoviPath, "/tmp/paper-agent-xovi.tar.gz", 0o600); err != nil {
 			return status, err
@@ -268,7 +287,7 @@ test -x /home/root/node/bin/pi-ai
 		}
 	}
 
-	if forceRepair || !status.QMLIndex {
+	if plan.qmlIndex {
 		report(callback, "xovi", "Building the AppLoad QML index; this can take two minutes…", 70)
 		if err := launchHashtableBuild(connection); err != nil {
 			return status, err
