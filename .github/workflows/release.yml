@@ -117,7 +117,7 @@ jobs:
 
       - name: Pack macOS installer
         if: runner.os == 'macOS'
-        run: ditto -c -k --sequesterRsrc --keepParent installer/build/bin/paper-agent-installer.app paper-agent-installer-macos.zip
+        run: ditto -c -k --sequesterRsrc --keepParent "installer/build/bin/Paper Agent Installer.app" paper-agent-installer-macos.zip
 
       - name: Pack Windows installer
         if: runner.os == 'Windows'
