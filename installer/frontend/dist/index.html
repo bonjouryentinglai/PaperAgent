@@ -18,6 +18,65 @@
         <span class="badge">Phase 2B</span>
       </header>
 
+      <section class="card preparation-card">
+        <div class="section-title">
+          <div>
+            <p class="eyebrow">Before Step 1</p>
+            <h2>Prepare your Move</h2>
+          </div>
+          <span class="badge muted">One-time setup</span>
+        </div>
+        <ol class="setup-list">
+          <li>
+            <strong>Sync or back up your notebooks first.</strong>
+            Enabling Developer Mode performs a factory reset and removes data
+            currently stored on the Move.
+          </li>
+          <li>
+            <strong>Enable Developer Mode on the Move.</strong>
+            Open <span class="path">Settings → General → Paper Tablet → Software
+            → Advanced → Developer Mode</span>, then follow the reset and setup
+            instructions shown on the device.
+          </li>
+          <li>
+            <strong>Find the Developer password after setup.</strong>
+            Open <span class="path">Settings → General → Help → About →
+            Copyrights and Licenses</span>. Under <em>General Information</em>,
+            find the username and randomly generated password.
+          </li>
+          <li>
+            <strong>Connect the Move to this computer by USB.</strong>
+            Keep it awake and leave this information page available while
+            installing. The usual USB address is <span class="path">10.11.99.1</span>.
+          </li>
+        </ol>
+        <p class="official-note">
+          These paths follow reMarkable's official Developer Mode documentation.
+        </p>
+      </section>
+
+      <section class="card disclaimer-card">
+        <div>
+          <p class="eyebrow warning-label">Important</p>
+          <h2>Unofficial software disclaimer</h2>
+        </div>
+        <div class="disclaimer-copy">
+          <p>Paper Agent is an independent open-source project. It is not
+            affiliated with, endorsed by, or supported by reMarkable or OpenAI.</p>
+          <p>It installs and modifies software available through Developer Mode.
+            This weakens the device's normal security protections; firmware
+            updates may disable custom software, and modifications can affect
+            stability, support eligibility, or locally stored data. Paper Agent
+            backs up files it manages, but cannot guarantee recovery of unrelated
+            device data.</p>
+        </div>
+        <label class="check risk-confirm">
+          <input id="risk-confirm" type="checkbox">
+          <span>I have synced or backed up my notebooks and understand that I
+            install unofficial Developer Mode software at my own risk.</span>
+        </label>
+      </section>
+
       <section class="card connection">
         <div>
           <p class="step">Step 1</p>
@@ -81,16 +140,13 @@
           <strong id="release-version">Not checked</strong>
           <button id="check-release" class="secondary compact">Check</button>
         </div>
-        <label class="check change-confirm">
-          <input id="change-confirm" type="checkbox">
-          <span>I understand this modifies Developer Mode software on the Move.
-            Paper Agent backs up its own files and rolls back a failed release.</span>
-        </label>
         <div class="actions">
           <button id="install" disabled>Install Paper Agent</button>
           <button id="update" disabled>Update Paper Agent</button>
           <button id="repair" disabled>Repair Paper Agent</button>
         </div>
+        <p class="risk-reminder">Accept the disclaimer above before installing,
+          updating, repairing, or uninstalling.</p>
         <div id="operation-panel" class="operation-panel">
           <div><strong id="operation-stage">Ready</strong><span id="operation-percent">0%</span></div>
           <progress id="operation-progress" max="100" value="0"></progress>

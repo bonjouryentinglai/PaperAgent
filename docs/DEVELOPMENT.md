@@ -110,9 +110,13 @@ After an install, verify separately:
     must report failure, restore the previous mode-0600 config, restart the old
     service successfully, and leave OAuth data untouched.
 24. On a clean Developer Mode Move, run the desktop installer with only the
-    USB cable and device password. Confirm discovery, the `chiappa` model gate,
-    storage check, pinned XOVI/AppLoad/native dependency install, Node/Pi
-    install, and post-restart SSH recovery.
+    USB cable and device password. Before connecting, confirm the installer
+    shows the official on-device path for enabling Developer Mode and finding
+    the generated SSH password, explains the factory reset, and presents the
+    unofficial-software disclaimer. Confirm install and removal actions remain
+    disabled until the acknowledgment is selected. Then confirm discovery, the
+    `chiappa` model gate, storage check, pinned XOVI/AppLoad/native dependency
+    install, Node/Pi install, and post-restart SSH recovery.
 25. Start ChatGPT sign-in in the installer. Confirm the URL and device code
     appear, cancellation leaves no partial credential, successful approval
     produces a mode-0600 `/home/root/.pi/agent/auth.json`, and no token appears

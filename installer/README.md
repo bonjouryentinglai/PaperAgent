@@ -3,18 +3,20 @@
 Phase 2B is a Wails v2 desktop application with a Go backend. It provides one
 guided workflow on macOS, Windows, and Linux:
 
-1. Connect and discover a Developer Mode Paper Pro Move.
-2. Enter the device password once for the current installer session and run an
+1. Read the in-app Developer Mode preparation steps, sync or back up notebooks,
+   and accept the unofficial-software disclaimer.
+2. Connect and discover a Developer Mode Paper Pro Move.
+3. Enter the device password once for the current installer session and run an
    allowlisted preflight. The password is never saved.
-3. Verify model, OS, storage, XOVI/AppLoad, native dependencies, Node/Pi,
+4. Verify model, OS, storage, XOVI/AppLoad, native dependencies, Node/Pi,
    ChatGPT login, Paper Agent, and the Settings app.
-4. Install any missing prerequisites from pinned HTTPS artifacts whose byte
+5. Install any missing prerequisites from pinned HTTPS artifacts whose byte
    length and SHA-256 are checked before upload.
-5. Run Pi's OpenAI/Codex device-code login on the Move. The desktop displays
+6. Run Pi's OpenAI/Codex device-code login on the Move. The desktop displays
    only the approval URL and code; `auth.json` stays on the tablet.
-6. Download a checksum-verified Paper Agent release and apply it with device
+7. Download a checksum-verified Paper Agent release and apply it with device
    backup, health checks, QMD verification, and automatic rollback.
-7. Use the same verified transaction for Install, Update, or Repair.
+8. Use the same verified transaction for Install, Update, or Repair.
 
 Safe uninstall removes only Paper Agent's executable integration and Settings
 app. It preserves shared XOVI/AppLoad components, Node/Pi, ChatGPT credentials,
@@ -38,6 +40,10 @@ installations without ownership evidence remain limited to safe uninstall.
 
 ## Security boundaries
 
+- The installer repeats reMarkable's official Developer Mode paths and warns
+  that enabling it factory-resets the device before any connection attempt.
+- Install, Update, Repair, and Uninstall stay disabled until the user accepts
+  the in-app unofficial-software and backup acknowledgment.
 - Developer passwords exist only in memory until the installer closes.
 - The installer never reads or copies OAuth access or refresh tokens.
 - Published manifests and artifacts must use HTTPS.

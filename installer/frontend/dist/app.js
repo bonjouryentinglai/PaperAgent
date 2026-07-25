@@ -13,7 +13,7 @@ const loginMessage = document.querySelector("#login-message");
 const installButton = document.querySelector("#install");
 const updateButton = document.querySelector("#update");
 const repairButton = document.querySelector("#repair");
-const changeConfirm = document.querySelector("#change-confirm");
+const riskConfirm = document.querySelector("#risk-confirm");
 const checkReleaseButton = document.querySelector("#check-release");
 const releaseVersion = document.querySelector("#release-version");
 const operationStage = document.querySelector("#operation-stage");
@@ -113,7 +113,7 @@ function render(status) {
 
 function updateActions() {
   const ready = lastStatus?.supportedModel && lastStatus?.developerMode;
-  const confirmed = changeConfirm.checked;
+  const confirmed = riskConfirm.checked;
   const operationRunning = operationProgress.dataset.running === "true";
   const loginRunning = loginButton.dataset.running === "true";
   installButton.disabled = !(ready && !lastStatus?.paperAgent && confirmed && !operationRunning && !loginRunning);
@@ -129,6 +129,7 @@ function updateActions() {
   uninstallButton.disabled = !(
     ready &&
     (lastStatus?.paperAgent || (fullUninstall.checked && (lastStatus?.installerOwned || []).length > 0)) &&
+    confirmed &&
     uninstallConfirm.checked &&
     !operationRunning &&
     !loginRunning
@@ -170,7 +171,7 @@ fullUninstall.addEventListener("change", () => {
   updateUninstallOption();
   updateActions();
 });
-changeConfirm.addEventListener("change", updateActions);
+riskConfirm.addEventListener("change", updateActions);
 
 checkReleaseButton.addEventListener("click", () => busy(checkReleaseButton, async () => {
   releaseVersion.textContent = "Checking…";
@@ -205,7 +206,7 @@ async function pollOperation() {
 }
 
 async function startOperation(name, button) {
-  await api(name, host.value, password.value, changeConfirm.checked);
+  await api(name, host.value, password.value, riskConfirm.checked);
   renderOperation({
     running: true,
     stage: "starting",
@@ -291,7 +292,7 @@ uninstallButton.addEventListener("click", () => busy(uninstallButton, async () =
     "Uninstall",
     host.value,
     password.value,
-    uninstallConfirm.checked,
+    riskConfirm.checked && uninstallConfirm.checked,
     fullUninstall.checked,
   );
   uninstallConfirm.checked = false;

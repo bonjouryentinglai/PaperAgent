@@ -25,6 +25,32 @@ header .badge { margin-left: auto; }
 }
 .card h2 { margin: 0; font-size: 22px; }
 .card p { color: #686963; }
+.preparation-card { display: grid; gap: 18px; }
+.setup-list {
+  display: grid; gap: 14px; margin: 0; padding-left: 24px; color: #555650;
+  line-height: 1.5;
+}
+.setup-list li { padding-left: 5px; }
+.setup-list strong { color: #20242a; }
+.path {
+  color: #20242a; font-weight: 750; background: #eeebe3;
+  padding: 2px 5px; border-radius: 5px;
+}
+.official-note {
+  margin: 0; padding: 11px 14px; border-radius: 10px;
+  background: #eeebe3; font-size: 13px;
+}
+.disclaimer-card {
+  display: grid; grid-template-columns: 1fr 1.5fr; gap: 18px 28px;
+  border-color: #d0b57d; background: #fff9eb;
+}
+.disclaimer-copy p { margin: 0 0 10px; line-height: 1.5; }
+.disclaimer-copy p:last-child { margin-bottom: 0; }
+.disclaimer-card .risk-confirm {
+  grid-column: 1 / -1; max-width: none; padding: 14px;
+  border: 1px solid #d0b57d; border-radius: 10px; background: #fffdf6;
+}
+.warning-label { color: #815d14 !important; }
 .connection { display: grid; grid-template-columns: 1fr 1.3fr; gap: 20px 28px; }
 .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 label { display: grid; gap: 7px; font-size: 13px; font-weight: 700; }
@@ -72,7 +98,10 @@ button:disabled { opacity: .35; cursor: not-allowed; }
 .install-card .actions { grid-column: 1 / -1; }
 .release { display: flex; align-items: center; gap: 12px; justify-content: flex-end; }
 button.compact { padding: 8px 11px; font-size: 12px; }
-.change-confirm { grid-column: 1 / -1; max-width: 760px; }
+.risk-reminder {
+  grid-column: 1 / -1; margin: -2px 0 0 !important;
+  color: #73736d !important; font-size: 12px;
+}
 .operation-panel {
   grid-column: 1 / -1; display: grid; gap: 9px; padding: 14px;
   background: #eeebe3; border-radius: 12px;
@@ -100,7 +129,7 @@ button.compact { padding: 8px 11px; font-size: 12px; }
 @media (max-width: 840px) {
   body { min-width: 0; }
   main { width: min(100% - 24px, 720px); }
-  header, .connection, .login-card, .install-card, .uninstall-card { grid-template-columns: 1fr; }
+  header, .disclaimer-card, .connection, .login-card, .install-card, .uninstall-card { grid-template-columns: 1fr; }
   header { align-items: flex-start; }
   header .badge { margin-left: 0; }
   .fields { grid-template-columns: 1fr; }
