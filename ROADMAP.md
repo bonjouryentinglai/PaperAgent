@@ -50,9 +50,10 @@ follow-up is intentionally deferred.
 - [ ] Guide ChatGPT subscription login while keeping OAuth credentials only on
   the Move.
 - [ ] Add a Paper Agent Settings app to AppLoad for validated model, thinking,
-  text-size, minimum auto-scale, and related user preferences.
-- [ ] Apply settings atomically, offer safe defaults, and restart only the
-  Paper Agent service when a change requires it.
+  AI answer text-size, and minimum auto-scale controls.
+- [ ] Keep edits pending until the user presses Apply, then validate and write
+  them atomically, restart only the Paper Agent service, verify health, and
+  restore the previous settings if activation fails.
 - [ ] Verify the installation, then offer install, update, repair, and
   Paper Agent-only uninstall paths from the same tool.
 - [ ] Preserve shared XOVI/AppLoad components and ChatGPT credentials by
