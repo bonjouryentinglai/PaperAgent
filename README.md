@@ -143,10 +143,10 @@ details can read [Development](docs/DEVELOPMENT.md).
   applications and may stop working after an upstream change. The supported
   public OpenAI API uses API-key authentication; Paper Agent does not currently
   implement that provider.
-- `scripts/uninstall.sh` removes Paper Agent but deliberately preserves Pi's
-  credential store. Remove or revoke the `openai-codex` credential separately
-  when retiring or transferring the device. Deleting `auth.json` removes every
-  Pi provider credential stored in that file, not only Paper Agent's login.
+- `scripts/uninstall.sh` removes Paper Agent and signs out its `openai-codex`
+  credential. Other Pi provider credentials in the same store are preserved.
+  Deleting `auth.json` manually would remove every Pi provider credential, so
+  the uninstaller edits the store selectively instead.
 
 See [Security](SECURITY.md) for the complete trust boundary and
 [OpenAI's Codex authentication documentation](https://developers.openai.com/codex/auth)

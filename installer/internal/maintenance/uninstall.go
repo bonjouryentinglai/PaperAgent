@@ -11,7 +11,8 @@ type Runner interface {
 }
 
 // UninstallCommand intentionally preserves shared XOVI/AppLoad components,
-// the Pi/Node runtime, ChatGPT credentials, user configuration, and backups.
+// the Pi/Node runtime, non-OpenAI Pi credentials, user configuration, and
+// backups. It removes only the openai-codex credential used by Paper Agent.
 // Keep this behavior aligned with scripts/uninstall.sh.
 const UninstallCommand = `set -eu
 BASE=/home/root/paper-agent
@@ -28,6 +29,51 @@ STATE_ROOT="$BASE/backups"
 STAMP=$(date +%Y%m%d-%H%M%S)
 BACKUP="$STATE_ROOT/uninstall-$STAMP"
 mkdir -p "$BACKUP"
+
+AUTH=/home/root/.pi/agent/auth.json
+AUTH_TMP="${AUTH}.paper-agent-uninstall.$$"
+chatgpt_state=openai-codex-not-present
+if [ -f "$AUTH" ]; then
+  if [ ! -x /home/root/node/bin/node ]; then
+    echo "Cannot safely sign out ChatGPT because the Pi Node runtime is missing" >&2
+    exit 1
+  fi
+  if /home/root/node/bin/node -e '
+const fs = require("fs");
+const source = process.argv[1];
+const target = process.argv[2];
+const value = JSON.parse(fs.readFileSync(source, "utf8"));
+if (!value || typeof value !== "object" || Array.isArray(value)) process.exit(2);
+if (!Object.prototype.hasOwnProperty.call(value, "openai-codex")) process.exit(4);
+delete value["openai-codex"];
+if (Object.keys(value).length === 0) process.exit(3);
+fs.writeFileSync(target, JSON.stringify(value, null, 2) + "\n", { mode: 0o600 });
+' "$AUTH" "$AUTH_TMP"; then
+    auth_status=0
+  else
+    auth_status=$?
+  fi
+  case "$auth_status" in
+    0)
+      chmod 0600 "$AUTH_TMP"
+      mv -f "$AUTH_TMP" "$AUTH"
+      chatgpt_state=openai-codex-removed
+      ;;
+    3)
+      rm -f "$AUTH" "$AUTH_TMP"
+      rmdir /home/root/.pi/agent /home/root/.pi 2>/dev/null || true
+      chatgpt_state=openai-codex-removed
+      ;;
+    4)
+      rm -f "$AUTH_TMP"
+      ;;
+    *)
+      rm -f "$AUTH_TMP"
+      echo "Cannot safely remove the openai-codex credential" >&2
+      exit 1
+      ;;
+  esac
+fi
 
 systemctl stop paper-agent-native-oracle.service 2>/dev/null || true
 systemctl disable paper-agent-native-oracle.service >/dev/null 2>&1 || true
@@ -64,7 +110,7 @@ echo "paper_agent=removed"
 echo "preserved_config=$BASE/config.env"
 echo "preserved_backups=$STATE_ROOT"
 echo "preserved_runtime=$BASE/runtime"
-echo "preserved_credential=/home/root/.pi/agent/auth.json"
+echo "chatgpt=$chatgpt_state"
 `
 
 func Uninstall(device Runner) (string, error) {
@@ -74,6 +120,10 @@ func Uninstall(device Runner) (string, error) {
 	}
 	if !strings.Contains(output, "paper_agent=removed") {
 		return output, fmt.Errorf("remove Paper Agent: device did not confirm removal")
+	}
+	if !strings.Contains(output, "chatgpt=openai-codex-removed") &&
+		!strings.Contains(output, "chatgpt=openai-codex-not-present") {
+		return output, fmt.Errorf("remove Paper Agent: device did not confirm ChatGPT sign-out")
 	}
 	return output, nil
 }
@@ -115,7 +165,7 @@ if [ -e "$OWN/oauth.sha256" ] && [ -f /home/root/.pi/agent/auth.json ]; then
     rmdir /home/root/.pi/agent /home/root/.pi 2>/dev/null || true
     append_removed oauth
   else
-    echo "preserved_changed_oauth=1"
+    echo "preserved_other_pi_credentials=1"
   fi
 fi
 

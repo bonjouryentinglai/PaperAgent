@@ -18,11 +18,12 @@ guided workflow on macOS, Windows, and Linux:
    backup, health checks, QMD verification, and automatic rollback.
 8. Use the same verified transaction for Install, Update, or Repair.
 
-Safe uninstall removes only Paper Agent's executable integration and Settings
-app. It preserves shared XOVI/AppLoad components, Node/Pi, ChatGPT credentials,
-`config.env`, the runtime, and backups. Temporary jobs and generated outputs
-inside the removed native runtime are deleted. The confirmation is enforced in
-both the UI and Go backend.
+Safe uninstall removes Paper Agent's executable integration and Settings app,
+then signs out its `openai-codex` ChatGPT login. It preserves shared
+XOVI/AppLoad components, Node/Pi, other Pi provider credentials, `config.env`,
+the runtime, and backups. Temporary jobs and generated outputs inside the
+removed native runtime are deleted. The confirmation is enforced in both the
+UI and Go backend.
 
 Existing XOVI and AppLoad installations are detected and reused. Paper Agent
 does not claim ownership of those shared components and never removes them;
@@ -33,9 +34,9 @@ XOVI/AppLoad installation remains in place.
 New installations record which prerequisites the installer actually creates.
 When that record exists, the uninstall card offers an explicit full-removal
 option for only those recorded components. This can include XOVI, AppLoad and
-all of its apps, Node/Pi, XOVI persistence, the ChatGPT sign-in created through
-the installer, settings, runtime, and backups. A credential that changed after
-the installer recorded it is preserved. Older or externally managed
+all of its apps, Node/Pi, XOVI persistence, settings, runtime, and backups.
+Paper Agent's ChatGPT sign-in is already removed by the normal uninstall step;
+other Pi provider credentials are preserved. Older or externally managed
 installations without ownership evidence remain limited to safe uninstall.
 
 ## Security boundaries

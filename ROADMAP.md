@@ -56,8 +56,8 @@ follow-up is intentionally deferred.
   restore the previous settings if activation fails.
 - [x] Verify the installation, then offer install, update, repair, and
   Paper Agent-only uninstall paths from the same tool.
-- [x] Preserve shared XOVI/AppLoad components and ChatGPT credentials during
-  the default Paper Agent-only uninstall.
+- [x] Preserve shared XOVI/AppLoad components while signing out Paper Agent's
+  ChatGPT credential during the default uninstall.
 - [ ] Complete cross-platform artifact, signing, onboarding, and fresh-device
   physical acceptance before calling the installer a stable release.
 

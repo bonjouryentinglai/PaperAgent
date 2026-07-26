@@ -130,17 +130,17 @@ After an install, verify separately:
     the previous working version and leave notebook content and OAuth data
     unchanged.
 28. Use desktop Uninstall. Confirm Paper Agent, its Xochitl selection entry,
-    image bridge, service, and Settings app are gone while XOVI/AppLoad,
-    Node/Pi, ChatGPT login, `config.env`, the runtime, and backups remain.
-    Temporary jobs and generated outputs should be gone. Reinstall without
-    repeating ChatGPT login.
+    image bridge, service, Settings app, and `openai-codex` ChatGPT login are
+    gone while XOVI/AppLoad, Node/Pi, other Pi provider credentials,
+    `config.env`, the runtime, and backups remain. Temporary jobs and generated
+    outputs should be gone. Reinstall must require ChatGPT sign-in again.
 29. On a clean installer-owned stack, confirm Full removal lists only recorded
     components, warns that installer-owned AppLoad apps will also be removed,
     and removes the recorded XOVI/AppLoad, persistence, Node/Pi, unchanged
-    ChatGPT sign-in, configuration, runtime, and backups. Repeat with
+    configuration, runtime, and backups. Repeat with
     pre-existing XOVI/AppLoad and confirm full removal is not offered for those
-    components. Replace the OAuth credential after installation and confirm
-    full removal preserves the changed credential.
+    components. Confirm other Pi provider credentials remain after Paper Agent
+    signs out its own `openai-codex` login.
 
 Vector acceptance should also confirm that hatch density remains readable at
 small and large placements. Legacy vector results keep the active Xochitl ink

@@ -57,7 +57,7 @@ function managedDescription(status) {
   if (owned.includes("runtime")) labels.push("Node/Pi runtime");
   else if (owned.includes("pi-packages")) labels.push("Pi packages");
   if (owned.includes("persistence")) labels.push("XOVI persistence");
-  if (owned.includes("oauth")) labels.push("ChatGPT sign-in");
+  if (owned.includes("oauth") && status?.chatGPTLoggedIn) labels.push("ChatGPT sign-in");
   if (!owned.includes("xovi") && owned.some((name) => name.startsWith("extension-"))) {
     labels.push("added XOVI extensions");
   }
@@ -73,8 +73,8 @@ function updateUninstallOption() {
     ? `Also remove installer-managed components: ${description}. This can remove every app inside an installer-managed AppLoad.`
     : "No installer-managed components were recorded for this installation. Safe Paper Agent-only uninstall remains available.";
   uninstallConfirmCopy.textContent = fullUninstall.checked
-    ? "I understand this permanently removes Paper Agent, its saved data, and the installer-managed components listed above."
-    : "I understand this removes Paper Agent but keeps shared components, sign-in, settings, runtime, and backups.";
+    ? "I understand this signs out ChatGPT and permanently removes Paper Agent, its saved data, and the installer-managed components listed above."
+    : "I understand this removes Paper Agent and signs out ChatGPT, while keeping shared components, settings, runtime, and backups.";
 }
 
 function render(status) {

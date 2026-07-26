@@ -169,7 +169,7 @@ chmod 0600 "$OWN/oauth.sha256"
 	if _, err := connection.Run(markOwnership); err != nil {
 		manager.finish(
 			true,
-			"ChatGPT sign-in is ready. Its ownership could not be recorded, so full uninstall will preserve it.",
+			"ChatGPT sign-in is ready. Installer ownership could not be recorded, but Paper Agent uninstall will still sign out.",
 			nil,
 		)
 		return

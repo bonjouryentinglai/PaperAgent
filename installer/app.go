@@ -468,14 +468,14 @@ func (a *App) Uninstall(host, password string, acknowledged, full bool) (Operati
 			return OperationResult{}, fmt.Errorf("full cleanup verification failed: installer-managed Pi packages remain")
 		}
 		summary := "Paper Agent and all components proven to be installed by Paper Agent Installer were removed."
-		if strings.Contains(cleanupOutput, "preserved_changed_oauth=1") {
-			summary += " ChatGPT sign-in was preserved because it changed after the installer recorded it."
+		if strings.Contains(cleanupOutput, "preserved_other_pi_credentials=1") {
+			summary += " Other Pi provider credentials were preserved."
 		}
 		return OperationResult{Status: after, Summary: summary}, nil
 	}
 	return OperationResult{
 		Status:  after,
-		Summary: "Paper Agent was removed. ChatGPT sign-in, XOVI/AppLoad, settings, runtime, and backups were preserved.",
+		Summary: "Paper Agent was removed and ChatGPT was signed out. XOVI/AppLoad, settings, runtime, and backups were preserved.",
 	}, nil
 }
 
