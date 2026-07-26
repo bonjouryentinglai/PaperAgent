@@ -56,6 +56,16 @@ func TestFetchValidatesAndResolvesBundle(t *testing.T) {
 	}
 }
 
+func TestFetchExplainsMissingPublishedRelease(t *testing.T) {
+	client := &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+		return response(http.StatusNotFound, "not found"), nil
+	})}
+	_, err := Fetch(context.Background(), client, "https://example.test/releases/manifest.json")
+	if err == nil || !strings.Contains(err.Error(), "no published Paper Agent release") {
+		t.Fatalf("unexpected missing release error: %v", err)
+	}
+}
+
 func TestManifestRejectsUnsafeOrUnsupportedInput(t *testing.T) {
 	valid := Manifest{
 		Schema:          1,

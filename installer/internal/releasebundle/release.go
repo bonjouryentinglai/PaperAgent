@@ -116,6 +116,9 @@ func Fetch(ctx context.Context, client *http.Client, manifestURL string) (Manife
 		return Manifest{}, fmt.Errorf("download release manifest: %w", err)
 	}
 	defer response.Body.Close()
+	if response.StatusCode == http.StatusNotFound {
+		return Manifest{}, fmt.Errorf("no published Paper Agent release is available yet")
+	}
 	if response.StatusCode != http.StatusOK {
 		return Manifest{}, fmt.Errorf("download release manifest: HTTP %d", response.StatusCode)
 	}
