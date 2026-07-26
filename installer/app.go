@@ -97,7 +97,8 @@ func (a *App) OpenLoginURL(raw string) error {
 }
 
 // Discover performs the same USB-first/dropbear probe used by remagic. It is
-// read-only and does not authenticate or change the device.
+// read-only, does not authenticate or change the device, and excludes generic
+// Dropbear hosts such as routers from the candidate list.
 func (a *App) Discover() []Candidate {
 	probes := device.Discover(650 * time.Millisecond)
 	if len(probes) == 0 {
@@ -105,10 +106,13 @@ func (a *App) Discover() []Candidate {
 	}
 	candidates := make([]Candidate, 0, len(probes))
 	for _, probe := range probes {
+		if !probe.IsPaperPro() {
+			continue
+		}
 		candidates = append(candidates, Candidate{
 			Address:       probe.Addr,
 			Banner:        probe.Banner,
-			DeveloperMode: probe.IsPaperPro(),
+			DeveloperMode: true,
 			USB:           probe.Addr == device.DefaultUSBAddr,
 		})
 	}

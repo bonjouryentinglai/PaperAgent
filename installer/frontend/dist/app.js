@@ -150,13 +150,17 @@ async function busy(button, action, errorTarget = message) {
 
 connectButton.addEventListener("click", () => busy(connectButton, async () => {
   message.textContent = "Finding and checking your Move…";
+  const enteredAddress = host.value.trim();
   const devices = await api("Discover");
-  if (devices && devices.length > 0) {
-    const selected = devices.find((device) => device.usb) || devices[0];
-    host.value = selected.address;
-  } else if (!host.value.trim()) {
-    message.textContent = "No awake developer-mode reMarkable was found. You can enter its address manually and try again.";
+  const usbMove = devices?.find((device) => device.usb && device.developerMode);
+  if (usbMove) {
+    host.value = usbMove.address;
+  } else if (!enteredAddress) {
+    message.textContent = "No USB-connected Developer Mode Move was found. Connect it by USB or enter its address manually.";
     return;
+  } else {
+    host.value = enteredAddress;
+    message.textContent = "No USB Move was auto-detected; checking the entered address…";
   }
   const status = await api("Inspect", host.value, password.value);
   render(status);
