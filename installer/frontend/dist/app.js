@@ -273,7 +273,11 @@ function renderLogin(state) {
   loginButton.dataset.running = state.running ? "true" : "";
   cancelLoginButton.disabled = !state.running;
   loginMessage.textContent = state.error || state.message;
-  if (state.url && state.code) {
+  if (state.done && !state.signedIn) {
+    loginGuide.classList.add("hidden");
+    loginURL.removeAttribute("href");
+    loginCode.textContent = "Waiting…";
+  } else if (state.url && state.code) {
     loginGuide.classList.remove("hidden");
     loginURL.href = state.url;
     loginURL.textContent = "Open ChatGPT sign-in";

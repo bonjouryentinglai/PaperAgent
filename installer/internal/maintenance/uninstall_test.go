@@ -70,16 +70,35 @@ func uninstallCredentialJavaScript(t *testing.T) string {
 	t.Helper()
 	const prefix = `/home/root/node/bin/node -e '`
 	const suffix = `' "$AUTH" "$AUTH_TMP"; then`
-	start := strings.Index(UninstallCommand, prefix)
+	start := strings.Index(SignOutChatGPTCommand, prefix)
 	if start < 0 {
 		t.Fatal("credential removal JavaScript start was not found")
 	}
-	after := strings.TrimPrefix(UninstallCommand[start:], prefix)
+	after := strings.TrimPrefix(SignOutChatGPTCommand[start:], prefix)
 	script, _, found := strings.Cut(after, suffix)
 	if !found {
 		t.Fatal("credential removal JavaScript end was not found")
 	}
 	return script
+}
+
+func TestSignOutChatGPTRequiresDeviceConfirmation(t *testing.T) {
+	for _, runner := range []*fakeRunner{
+		{output: "done\n"},
+		{output: "failed\n", err: errors.New("exit 1")},
+	} {
+		if _, err := SignOutChatGPT(runner); err == nil {
+			t.Fatal("missing sign-out confirmation was accepted")
+		}
+	}
+	for _, confirmation := range []string{
+		"chatgpt=openai-codex-removed\n",
+		"chatgpt=openai-codex-not-present\n",
+	} {
+		if _, err := SignOutChatGPT(&fakeRunner{output: confirmation}); err != nil {
+			t.Fatalf("valid sign-out confirmation was rejected: %v", err)
+		}
+	}
 }
 
 func TestUninstallCredentialRemovalPreservesOtherPiProviders(t *testing.T) {
@@ -168,8 +187,9 @@ func TestFullCleanupRequiresDeviceConfirmation(t *testing.T) {
 
 func TestUninstallShellSyntax(t *testing.T) {
 	for name, script := range map[string]string{
-		"safe": UninstallCommand,
-		"full": FullCleanupCommand,
+		"sign-out": SignOutChatGPTCommand,
+		"safe":     UninstallCommand,
+		"full":     FullCleanupCommand,
 	} {
 		command := exec.Command("sh", "-n")
 		command.Stdin = strings.NewReader(script)

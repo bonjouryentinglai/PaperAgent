@@ -7,14 +7,18 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/bonjouryentinglai/paper-agent/installer/internal/device"
+	"github.com/bonjouryentinglai/paper-agent/installer/internal/maintenance"
 )
 
 var (
 	ansiPattern = regexp.MustCompile(`\x1b\[[0-9;?]*[ -/]*[@-~]`)
 	urlPattern  = regexp.MustCompile(`https://[^\s]+`)
 	codePattern = regexp.MustCompile(`(?i)Enter code:\s*([A-Z0-9-]{4,})`)
+	loginSerial atomic.Uint64
 )
 
 type State struct {
@@ -113,6 +117,8 @@ func (manager *Manager) run(ctx context.Context, host, password string) {
 	if host == "" {
 		host = device.DefaultUSBAddr
 	}
+	loginID := fmt.Sprintf("%x-%x", time.Now().UnixNano(), loginSerial.Add(1))
+	pidFile := "/run/paper-agent-installer-login-" + loginID + ".pid"
 	connection, err := device.Connect(host, password)
 	if err != nil {
 		manager.finish(false, "Could not connect to the Move.", err)
@@ -124,16 +130,7 @@ func (manager *Manager) run(ctx context.Context, host, password string) {
 		manager.finish(false, "Install the Paper Agent runtime before signing in.", fmt.Errorf("Pi is not installed on the Move"))
 		return
 	}
-	const command = `set -eu
-umask 077
-AUTH_DIR=/home/root/.pi/agent
-mkdir -p "$AUTH_DIR"
-chmod 0700 /home/root/.pi "$AUTH_DIR" 2>/dev/null || true
-cd "$AUTH_DIR"
-HOME=/home/root PATH="/home/root/node/bin:$PATH" \
-  /home/root/node/bin/pi-ai login openai-codex
-chmod 0600 "$AUTH_DIR/auth.json"
-`
+	command := loginCommand(pidFile)
 	_, err = connection.RunStreaming(
 		ctx,
 		command,
@@ -142,7 +139,11 @@ chmod 0600 "$AUTH_DIR/auth.json"
 	)
 	if err != nil {
 		if ctx.Err() != nil {
-			manager.finish(false, "ChatGPT login was cancelled.", ctx.Err())
+			if cleanupErr := cleanupCancelledLogin(host, password, pidFile); cleanupErr != nil {
+				manager.finish(false, "ChatGPT login was cancelled, but cleanup needs attention.", cleanupErr)
+				return
+			}
+			manager.finish(false, "ChatGPT login was cancelled.", nil)
 			return
 		}
 		manager.finish(false, "ChatGPT login failed.", err)
@@ -175,4 +176,87 @@ chmod 0600 "$OWN/oauth.sha256"
 		return
 	}
 	manager.finish(true, "ChatGPT sign-in is ready on the Move.", nil)
+}
+
+func loginCommand(pidFile string) string {
+	return `set -eu
+umask 077
+AUTH_DIR=/home/root/.pi/agent
+PIDFILE=` + pidFile + `
+mkdir -p "$AUTH_DIR"
+chmod 0700 /home/root/.pi "$AUTH_DIR" 2>/dev/null || true
+cd "$AUTH_DIR"
+if sh -c '
+  set -eu
+  PIDFILE=$1
+  printf "%s\n" "$$" >"$PIDFILE"
+  chmod 0600 "$PIDFILE"
+  exec env HOME=/home/root PATH="/home/root/node/bin:$PATH" \
+    /home/root/node/bin/pi-ai login openai-codex
+' paper-agent-login "$PIDFILE"; then
+  login_status=0
+else
+  login_status=$?
+fi
+rm -f "$PIDFILE"
+[ "$login_status" -eq 0 ] || exit "$login_status"
+chmod 0600 "$AUTH_DIR/auth.json"
+`
+}
+
+func cancelLoginCommand(pidFile string) string {
+	return `set -eu
+PIDFILE=` + pidFile + `
+if [ -f "$PIDFILE" ]; then
+  pid=$(cat "$PIDFILE")
+  case "$pid" in
+    ""|*[!0-9]*)
+      echo "Invalid Paper Agent login PID" >&2
+      exit 1
+      ;;
+  esac
+  if [ -r "/proc/$pid/cmdline" ]; then
+    command=$(tr '\000' ' ' <"/proc/$pid/cmdline")
+    case "$command" in
+      "node /home/root/node/bin/pi-ai login openai-codex "*|\
+      "/home/root/node/bin/node /home/root/node/bin/pi-ai login openai-codex "*)
+        kill -TERM "$pid" 2>/dev/null || true
+        attempt=0
+        while kill -0 "$pid" 2>/dev/null && [ "$attempt" -lt 2 ]; do
+          sleep 1
+          attempt=$((attempt + 1))
+        done
+        if kill -0 "$pid" 2>/dev/null; then
+          kill -KILL "$pid"
+        fi
+        ;;
+      *)
+        echo "Refusing to stop an unrelated process" >&2
+        exit 1
+        ;;
+    esac
+  fi
+  rm -f "$PIDFILE"
+fi
+echo "login_process=stopped"
+`
+}
+
+func cleanupCancelledLogin(host, password, pidFile string) error {
+	connection, err := device.Connect(host, password)
+	if err != nil {
+		return fmt.Errorf("reconnect to clean up cancelled login: %w", err)
+	}
+	defer connection.Close()
+	output, err := connection.Run(cancelLoginCommand(pidFile))
+	if err != nil {
+		return fmt.Errorf("stop cancelled login: %w: %s", err, strings.TrimSpace(output))
+	}
+	if !strings.Contains(output, "login_process=stopped") {
+		return fmt.Errorf("stop cancelled login: device did not confirm cleanup")
+	}
+	if _, err := maintenance.SignOutChatGPT(connection); err != nil {
+		return err
+	}
+	return nil
 }

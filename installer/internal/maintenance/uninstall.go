@@ -10,26 +10,9 @@ type Runner interface {
 	Run(command string) (string, error)
 }
 
-// UninstallCommand intentionally preserves shared XOVI/AppLoad components,
-// the Pi/Node runtime, non-OpenAI Pi credentials, user configuration, and
-// backups. It removes only the openai-codex credential used by Paper Agent.
-// Keep this behavior aligned with scripts/uninstall.sh.
-const UninstallCommand = `set -eu
-BASE=/home/root/paper-agent
-NATIVE="$BASE/native"
-SYSTEMD_HOME="$BASE/systemd"
-QMD=/home/root/xovi/exthome/qt-resource-rebuilder/paperAgentSelection.qmd
-UNIT_SOURCE="$SYSTEMD_HOME/paper-agent-native-oracle.service"
-UNIT_RUN=/run/systemd/system/paper-agent-native-oracle.service
-UNIT_LEGACY=/etc/systemd/system/paper-agent-native-oracle.service
-START_HOOK=/home/root/xovi/scripts/post-start/paper-agent-native-oracle.sh
-IMAGE_PLUGIN=/home/root/xovi/extensions.d/paper-agent-image.so
-SETTINGS_APP=/home/root/xovi/exthome/appload/paper-agent-settings
-STATE_ROOT="$BASE/backups"
-STAMP=$(date +%Y%m%d-%H%M%S)
-BACKUP="$STATE_ROOT/uninstall-$STAMP"
-mkdir -p "$BACKUP"
-
+// SignOutChatGPTCommand removes only Paper Agent's openai-codex entry from
+// Pi's credential store. Other providers in the same JSON file are preserved.
+const SignOutChatGPTCommand = `set -eu
 AUTH=/home/root/.pi/agent/auth.json
 AUTH_TMP="${AUTH}.paper-agent-uninstall.$$"
 chatgpt_state=openai-codex-not-present
@@ -74,7 +57,29 @@ fs.writeFileSync(target, JSON.stringify(value, null, 2) + "\n", { mode: 0o600 })
       ;;
   esac
 fi
+echo "chatgpt=$chatgpt_state"
+`
 
+// UninstallCommand intentionally preserves shared XOVI/AppLoad components,
+// the Pi/Node runtime, non-OpenAI Pi credentials, user configuration, and
+// backups. It removes only the openai-codex credential used by Paper Agent.
+// Keep this behavior aligned with scripts/uninstall.sh.
+const UninstallCommand = `set -eu
+BASE=/home/root/paper-agent
+NATIVE="$BASE/native"
+SYSTEMD_HOME="$BASE/systemd"
+QMD=/home/root/xovi/exthome/qt-resource-rebuilder/paperAgentSelection.qmd
+UNIT_SOURCE="$SYSTEMD_HOME/paper-agent-native-oracle.service"
+UNIT_RUN=/run/systemd/system/paper-agent-native-oracle.service
+UNIT_LEGACY=/etc/systemd/system/paper-agent-native-oracle.service
+START_HOOK=/home/root/xovi/scripts/post-start/paper-agent-native-oracle.sh
+IMAGE_PLUGIN=/home/root/xovi/extensions.d/paper-agent-image.so
+SETTINGS_APP=/home/root/xovi/exthome/appload/paper-agent-settings
+STATE_ROOT="$BASE/backups"
+STAMP=$(date +%Y%m%d-%H%M%S)
+BACKUP="$STATE_ROOT/uninstall-$STAMP"
+mkdir -p "$BACKUP"
+` + SignOutChatGPTCommand + `
 systemctl stop paper-agent-native-oracle.service 2>/dev/null || true
 systemctl disable paper-agent-native-oracle.service >/dev/null 2>&1 || true
 [ -f "$QMD" ] && cp -p "$QMD" "$BACKUP/paperAgentSelection.qmd"
@@ -110,8 +115,19 @@ echo "paper_agent=removed"
 echo "preserved_config=$BASE/config.env"
 echo "preserved_backups=$STATE_ROOT"
 echo "preserved_runtime=$BASE/runtime"
-echo "chatgpt=$chatgpt_state"
 `
+
+func SignOutChatGPT(device Runner) (string, error) {
+	output, err := device.Run(SignOutChatGPTCommand)
+	if err != nil {
+		return output, fmt.Errorf("sign out ChatGPT: %w: %s", err, strings.TrimSpace(output))
+	}
+	if !strings.Contains(output, "chatgpt=openai-codex-removed") &&
+		!strings.Contains(output, "chatgpt=openai-codex-not-present") {
+		return output, fmt.Errorf("sign out ChatGPT: device did not confirm sign-out")
+	}
+	return output, nil
+}
 
 func Uninstall(device Runner) (string, error) {
 	output, err := device.Run(UninstallCommand)

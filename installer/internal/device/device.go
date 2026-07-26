@@ -118,6 +118,10 @@ func (d *Device) RunStreaming(
 		select {
 		case <-ctx.Done():
 			_ = session.Close()
+			// Dropbear can leave a foreground process alive when only the SSH
+			// channel is closed. Closing the transport makes cancellation
+			// observable by the remote session and also guarantees Run returns.
+			_ = d.client.Close()
 		case <-done:
 		}
 	}()
