@@ -178,17 +178,34 @@
           <p class="eyebrow danger-label">Optional cleanup</p>
           <h2>Uninstall Paper Agent</h2>
         </div>
-        <p>Removes Paper Agent's notebook integration, background service,
-          Settings app, and ChatGPT sign-in. Shared XOVI, AppLoad, Node/Pi,
-          user settings, and backups are preserved.</p>
-        <p class="shared-note">XOVI and AppLoad are never removed here because
-          other reMarkable tools may depend on them, including copies installed
-          before Paper Agent. Full removal is offered only for components whose
-          installation source was recorded by Paper Agent Installer.</p>
-        <label class="check full-cleanup">
-          <input id="full-uninstall" type="checkbox" disabled>
-          <span id="full-uninstall-copy">No installer-managed components were recorded for this installation.</span>
-        </label>
+        <p>Choose how much to remove. Paper Agent only deletes shared components
+          when this installer has a record proving that it originally installed
+          them.</p>
+        <div class="uninstall-options" role="radiogroup" aria-label="Uninstall options">
+          <label id="safe-uninstall-option" class="uninstall-option selected">
+            <input id="safe-uninstall" name="uninstall-mode" type="radio" checked>
+            <span class="uninstall-option-copy">
+              <span class="uninstall-option-title">
+                <strong>Remove Paper Agent</strong>
+                <span class="badge">Recommended</span>
+              </span>
+              <span>Removes the notebook integration, background service,
+                Settings app, and ChatGPT sign-in. Keeps XOVI, AppLoad, Node/Pi,
+                user settings, and backups.</span>
+            </span>
+          </label>
+          <label id="full-uninstall-option" class="uninstall-option full-cleanup unavailable">
+            <input id="full-uninstall" name="uninstall-mode" type="radio" disabled>
+            <span class="uninstall-option-copy">
+              <span class="uninstall-option-title">
+                <strong>Full cleanup</strong>
+                <span id="full-uninstall-status" class="badge muted">Check Move first</span>
+              </span>
+              <span id="full-uninstall-copy">Available only for shared components
+                installed and recorded by Paper Agent Installer.</span>
+            </span>
+          </label>
+        </div>
         <label class="check">
           <input id="uninstall-confirm" type="checkbox">
           <span id="uninstall-confirm-copy">I understand this removes Paper Agent and signs out ChatGPT, while keeping the shared components and saved data listed above.</span>

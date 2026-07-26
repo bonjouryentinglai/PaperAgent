@@ -23,8 +23,12 @@ const operationMessage = document.querySelector("#operation-message");
 const uninstallButton = document.querySelector("#uninstall");
 const uninstallConfirm = document.querySelector("#uninstall-confirm");
 const uninstallMessage = document.querySelector("#uninstall-message");
+const safeUninstall = document.querySelector("#safe-uninstall");
+const safeUninstallOption = document.querySelector("#safe-uninstall-option");
 const fullUninstall = document.querySelector("#full-uninstall");
+const fullUninstallOption = document.querySelector("#full-uninstall-option");
 const fullUninstallCopy = document.querySelector("#full-uninstall-copy");
+const fullUninstallStatus = document.querySelector("#full-uninstall-status");
 const uninstallConfirmCopy = document.querySelector("#uninstall-confirm-copy");
 const DEFAULT_USB_ADDRESS = "10.11.99.1";
 let lastStatus = null;
@@ -68,13 +72,24 @@ function updateUninstallOption() {
   const description = managedDescription(lastStatus);
   const available = description.length > 0;
   fullUninstall.disabled = !available;
-  if (!available) fullUninstall.checked = false;
+  if (!available) {
+    fullUninstall.checked = false;
+    safeUninstall.checked = true;
+  }
+  fullUninstallStatus.textContent = available ? "Available" : "Unavailable";
+  fullUninstallStatus.className = available ? "badge" : "badge muted";
+  safeUninstallOption.classList.toggle("selected", safeUninstall.checked);
+  fullUninstallOption.classList.toggle("selected", fullUninstall.checked);
+  fullUninstallOption.classList.toggle("unavailable", !available);
   fullUninstallCopy.textContent = available
-    ? `Also remove installer-managed components: ${description}. This can remove every app inside an installer-managed AppLoad.`
-    : "No installer-managed components were recorded for this installation. Safe Paper Agent-only uninstall remains available.";
+    ? `Also removes installer-managed components: ${description}. This may remove every app inside an installer-managed AppLoad.`
+    : "Unavailable on this Move. The shared components were already present or were not installed by Paper Agent Installer.";
   uninstallConfirmCopy.textContent = fullUninstall.checked
     ? "I understand this signs out ChatGPT and permanently removes Paper Agent, its saved data, and the installer-managed components listed above."
     : "I understand this removes Paper Agent and signs out ChatGPT, while keeping shared components, settings, runtime, and backups.";
+  uninstallButton.textContent = fullUninstall.checked
+    ? "Run full cleanup"
+    : "Uninstall Paper Agent";
 }
 
 function render(status) {
@@ -183,6 +198,11 @@ connectButton.addEventListener("click", () => busy(connectButton, async () => {
 }));
 
 uninstallConfirm.addEventListener("change", updateActions);
+safeUninstall.addEventListener("change", () => {
+  uninstallConfirm.checked = false;
+  updateUninstallOption();
+  updateActions();
+});
 fullUninstall.addEventListener("change", () => {
   uninstallConfirm.checked = false;
   updateUninstallOption();
