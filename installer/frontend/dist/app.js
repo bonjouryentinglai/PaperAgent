@@ -26,9 +26,18 @@ const uninstallMessage = document.querySelector("#uninstall-message");
 const fullUninstall = document.querySelector("#full-uninstall");
 const fullUninstallCopy = document.querySelector("#full-uninstall-copy");
 const uninstallConfirmCopy = document.querySelector("#uninstall-confirm-copy");
+const DEFAULT_USB_ADDRESS = "10.11.99.1";
 let lastStatus = null;
 let operationTimer = null;
 let loginTimer = null;
+let addressEditedThisSession = false;
+
+// WebKit may restore form values from an earlier installer session. Never reuse
+// a stale network address without the user editing the field in this session.
+host.value = DEFAULT_USB_ADDRESS;
+host.addEventListener("input", () => {
+  addressEditedThisSession = true;
+});
 
 function api(name, ...args) {
   const fn = window.go?.main?.App?.[name];
@@ -155,12 +164,16 @@ connectButton.addEventListener("click", () => busy(connectButton, async () => {
   const usbMove = devices?.find((device) => device.usb && device.developerMode);
   if (usbMove) {
     host.value = usbMove.address;
+  } else if (!addressEditedThisSession) {
+    host.value = DEFAULT_USB_ADDRESS;
+    message.textContent = "No USB-connected Move was found. Reconnect its USB cable, keep the Move awake, and try again.";
+    return;
   } else if (!enteredAddress) {
-    message.textContent = "No USB-connected Developer Mode Move was found. Connect it by USB or enter its address manually.";
+    message.textContent = "Enter the Move address, or reconnect it by USB and use 10.11.99.1.";
     return;
   } else {
     host.value = enteredAddress;
-    message.textContent = "No USB Move was auto-detected; checking the entered address…";
+    message.textContent = "Checking the address you entered…";
   }
   const status = await api("Inspect", host.value, password.value);
   render(status);
