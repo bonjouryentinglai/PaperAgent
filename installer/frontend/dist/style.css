@@ -157,6 +157,12 @@ button.compact { padding: 8px 11px; font-size: 12px; }
 .operation-panel > div { display: flex; justify-content: space-between; gap: 12px; }
 .operation-panel progress { width: 100%; accent-color: #20242a; }
 .operation-panel p { margin: 0; font-size: 13px; }
+.recovery-tip {
+  grid-column: 1 / -1; display: flex; align-items: baseline; gap: 9px;
+  padding: 11px 14px; border-left: 3px solid #20242a;
+  background: #f3f0e8; border-radius: 0 9px 9px 0; font-size: 13px;
+}
+.recovery-tip span { color: #66655f; }
 .check { display: flex; align-items: flex-start; gap: 10px; max-width: 650px; line-height: 1.4; }
 .check input { width: 18px; height: 18px; margin: 1px 0 0; flex: 0 0 auto; }
 .uninstall-card {

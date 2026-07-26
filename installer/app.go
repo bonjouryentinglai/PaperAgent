@@ -365,7 +365,10 @@ func (a *App) runOperation(ctx context.Context, kind, host, password string) {
 		return
 	}
 	a.finishOperation(
-		fmt.Sprintf("Paper Agent %s is installed and running.", manifest.Version),
+		fmt.Sprintf(
+			"Paper Agent %s is installed and running. If AppLoad is not visible, quickly press the Move power button three times to start XOVI.",
+			manifest.Version,
+		),
 		&verified,
 		nil,
 	)

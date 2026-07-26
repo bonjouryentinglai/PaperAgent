@@ -90,6 +90,10 @@ device bundle.
    Xochitl integration, and Settings app pass verification; otherwise the
    previous Paper Agent files are restored.
 
+> **AppLoad not visible after installation or a restart?** Wake the Move, then
+> quickly press the power button three times. This starts or restarts XOVI so
+> AppLoad can appear again.
+
 The same desktop tool provides **Update**, **Repair**, and a confirmed
 Paper-Agent-only **Uninstall**. Open **Paper Agent Settings** in AppLoad to
 change the model, thinking level, AI answer size, and minimum automatic scale.

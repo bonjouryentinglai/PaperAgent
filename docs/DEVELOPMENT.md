@@ -116,7 +116,9 @@ After an install, verify separately:
     unofficial-software disclaimer. Confirm install and removal actions remain
     disabled until the acknowledgment is selected. Then confirm discovery, the
     `chiappa` model gate, storage check, pinned XOVI/AppLoad/native dependency
-    install, Node/Pi install, and post-restart SSH recovery.
+    install, Node/Pi install, and post-restart SSH recovery. After installation
+    and again after a reboot, hide or stop XOVI, quickly press the power button
+    three times, and confirm XOVI restarts and AppLoad becomes available.
 25. Start ChatGPT sign-in in the installer. Confirm the URL and device code
     appear, cancellation leaves no partial credential, successful approval
     produces a mode-0600 `/home/root/.pi/agent/auth.json`, and no token appears
