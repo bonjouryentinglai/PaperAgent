@@ -54,6 +54,10 @@ Paper Agent's original code is MIT licensed unless a file says otherwise.
   Project Authors. It provides the generic symbol fallback used for chess,
   mathematical and other common Unicode symbols. License:
   `device/native/assets/fonts/NOTO-SYMBOLS-OFL.txt`.
+- **Lucide Icons** 1.27.0, ISC with Feather-derived icons under MIT,
+  copyright 2026 Lucide Icons and Contributors and 2013-present Cole Bemis.
+  Six preparation and warning icons are bundled in the desktop installer.
+  License: `third_party/lucide-ISC.txt`.
 
 Rust dependency licenses are recorded by their upstream crates, including
 `ab_glyph`, `ab_glyph_rasterizer`, `owned_ttf_parser`, `ttf-parser`, `png`,

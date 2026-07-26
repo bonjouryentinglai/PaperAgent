@@ -13,7 +13,6 @@
         <div>
           <p class="eyebrow">reMarkable Paper Pro Move</p>
           <h1>Paper Agent Installer</h1>
-          <p>Guided setup with device checks, backup, verification, and rollback.</p>
         </div>
         <span class="badge">Phase 2B</span>
       </header>
@@ -21,55 +20,72 @@
       <section class="card preparation-card">
         <div class="section-title">
           <div>
-            <p class="eyebrow">Before Step 1</p>
-            <h2>Prepare your Move</h2>
+            <p class="eyebrow">Preparation</p>
+            <h2>Get your Move ready</h2>
           </div>
-          <span class="badge muted">One-time setup</span>
+          <span class="badge muted">About 5 minutes</span>
         </div>
-        <ol class="setup-list">
-          <li>
-            <strong>Sync or back up your notebooks first.</strong>
-            Enabling Developer Mode performs a factory reset and removes data
-            currently stored on the Move.
-          </li>
-          <li>
-            <strong>Enable Developer Mode on the Move.</strong>
-            Open <span class="path">Settings → General → Paper Tablet → Software
-            → Advanced → Developer Mode</span>, then follow the reset and setup
-            instructions shown on the device.
-          </li>
-          <li>
-            <strong>Find the Developer password after setup.</strong>
-            Open <span class="path">Settings → General → Help → About →
-            Copyrights and Licenses</span>. Under <em>General Information</em>,
-            find the username and randomly generated password.
-          </li>
-          <li>
-            <strong>Connect the Move to this computer by USB.</strong>
-            Keep it awake and leave this information page available while
-            installing. The usual USB address is <span class="path">10.11.99.1</span>.
-          </li>
-        </ol>
-        <p class="official-note">
-          These paths follow reMarkable's official Developer Mode documentation.
-        </p>
+        <div class="prep-flow" aria-label="Move preparation flow">
+          <article class="prep-step">
+            <span class="prep-number">1</span>
+            <span class="prep-icon"><img src="./assets/lucide/cloud-upload.svg" alt=""></span>
+            <strong>Back up notes</strong>
+            <small>Developer Mode resets the Move.</small>
+          </article>
+          <img class="flow-arrow" src="./assets/lucide/chevron-right.svg" alt="">
+          <article class="prep-step">
+            <span class="prep-number">2</span>
+            <span class="prep-icon"><img src="./assets/lucide/tablet-smartphone.svg" alt=""></span>
+            <strong>Enable Developer Mode</strong>
+            <small>Complete the reset and setup.</small>
+          </article>
+          <img class="flow-arrow" src="./assets/lucide/chevron-right.svg" alt="">
+          <article class="prep-step">
+            <span class="prep-number">3</span>
+            <span class="prep-icon"><img src="./assets/lucide/key-round.svg" alt=""></span>
+            <strong>Find the password</strong>
+            <small>It appears in General Information.</small>
+          </article>
+          <img class="flow-arrow" src="./assets/lucide/chevron-right.svg" alt="">
+          <article class="prep-step">
+            <span class="prep-number">4</span>
+            <span class="prep-icon"><img src="./assets/lucide/usb.svg" alt=""></span>
+            <strong>Connect USB</strong>
+            <small>Keep the Move awake.</small>
+          </article>
+        </div>
+        <details class="setup-details">
+          <summary>Where to find Developer Mode and the password</summary>
+          <div class="setup-paths">
+            <p><strong>Developer Mode</strong><span>Settings → General → Paper
+              Tablet → Software → Advanced → Developer Mode</span></p>
+            <p><strong>Developer password</strong><span>Settings → General →
+              Help → About → Copyrights and Licenses → General Information</span></p>
+          </div>
+        </details>
       </section>
 
       <section class="card disclaimer-card">
-        <div>
-          <p class="eyebrow warning-label">Important</p>
-          <h2>Unofficial software disclaimer</h2>
+        <div class="disclaimer-heading">
+          <span class="warning-icon"><img src="./assets/lucide/shield-alert.svg" alt=""></span>
+          <div>
+            <p class="eyebrow warning-label">Before you continue</p>
+            <h2>Know the risks</h2>
+          </div>
         </div>
-        <div class="disclaimer-copy">
-          <p>Paper Agent is an independent open-source project. It is not
-            affiliated with, endorsed by, or supported by reMarkable or OpenAI.</p>
-          <p>It installs and modifies software available through Developer Mode.
-            This weakens the device's normal security protections; firmware
-            updates may disable custom software, and modifications can affect
-            stability, support eligibility, or locally stored data. Paper Agent
-            backs up files it manages, but cannot guarantee recovery of unrelated
-            device data.</p>
-        </div>
+        <ul class="risk-points">
+          <li>Independent project; not supported by reMarkable or OpenAI</li>
+          <li>Developer Mode reduces the Move's normal security</li>
+          <li>Updates may break custom software, so keep notes backed up</li>
+        </ul>
+        <details class="disclaimer-details">
+          <summary>Read the full disclaimer</summary>
+          <p>Paper Agent installs and modifies unofficial Developer Mode
+            software. These changes can affect device stability, support
+            eligibility, or locally stored data. Paper Agent backs up files it
+            manages, but cannot guarantee recovery of unrelated device data.
+            You are responsible for installing and using it.</p>
+        </details>
         <label class="check risk-confirm">
           <input id="risk-confirm" type="checkbox">
           <span>I have synced or backed up my notebooks and understand that I
@@ -81,12 +97,13 @@
         <div>
           <p class="step">Step 1</p>
           <h2>Connect your Move</h2>
-          <p>Connect it over USB, wake it, and keep Developer Mode enabled.
-            The installer will find it and check compatibility in one step.</p>
+          <p>Connect it over USB and keep it awake. One click finds the Move and
+            checks compatibility.</p>
         </div>
         <div class="fields">
           <label>Device address
             <input id="host" value="10.11.99.1" autocomplete="off">
+            <small>Default USB address. Change it only when needed.</small>
           </label>
           <label>Developer password
             <input id="password" type="password" autocomplete="off">
