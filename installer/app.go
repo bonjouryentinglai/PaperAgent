@@ -59,7 +59,14 @@ type OperationState struct {
 	Status     preflight.Status `json:"status"`
 }
 
-const defaultReleaseManifestURL = "https://github.com/bonjouryentinglai/PaperAgent/releases/latest/download/paper-agent-manifest.json"
+const (
+	defaultReleaseManifestURL = "https://github.com/bonjouryentinglai/PaperAgent/releases/latest/download/paper-agent-manifest.json"
+	taggedReleaseManifestURL  = "https://github.com/bonjouryentinglai/PaperAgent/releases/download/%s/paper-agent-manifest.json"
+)
+
+// releaseTag is set only for tagged release builds through Go linker flags.
+// Branch, pull-request, and local builds leave it empty and use latest.
+var releaseTag string
 
 func NewApp() *App {
 	return &App{
@@ -152,10 +159,31 @@ func (a *App) CheckRelease() (ReleaseSummary, error) {
 
 func releaseManifestURL() string {
 	manifestURL := strings.TrimSpace(os.Getenv("PAPER_AGENT_RELEASE_MANIFEST_URL"))
-	if manifestURL == "" {
-		return defaultReleaseManifestURL
+	if manifestURL != "" {
+		return manifestURL
 	}
-	return manifestURL
+	tag := strings.TrimSpace(releaseTag)
+	if validReleaseTag(tag) {
+		return fmt.Sprintf(taggedReleaseManifestURL, tag)
+	}
+	return defaultReleaseManifestURL
+}
+
+func validReleaseTag(tag string) bool {
+	if len(tag) < 2 || tag[0] != 'v' {
+		return false
+	}
+	for index := 1; index < len(tag); index++ {
+		current := tag[index]
+		if (current >= 'a' && current <= 'z') ||
+			(current >= 'A' && current <= 'Z') ||
+			(current >= '0' && current <= '9') ||
+			current == '.' || current == '_' || current == '+' || current == '-' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func (a *App) setOperation(update func(*OperationState)) {

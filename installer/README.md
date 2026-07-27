@@ -66,7 +66,9 @@ go run github.com/wailsapp/wails/v2/cmd/wails@v2.13.0 build
 
 `PAPER_AGENT_RELEASE_MANIFEST_URL` can point a maintainer build at an HTTPS or
 loopback development manifest. Normal builds use the latest published GitHub
-release.
+release. Installers built from a `v*` tag embed that exact tag's manifest URL,
+so a release candidate can remain a GitHub Pre-release without resolving
+through the stable `latest` alias.
 
 `paper-agent-manifest.example.json` documents manifest schema 1. A relative
 bundle URL is resolved beside the manifest. GitHub's release workflow builds

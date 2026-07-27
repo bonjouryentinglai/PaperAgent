@@ -116,7 +116,18 @@ jobs:
 
       - name: Build installer
         working-directory: installer
-        run: go run github.com/wailsapp/wails/v2/cmd/wails@v2.13.0 build -platform ${{ matrix.platform }}
+        shell: bash
+        env:
+          PAPER_AGENT_RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+        run: |
+          if [[ -n "$PAPER_AGENT_RELEASE_TAG" ]]; then
+            go run github.com/wailsapp/wails/v2/cmd/wails@v2.13.0 build \
+              -platform "${{ matrix.platform }}" \
+              -ldflags "-X main.releaseTag=$PAPER_AGENT_RELEASE_TAG"
+          else
+            go run github.com/wailsapp/wails/v2/cmd/wails@v2.13.0 build \
+              -platform "${{ matrix.platform }}"
+          fi
 
       - name: Pack macOS installer
         if: runner.os == 'macOS'
@@ -171,7 +182,8 @@ jobs:
               tag_name: $tag,
               name: ("Paper Agent " + $tag),
               generate_release_notes: true,
-              draft: true
+              draft: true,
+              prerelease: ($tag | contains("-"))
             }')")
           release_id=$(jq -r .id <<<"$response")
           test "$release_id" != null
