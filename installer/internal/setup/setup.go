@@ -26,6 +26,40 @@ const (
 	piVersion   = "0.80.7"
 )
 
+const installTripleTapCommand = `set -eu
+SOURCE=/tmp/paper-agent-tripletap-source
+ARCHIVE=/tmp/paper-agent-tripletap.tar.gz
+INSTALL=/home/root/xovi-tripletap
+OWN=/home/root/paper-agent/installer-owned
+rm -rf "$SOURCE"
+mkdir -p "$SOURCE" "$INSTALL"
+tar -xzf "$ARCHIVE" -C "$SOURCE" --strip-components=1
+test -s "$SOURCE/evtest.arm64" || {
+  echo "xovi-tripletap archive is missing evtest.arm64" >&2
+  exit 1
+}
+test -f "$SOURCE/xovi-tripletap.service"
+cp "$SOURCE/migrate-to-config.sh" "$SOURCE/config.default" "$INSTALL/"
+chmod 0755 "$INSTALL/migrate-to-config.sh"
+if [ ! -f "$INSTALL/config" ]; then
+  "$INSTALL/migrate-to-config.sh"
+fi
+for name in main.sh enable.sh uninstall.sh version-switcher.sh init-version-switching.sh prepare-new-version.sh disable-version-switching.sh; do
+  cp "$SOURCE/$name" "$INSTALL/$name"
+  chmod 0755 "$INSTALL/$name"
+done
+cp "$SOURCE/evtest.arm64" "$INSTALL/evtest"
+chmod 0755 "$INSTALL/evtest"
+test -x "$INSTALL/evtest"
+cp "$SOURCE/xovi-tripletap.service" "$INSTALL/xovi-tripletap.service"
+printf '%s\n' 869497aa61435448bf0077fbf75fb264dcba92c5 >"$INSTALL/version.txt"
+rm -rf "$SOURCE" "$ARCHIVE"
+"$INSTALL/enable.sh"
+mkdir -p "$OWN"
+: >"$OWN/persistence"
+chmod 0600 "$OWN/persistence"
+`
+
 type Reporter func(stage, message string, percent int)
 
 type prerequisitePlan struct {
@@ -342,36 +376,7 @@ fi
 		if err := connection.PushFile(tripleTapPath, "/tmp/paper-agent-tripletap.tar.gz", 0o600); err != nil {
 			return status, err
 		}
-		const installTripleTap = `set -eu
-SOURCE=/tmp/paper-agent-tripletap-source
-ARCHIVE=/tmp/paper-agent-tripletap.tar.gz
-INSTALL=/home/root/xovi-tripletap
-OWN=/home/root/paper-agent/installer-owned
-rm -rf "$SOURCE"
-mkdir -p "$SOURCE" "$INSTALL"
-tar -xzf "$ARCHIVE" -C "$SOURCE" --strip-components=1
-test -x "$SOURCE/evtest.arm64"
-test -f "$SOURCE/xovi-tripletap.service"
-cp "$SOURCE/migrate-to-config.sh" "$SOURCE/config.default" "$INSTALL/"
-chmod 0755 "$INSTALL/migrate-to-config.sh"
-if [ ! -f "$INSTALL/config" ]; then
-  "$INSTALL/migrate-to-config.sh"
-fi
-for name in main.sh enable.sh uninstall.sh version-switcher.sh init-version-switching.sh prepare-new-version.sh disable-version-switching.sh; do
-  cp "$SOURCE/$name" "$INSTALL/$name"
-  chmod 0755 "$INSTALL/$name"
-done
-cp "$SOURCE/evtest.arm64" "$INSTALL/evtest"
-chmod 0755 "$INSTALL/evtest"
-cp "$SOURCE/xovi-tripletap.service" "$INSTALL/xovi-tripletap.service"
-printf '%s\n' 869497aa61435448bf0077fbf75fb264dcba92c5 >"$INSTALL/version.txt"
-rm -rf "$SOURCE" "$ARCHIVE"
-"$INSTALL/enable.sh"
-mkdir -p "$OWN"
-: >"$OWN/persistence"
-chmod 0600 "$OWN/persistence"
-`
-		output, installErr := connection.Run(installTripleTap)
+		output, installErr := connection.Run(installTripleTapCommand)
 		if installErr != nil {
 			return status, fmt.Errorf("install XOVI persistence: %w: %s", installErr, tail(output, 500))
 		}
