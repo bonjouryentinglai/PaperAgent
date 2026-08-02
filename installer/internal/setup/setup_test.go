@@ -56,6 +56,19 @@ func TestGitHubArchiveEvtestModeDoesNotNeedToBeExecutable(t *testing.T) {
 		strings.Index(installTripleTapCommand, chmodStep) < strings.Index(installTripleTapCommand, installedCheck)) {
 		t.Fatal("triple-tap evtest validation and installation steps are out of order")
 	}
+
+	enableStep := `"$INSTALL/enable.sh"`
+	whiteoutCheck := `if [ -c "$whiteout" ]`
+	if !strings.Contains(installTripleTapCommand, "/var/volatile/etc/systemd/system/xovi-tripletap.service") ||
+		!strings.Contains(installTripleTapCommand, "/var/volatile/etc/systemd/system/multi-user.target.wants/xovi-tripletap.service") {
+		t.Fatal("triple-tap installer does not clear the known persistence whiteouts")
+	}
+	if strings.Index(installTripleTapCommand, enableStep) >= strings.Index(installTripleTapCommand, whiteoutCheck) {
+		t.Fatal("persistence whiteouts must be inspected only after enable.sh unmounts /etc")
+	}
+	if strings.Contains(installTripleTapCommand, `[ -e "$whiteout" ]`) {
+		t.Fatal("regular persistence files must not be removed as whiteouts")
+	}
 }
 
 func TestDeployRejectsUnexpectedBundleNameBeforeDeviceAccess(t *testing.T) {
@@ -92,5 +105,29 @@ func TestRepairPreservesDetectedSharedComponents(t *testing.T) {
 	}
 	if plan.nativeBridge || !plan.qmlIndex {
 		t.Fatal("repair must preserve shared native files and rebuild only Paper Agent's QML index")
+	}
+}
+
+func TestMissingPrerequisitesNamesOnlyFailedChecks(t *testing.T) {
+	status := preflight.Status{
+		XOVIInstalled:    true,
+		AppLoadInstalled: true,
+		NodeInstalled:    true,
+		PiInstalled:      false,
+		NativeDeps:       false,
+		QMLIndex:         true,
+		XOVIPersistence:  false,
+	}
+	want := []string{"Pi", "native selection bridge", "XOVI startup"}
+	got := missingPrerequisites(status)
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("missingPrerequisites() = %q, want %q", got, want)
+	}
+
+	status.PiInstalled = true
+	status.NativeDeps = true
+	status.XOVIPersistence = true
+	if got := missingPrerequisites(status); len(got) != 0 {
+		t.Fatalf("complete status reported missing prerequisites: %q", got)
 	}
 }

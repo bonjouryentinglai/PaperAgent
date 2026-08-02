@@ -102,6 +102,9 @@ function render(status) {
     ["OS", status.osVersion || "Unknown"],
     ["XOVI", yes(status.xoviInstalled, "Installed")],
     ["AppLoad", yes(status.appLoadInstalled, "Installed")],
+    ["XOVI startup", yes(status.xoviPersistence, "Enabled")],
+    ["QML index", yes(status.qmlIndex, "Ready")],
+    ["Native bridge", yes(status.nativeDeps, "Installed")],
     ["Node + Pi", status.nodeInstalled && status.piInstalled ? "Installed" : "Missing"],
     ["ChatGPT login", yes(status.chatGPTLoggedIn, "Signed in", "Not signed in")],
     ["Paper Agent", yes(

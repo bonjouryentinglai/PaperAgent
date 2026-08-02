@@ -55,6 +55,17 @@ cp "$SOURCE/xovi-tripletap.service" "$INSTALL/xovi-tripletap.service"
 printf '%s\n' 869497aa61435448bf0077fbf75fb264dcba92c5 >"$INSTALL/version.txt"
 rm -rf "$SOURCE" "$ARCHIVE"
 "$INSTALL/enable.sh"
+# Full cleanup can leave overlayfs whiteouts at these exact paths. The
+# persistence installer has just unmounted /etc on Paper Pro devices, so it is
+# now safe to remove only those stale character-device markers before /etc is
+# mounted again. Regular files and symlinks are intentionally preserved.
+for whiteout in \
+  /var/volatile/etc/systemd/system/xovi-tripletap.service \
+  /var/volatile/etc/systemd/system/multi-user.target.wants/xovi-tripletap.service; do
+  if [ -c "$whiteout" ]; then
+    rm -f "$whiteout"
+  fi
+done
 mkdir -p "$OWN"
 : >"$OWN/persistence"
 chmod 0600 "$OWN/persistence"
@@ -79,6 +90,28 @@ func planPrerequisites(status preflight.Status, forceRepair bool) prerequisitePl
 		nativeBridge: !status.NativeDeps,
 		qmlIndex:     forceRepair || !status.QMLIndex,
 	}
+}
+
+func missingPrerequisites(status preflight.Status) []string {
+	missing := make([]string, 0, 7)
+	checks := []struct {
+		ready bool
+		name  string
+	}{
+		{status.XOVIInstalled, "XOVI"},
+		{status.AppLoadInstalled, "AppLoad"},
+		{status.NodeInstalled, "Node.js"},
+		{status.PiInstalled, "Pi"},
+		{status.NativeDeps, "native selection bridge"},
+		{status.QMLIndex, "AppLoad QML index"},
+		{status.XOVIPersistence, "XOVI startup"},
+	}
+	for _, check := range checks {
+		if !check.ready {
+			missing = append(missing, check.name)
+		}
+	}
+	return missing
 }
 
 func report(callback Reporter, stage, message string, percent int) {
@@ -452,10 +485,11 @@ systemd-run --unit=xovi-firststart --collect --service-type=oneshot /home/root/x
 	if err != nil {
 		return status, err
 	}
-	if !verified.XOVIInstalled || !verified.AppLoadInstalled || !verified.NodeInstalled ||
-		!verified.PiInstalled || !verified.NativeDeps || !verified.QMLIndex ||
-		!verified.XOVIPersistence {
-		return verified, fmt.Errorf("prerequisite verification failed")
+	if missing := missingPrerequisites(verified); len(missing) > 0 {
+		return verified, fmt.Errorf(
+			"prerequisite verification failed: missing %s",
+			strings.Join(missing, ", "),
+		)
 	}
 	return verified, nil
 }
