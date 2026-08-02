@@ -63,6 +63,7 @@ type OperationState struct {
 const (
 	defaultReleaseManifestURL = "https://github.com/bonjouryentinglai/PaperAgent/releases/latest/download/paper-agent-manifest.json"
 	taggedReleaseManifestURL  = "https://github.com/bonjouryentinglai/PaperAgent/releases/download/%s/paper-agent-manifest.json"
+	releaseCheckTimeout       = 20 * time.Second
 )
 
 // releaseTag is set only for tagged release builds through Go linker flags.
@@ -147,9 +148,11 @@ func (a *App) CheckRelease() (ReleaseSummary, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	ctx, cancel := context.WithTimeout(ctx, releaseCheckTimeout)
+	defer cancel()
 	manifest, err := releasebundle.Fetch(ctx, a.httpClient, manifestURL)
 	if err != nil {
-		return ReleaseSummary{}, err
+		return ReleaseSummary{}, fmt.Errorf("check published release: %w", err)
 	}
 	var runtimeBytes int64
 	if manifest.Runtime != nil {
@@ -281,11 +284,11 @@ func (a *App) operationProgress(stage, message string, percent int) {
 func (a *App) pauseForLogin(status preflight.Status, message string) {
 	a.setOperation(func(state *OperationState) {
 		state.Running = false
-		state.Done = false
+		state.Done = true
 		state.NeedsLogin = true
-		state.Stage = "login"
+		state.Stage = "installed"
 		state.Message = message
-		state.Percent = 98
+		state.Percent = 100
 		state.Status = status
 		state.HasStatus = true
 	})
@@ -368,12 +371,12 @@ func (a *App) runOperation(ctx context.Context, kind, host, password string) {
 		return
 	}
 	if !status.ChatGPTLoggedIn && kind != "install" {
-		a.pauseForLogin(status, "Paper Agent is installed, but ChatGPT is signed out. Sign in to continue this maintenance operation.")
+		a.pauseForLogin(status, "Paper Agent and Settings are ready. Continue with ChatGPT sign-in in Step 4.")
 		return
 	}
 	if !status.ChatGPTLoggedIn && status.ActivationRequired && status.SettingsApp &&
 		status.InstalledVersion == manifest.Version {
-		a.pauseForLogin(status, "Paper Agent and Settings are installed. Sign in to ChatGPT; activation will continue automatically.")
+		a.pauseForLogin(status, "Paper Agent and Settings are installed. Continue with ChatGPT sign-in in Step 4.")
 		return
 	}
 
@@ -415,7 +418,7 @@ func (a *App) runOperation(ctx context.Context, kind, host, password string) {
 			a.finishOperation("Paper Agent and Settings did not pass staged verification.", &verified, deployErr)
 			return
 		}
-		a.pauseForLogin(verified, "Paper Agent and Settings are installed. Sign in to ChatGPT; activation will continue automatically.")
+		a.pauseForLogin(verified, "Paper Agent and Settings are installed. Continue with ChatGPT sign-in in Step 4.")
 		return
 	}
 

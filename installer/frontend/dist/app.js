@@ -10,6 +10,7 @@ const loginGuide = document.querySelector("#login-guide");
 const loginURL = document.querySelector("#login-url");
 const loginCode = document.querySelector("#login-code");
 const loginMessage = document.querySelector("#login-message");
+const loginActions = document.querySelector("#login-actions");
 const installButton = document.querySelector("#install");
 const updateButton = document.querySelector("#update");
 const repairButton = document.querySelector("#repair");
@@ -38,6 +39,7 @@ let addressEditedThisSession = false;
 let pendingOperationKind = null;
 let automaticLoginStarting = false;
 let automaticResumeStarting = false;
+let activationResumeRunning = false;
 
 // WebKit may restore form values from an earlier installer session. Never reuse
 // a stale network address without the user editing the field in this session.
@@ -131,10 +133,13 @@ function render(status) {
   readyBadge.className = ready ? "badge" : "badge muted";
   if (status.chatGPTLoggedIn) {
     loginGuide.classList.add("hidden");
+    loginActions.classList.add("hidden");
     loginMessage.textContent = "ChatGPT is signed in on this Move.";
   } else if (status.activationRequired && status.paperAgent && status.settingsApp) {
+    loginActions.classList.remove("hidden");
     loginMessage.textContent = "Paper Agent and Settings are installed. Sign in to activate the notebook integration.";
   } else {
+    loginActions.classList.remove("hidden");
     loginMessage.textContent = "Install Paper Agent and Settings first; ChatGPT sign-in starts afterward.";
   }
   updateUninstallOption();
@@ -223,17 +228,24 @@ checkReleaseButton.addEventListener("click", () => busy(checkReleaseButton, asyn
   const release = await api("CheckRelease");
   const downloadBytes = release.bundleBytes + (release.runtimeBytes || 0);
   releaseVersion.textContent = `${release.version} · ${(downloadBytes / 1024 / 1024).toFixed(1)} MiB first-install download`;
-}));
+}, releaseVersion));
 
 function renderOperation(state) {
   operationProgress.dataset.running = state.running ? "true" : "false";
-  operationProgress.value = state.percent || 0;
-  operationStage.textContent = state.stage || (state.done ? "Complete" : "Ready");
-  operationPercent.textContent = `${state.percent || 0}%`;
-  operationMessage.textContent = state.error || state.message || "Working…";
+  if (activationResumeRunning && state.running) {
+    loginMessage.textContent = state.error || state.message || "Activating Paper Agent…";
+  } else {
+    operationProgress.value = state.percent || 0;
+    operationStage.textContent = state.stage || (state.done ? "Complete" : "Ready");
+    operationPercent.textContent = `${state.percent || 0}%`;
+    operationMessage.textContent = state.error || state.message || "Working…";
+  }
   if (state.hasStatus) render(state.status);
   if (state.needsLogin) {
-    loginMessage.textContent = "Paper Agent and Settings are ready. Sign in to activate the notebook integration.";
+    loginMessage.textContent = "Installation is complete. Open ChatGPT sign-in and enter the device code below.";
+  }
+  if (activationResumeRunning && !state.running) {
+    activationResumeRunning = false;
   }
   updateActions();
 }
@@ -292,6 +304,9 @@ repairButton.addEventListener("click", () => busy(
 function renderLogin(state) {
   loginButton.dataset.running = state.running ? "true" : "";
   cancelLoginButton.disabled = !state.running;
+  loginButton.textContent = state.running
+    ? "Sign-in in progress"
+    : (state.done ? "Retry ChatGPT sign-in" : "Start ChatGPT sign-in");
   loginMessage.textContent = state.error || state.message;
   if (state.done && !state.signedIn) {
     loginGuide.classList.add("hidden");
@@ -307,6 +322,7 @@ function renderLogin(state) {
     lastStatus.chatGPTLoggedIn = true;
     render(lastStatus);
   } else {
+    loginActions.classList.remove("hidden");
     updateActions();
   }
 }
@@ -341,10 +357,12 @@ async function resumePendingOperation() {
   pendingOperationKind = null;
   if (!target) return;
   automaticResumeStarting = true;
+  activationResumeRunning = true;
   try {
-    operationMessage.textContent = "ChatGPT signed in. Continuing installation automatically…";
+    loginMessage.textContent = "ChatGPT signed in. Activating Paper Agent…";
     await startOperation(target.name, target.button);
   } catch (error) {
+    activationResumeRunning = false;
     operationMessage.textContent = error?.message || String(error);
   } finally {
     automaticResumeStarting = false;

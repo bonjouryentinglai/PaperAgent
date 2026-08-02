@@ -168,16 +168,16 @@
 
       <section class="card login-card">
         <div><p class="step">Step 4</p><h2>Sign in and activate</h2></div>
-        <p>After prerequisites, Paper Agent, and Settings are installed, the
-          installer starts ChatGPT device-code login. OAuth credentials remain
+        <p>Installation reaches 100% before sign-in. When the device code
+          appears, open ChatGPT sign-in and enter it. OAuth credentials remain
           on the Move; successful sign-in activates the notebook integration.</p>
         <div id="login-guide" class="login-guide hidden">
           <a id="login-url" target="_blank" rel="noreferrer">Open ChatGPT sign-in</a>
-          <div><span>Code</span><strong id="login-code">Waiting…</strong></div>
+          <div><span>Device code</span><strong id="login-code">Waiting…</strong></div>
         </div>
         <p id="login-message" class="message">Install Paper Agent and Settings first. Sign-in starts automatically afterward.</p>
-        <div class="actions">
-          <button id="login" disabled>Retry ChatGPT sign-in</button>
+        <div id="login-actions" class="actions">
+          <button id="login" disabled>Start ChatGPT sign-in</button>
           <button id="cancel-login" disabled class="secondary">Cancel sign-in</button>
         </div>
       </section>

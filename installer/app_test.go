@@ -1,7 +1,20 @@
 // SPDX-License-Identifier: MIT
 package main
 
-import "testing"
+import (
+	"errors"
+	"net/http"
+	"testing"
+	"time"
+
+	"github.com/bonjouryentinglai/paper-agent/installer/internal/preflight"
+)
+
+type appRoundTripFunc func(*http.Request) (*http.Response, error)
+
+func (function appRoundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
+	return function(request)
+}
 
 func TestLinkedReleaseTagWhenPresent(t *testing.T) {
 	if releaseTag == "" {
@@ -48,5 +61,38 @@ func TestReleaseManifestEnvironmentOverrideTakesPriority(t *testing.T) {
 
 	if actual := releaseManifestURL(); actual != "http://127.0.0.1:8765/test.json" {
 		t.Fatalf("release manifest URL = %q", actual)
+	}
+}
+
+func TestCheckReleaseUsesShortRequestDeadline(t *testing.T) {
+	t.Setenv("PAPER_AGENT_RELEASE_MANIFEST_URL", "https://example.invalid/manifest.json")
+	var remaining time.Duration
+	app := NewApp()
+	app.httpClient = &http.Client{Transport: appRoundTripFunc(func(request *http.Request) (*http.Response, error) {
+		deadline, ok := request.Context().Deadline()
+		if !ok {
+			t.Fatal("release check request has no deadline")
+		}
+		remaining = time.Until(deadline)
+		return nil, errors.New("stop after inspecting deadline")
+	})}
+	if _, err := app.CheckRelease(); err == nil {
+		t.Fatal("release check unexpectedly succeeded")
+	}
+	if remaining <= 0 || remaining > releaseCheckTimeout+time.Second {
+		t.Fatalf("release check deadline remaining = %s", remaining)
+	}
+}
+
+func TestPauseForLoginCompletesInstallProgress(t *testing.T) {
+	app := NewApp()
+	status := preflight.Status{PaperAgent: true, SettingsApp: true, ActivationRequired: true}
+	app.pauseForLogin(status, "Continue in Step 4.")
+	state := app.GetOperationState()
+	if state.Running || !state.Done || !state.NeedsLogin {
+		t.Fatalf("unexpected paused operation state: %+v", state)
+	}
+	if state.Stage != "installed" || state.Percent != 100 {
+		t.Fatalf("install did not complete before login: stage=%q percent=%d", state.Stage, state.Percent)
 	}
 }
