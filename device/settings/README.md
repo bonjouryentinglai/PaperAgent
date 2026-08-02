@@ -1,9 +1,10 @@
 # Paper Agent Settings
 
 This is a full AppLoad application with a QML frontend and a narrow backend.
-The frontend edits only four Paper Agent settings. The backend forwards
-allowlisted JSON to `settings-controller.mjs`; it cannot access ChatGPT OAuth
-credentials or run arbitrary commands from QML.
+The frontend edits only four Paper Agent settings, displays whether the resident
+service is ready, busy, or unavailable, and offers a manual service restart.
+The backend forwards allowlisted operations to `settings-controller.mjs`; it
+cannot access ChatGPT OAuth credentials or run arbitrary commands from QML.
 
 Build an AppLoad-ready folder:
 

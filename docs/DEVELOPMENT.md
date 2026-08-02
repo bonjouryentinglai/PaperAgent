@@ -98,7 +98,10 @@ After an install, verify separately:
     and the next AI/Beautify request must start normally.
 20. Open Paper Agent Settings from AppLoad. Confirm it loads the active model,
     thinking level, AI answer size, and minimum auto-scale; Exit must return to
-    AppLoad without stopping the Paper Agent service.
+    AppLoad without stopping the Paper Agent service. Confirm the service status
+    changes between Ready, Busy, and Unavailable as appropriate. Stop the oracle
+    service, press Restart service, and confirm the app reports Restarting and
+    returns to Ready without restarting Xochitl or changing settings.
 21. Change all four settings but press Exit before Apply. Verify Apply & Exit,
     Discard, and Cancel independently, including AppLoad's top-edge close
     gesture as a fallback.

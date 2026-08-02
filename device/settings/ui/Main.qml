@@ -12,6 +12,8 @@ Rectangle {
 
     property bool loaded: false
     property bool applying: false
+    property bool restarting: false
+    property bool serviceReady: false
     property bool serviceActive: false
     property bool exitAfterApply: false
     property bool confirmExit: false
@@ -47,7 +49,15 @@ Rectangle {
         }
     }
 
-    function acceptState(contents, applied) {
+    function serviceLabel() {
+        if (restarting)
+            return "Restarting"
+        if (!serviceReady)
+            return "Unavailable"
+        return serviceActive ? "Busy" : "Ready"
+    }
+
+    function acceptState(contents, applied, message) {
         var data
         try {
             data = JSON.parse(contents)
@@ -56,7 +66,8 @@ Rectangle {
             applying = false
             return
         }
-        serviceActive = data.service && data.service.active === true
+        serviceReady = data.service && data.service.ready === true
+        serviceActive = serviceReady && data.service.active === true
         modelOptions = data.modelOptions || []
         thinkingOptions = data.thinkingOptions || []
         if (!loaded || !dirty || applied) {
@@ -71,9 +82,12 @@ Rectangle {
         }
         loaded = true
         applying = false
-        statusText = serviceActive
+        restarting = false
+        statusText = message || (serviceActive
             ? "Paper Agent is busy. Apply will be available when it finishes."
-            : (applied ? "Settings applied. Paper Agent is ready." : "Paper Agent is ready.")
+            : (serviceReady
+                ? (applied ? "Settings applied. Paper Agent is ready." : "Paper Agent is ready.")
+                : "Paper Agent service is unavailable. Use Restart to recover it."))
         if (applied && exitAfterApply) {
             exitAfterApply = false
             root.close()
@@ -81,7 +95,7 @@ Rectangle {
     }
 
     function applyChanges(andExit) {
-        if (!dirty || applying || serviceActive)
+        if (!dirty || applying || restarting || serviceActive)
             return
         exitAfterApply = andExit
         confirmExit = false
@@ -100,9 +114,15 @@ Rectangle {
                 root.applying = true
                 root.statusText = "Applying settings and restarting Paper Agent…"
             } else if (type === 102) {
-                root.acceptState(contents, true)
+                root.acceptState(contents, true, "")
+            } else if (type === 103) {
+                root.restarting = true
+                root.statusText = "Restarting Paper Agent service…"
+            } else if (type === 104) {
+                root.acceptState(contents, false, "Paper Agent restarted and is ready.")
             } else if (type === 199) {
                 root.applying = false
+                root.restarting = false
                 root.exitAfterApply = false
                 root.statusText = contents
             }
@@ -112,7 +132,7 @@ Rectangle {
     Timer {
         interval: 2500
         repeat: true
-        running: root.loaded && !root.applying && !root.confirmExit
+        running: root.loaded && !root.applying && !root.restarting && !root.confirmExit
         onTriggered: endpoint.sendMessage(1, "")
     }
 
@@ -138,7 +158,7 @@ Rectangle {
             width: header.sideSlotWidth - 48
             height: 80
             label: "Exit"
-            enabled: !root.applying
+            enabled: !root.applying && !root.restarting
             onClicked: {
                 if (root.dirty)
                     root.confirmExit = true
@@ -260,21 +280,69 @@ Rectangle {
         anchors.bottomMargin: 36
         spacing: 20
 
+        Rectangle {
+            width: parent.width
+            height: 76
+            radius: 12
+            border.width: 3
+            border.color: root.serviceReady ? (root.serviceActive ? "#8a6818" : "#315f3b") : "#8b3434"
+            color: "#eeebe3"
+
+            Row {
+                anchors.centerIn: parent
+                spacing: 16
+
+                Rectangle {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 22
+                    height: 22
+                    radius: 11
+                    color: root.restarting ? "#8a6818"
+                        : (root.serviceReady ? (root.serviceActive ? "#8a6818" : "#315f3b") : "#8b3434")
+                }
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "Service status: " + root.serviceLabel()
+                    font.pixelSize: 28
+                    font.bold: true
+                    color: "#20242a"
+                }
+            }
+        }
+
         Text {
             width: parent.width
             text: root.statusText
             wrapMode: Text.WordWrap
             horizontalAlignment: Text.AlignHCenter
             font.pixelSize: 25
-            color: root.serviceActive ? "#6b4c00" : "#3d403b"
+            color: root.serviceActive ? "#6b4c00" : (root.serviceReady ? "#3d403b" : "#7a2f2f")
         }
 
-        ActionButton {
+        Row {
             width: parent.width
             height: 104
-            label: root.applying ? "Applying…" : "Apply"
-            enabled: root.loaded && root.dirty && !root.applying && !root.serviceActive
-            onClicked: root.applyChanges(false)
+            spacing: 18
+
+            ActionButton {
+                width: (parent.width - parent.spacing) / 2
+                height: parent.height
+                label: root.restarting ? "Restarting…" : "Restart service"
+                enabled: root.loaded && !root.applying && !root.restarting
+                onClicked: {
+                    root.restarting = true
+                    root.statusText = "Restarting Paper Agent service…"
+                    endpoint.sendMessage(3, "")
+                }
+            }
+
+            ActionButton {
+                width: (parent.width - parent.spacing) / 2
+                height: parent.height
+                label: root.applying ? "Applying…" : "Apply"
+                enabled: root.loaded && root.dirty && !root.applying && !root.restarting && !root.serviceActive
+                onClicked: root.applyChanges(false)
+            }
         }
     }
 
@@ -310,7 +378,7 @@ Rectangle {
                 width: parent.width
                 height: 104
                 label: "Apply & Exit"
-                enabled: !root.serviceActive
+                enabled: !root.serviceActive && !root.restarting
                 onClicked: root.applyChanges(true)
             }
             ActionButton {

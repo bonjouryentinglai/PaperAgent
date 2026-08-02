@@ -12,9 +12,12 @@ use std::process::{Command, Stdio};
 
 const MSG_REFRESH: u32 = 1;
 const MSG_APPLY: u32 = 2;
+const MSG_RESTART: u32 = 3;
 const MSG_STATE: u32 = 100;
 const MSG_APPLYING: u32 = 101;
 const MSG_APPLIED: u32 = 102;
+const MSG_RESTARTING: u32 = 103;
+const MSG_RESTARTED: u32 = 104;
 const MSG_ERROR: u32 = 199;
 const MSG_SYSTEM_TERMINATE: u32 = 0xFFFF_FFFF;
 const MSG_SYSTEM_NEW_COORDINATOR: u32 = 0xFFFF_FFFE;
@@ -201,6 +204,15 @@ fn run() -> Result<(), String> {
                     .map_err(|error| format!("AppLoad send: {error}"))?;
                 match controller("apply", Some(&contents)) {
                     Ok(state) => send_message(fd, MSG_APPLIED, &state),
+                    Err(error) => send_message(fd, MSG_ERROR, &error),
+                }
+                .map_err(|error| format!("AppLoad send: {error}"))?;
+            }
+            MSG_RESTART => {
+                send_message(fd, MSG_RESTARTING, "")
+                    .map_err(|error| format!("AppLoad send: {error}"))?;
+                match controller("restart", None) {
+                    Ok(state) => send_message(fd, MSG_RESTARTED, &state),
                     Err(error) => send_message(fd, MSG_ERROR, &error),
                 }
                 .map_err(|error| format!("AppLoad send: {error}"))?;

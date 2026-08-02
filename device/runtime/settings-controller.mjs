@@ -244,6 +244,28 @@ export async function applySettings(value, overrides = {}) {
   }
 }
 
+export async function restartPaperAgent(overrides = {}) {
+  const configPath = overrides.configPath || CONFIG;
+  const lockPath = overrides.lockPath || LOCK;
+  const restart = overrides.restartService || restartService;
+  const health = overrides.waitForHealth || waitForHealth;
+  let unlock;
+  try {
+    unlock = acquireLock(lockPath);
+  } catch (error) {
+    if (error?.code === "EEXIST") throw new Error("Paper Agent settings are already being applied");
+    throw error;
+  }
+  try {
+    const contents = fs.existsSync(configPath) ? fs.readFileSync(configPath, "utf8") : "";
+    const settings = parseSettings(contents);
+    await restart();
+    return await health(settings);
+  } finally {
+    unlock();
+  }
+}
+
 export async function readState() {
   const contents = fs.existsSync(CONFIG) ? fs.readFileSync(CONFIG, "utf8") : "";
   const settings = parseSettings(contents);
@@ -278,7 +300,12 @@ async function main() {
     process.stdout.write(`${JSON.stringify({ ...await readState(), changed: result.changed })}\n`);
     return;
   }
-  throw new Error("usage: settings-controller.mjs get | apply");
+  if (command === "restart") {
+    await restartPaperAgent();
+    process.stdout.write(`${JSON.stringify({ ...await readState(), restarted: true })}\n`);
+    return;
+  }
+  throw new Error("usage: settings-controller.mjs get | apply | restart");
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(new URL(import.meta.url).pathname)) {

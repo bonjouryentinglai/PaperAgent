@@ -9,6 +9,7 @@ import {
   applySettings,
   DEFAULT_SETTINGS,
   parseSettings,
+  restartPaperAgent,
   updateSettings,
   validateSettings,
 } from "./settings-controller.mjs";
@@ -82,4 +83,47 @@ test("does not modify settings while an AI request is active", async () => {
     }),
     /current Paper Agent request/u,
   );
+});
+
+test("manually restarts the service without changing settings", async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "paper-agent-settings-restart-"));
+  const configPath = path.join(directory, "config.env");
+  const lockPath = path.join(directory, "settings.lock");
+  const contents = updateSettings("PAPER_AGENT_IMAGE_QUALITY=low\n", {
+    ...DEFAULT_SETTINGS,
+    model: "gpt-5.6-luna",
+  });
+  fs.writeFileSync(configPath, contents, { mode: 0o600 });
+  let restarts = 0;
+  let expected;
+  const ready = await restartPaperAgent({
+    configPath,
+    lockPath,
+    restartService: async () => { restarts += 1; },
+    waitForHealth: async (settings) => {
+      expected = settings;
+      return { type: "ready", ready: true, active: false };
+    },
+  });
+  assert.equal(restarts, 1);
+  assert.equal(expected.model, "gpt-5.6-luna");
+  assert.equal(ready.ready, true);
+  assert.equal(fs.readFileSync(configPath, "utf8"), contents);
+  assert.equal(fs.existsSync(lockPath), false);
+});
+
+test("releases the settings lock when a manual restart fails", async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "paper-agent-settings-restart-fail-"));
+  const configPath = path.join(directory, "config.env");
+  const lockPath = path.join(directory, "settings.lock");
+  fs.writeFileSync(configPath, updateSettings("", DEFAULT_SETTINGS));
+  await assert.rejects(
+    restartPaperAgent({
+      configPath,
+      lockPath,
+      restartService: async () => { throw new Error("restart failed"); },
+    }),
+    /restart failed/u,
+  );
+  assert.equal(fs.existsSync(lockPath), false);
 });
