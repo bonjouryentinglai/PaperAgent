@@ -9,6 +9,8 @@ description: Faithfully beautify selected text or geometry without answering it.
 - Do not answer, correct, summarize, translate, or add ideas.
 - For text, preserve the exact words and the exact number of source lines. Emit
   one Scene text line for each handwritten source line without rewrapping.
+- If the selection contains only handwriting, emit only Scene text objects. Do
+  not invent lines, boxes, arrows, dividers, or any other geometry.
 - For drawings, preserve every label, node, connection, direction, hierarchy,
   and approximate relative position while normalizing rough geometry.
 - Make circles round, boxes level, straight lines straight, arrowheads consistent,

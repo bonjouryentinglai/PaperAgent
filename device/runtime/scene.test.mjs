@@ -176,6 +176,38 @@ test("a safe shallow text Scene is accepted", () => {
   });
 });
 
+test("multi-object Beautify text is merged in visual line order", () => {
+  const runs = compileScene({
+    version: 1,
+    canvas: { width: 1_000, height: 600 },
+    objects: [
+      { type: "text", x: 100, y: 300, width: 800, height: 80, text: "第三行", group: "line-3" },
+      { type: "text", x: 100, y: 60, width: 800, height: 80, text: "第一行", group: "line-1" },
+      { type: "text", x: 100, y: 180, width: 800, height: 80, text: "第二行", group: "line-2" },
+    ],
+  }, { width: 800, height: 500 }, "beautify");
+  assert.deepEqual(runs, [{
+    kind: "beautifyText",
+    style: { color: "black", width: "medium" },
+    body: "第一行\n第二行\n第三行",
+    groups: ["line-1", "line-2", "line-3"],
+  }]);
+});
+
+test("mixed Beautify content keeps one spatial Scene path", () => {
+  const runs = compileScene({
+    version: 1,
+    canvas: { width: 1_000, height: 600 },
+    objects: [
+      { type: "rect", x: 100, y: 100, width: 800, height: 400 },
+      { type: "text", x: 180, y: 240, width: 640, height: 100, text: "保留位置" },
+    ],
+  }, { width: 800, height: 500 }, "beautify");
+  assert.ok(runs.every((run) => run.kind === "vector"));
+  assert.ok(runs.some((run) => /rect /u.test(run.body)));
+  assert.ok(runs.some((run) => /label /u.test(run.body)));
+});
+
 test("multiline text remains explicit lines and model text is never executable", () => {
   validateSceneToolCall({
     version: 1,

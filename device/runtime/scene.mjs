@@ -680,13 +680,14 @@ export function compileScene(raw, target, action = "ai") {
       groups: [...new Set(textItems.map((entry) => entry.group).filter(Boolean))],
     }];
   }
-  if (action === "beautify" && scene.objects.length === 1 && scene.objects[0].type === "text") {
-    const item = scene.objects[0];
+  if (action === "beautify" && scene.objects.every((item) => item.type === "text")) {
+    const textItems = sceneTextEntries(scene.objects);
+    const item = textItems[0];
     return [{
       kind: "beautifyText",
       style: item.style,
-      body: item.text,
-      groups: item.group ? [item.group] : [],
+      body: textItems.map((entry) => entry.text).join("\n"),
+      groups: [...new Set(textItems.map((entry) => entry.group).filter(Boolean))],
     }];
   }
 
