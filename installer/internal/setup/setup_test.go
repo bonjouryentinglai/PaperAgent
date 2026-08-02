@@ -62,6 +62,9 @@ func TestDeployRejectsUnexpectedBundleNameBeforeDeviceAccess(t *testing.T) {
 	if _, err := Deploy(nil, "/tmp/not-the-release.tar.gz"); err == nil {
 		t.Fatal("unexpected bundle filename was accepted")
 	}
+	if _, err := DeployStaged(nil, "/tmp/not-the-release.tar.gz"); err == nil {
+		t.Fatal("unexpected staged bundle filename was accepted")
+	}
 }
 
 func TestTailBoundsDiagnosticOutput(t *testing.T) {

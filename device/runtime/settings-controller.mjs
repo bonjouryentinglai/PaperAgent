@@ -19,6 +19,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
 });
 
 export const MODEL_OPTIONS = Object.freeze([
+  "gpt-5.5",
   "gpt-5.6-sol",
   "gpt-5.6-luna",
 ]);

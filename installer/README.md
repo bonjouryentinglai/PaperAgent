@@ -10,13 +10,18 @@ guided workflow on macOS, Windows, and Linux:
    allowlisted preflight. The password is never saved.
 4. Verify model, OS, storage, XOVI/AppLoad, native dependencies, Node/Pi,
    ChatGPT login, Paper Agent, and the Settings app.
-5. Install any missing prerequisites from pinned HTTPS artifacts whose byte
-   length and SHA-256 are checked before upload.
-6. Run Pi's OpenAI/Codex device-code login on the Move. The desktop displays
-   only the approval URL and code; `auth.json` stays on the tablet.
-7. Download a checksum-verified Paper Agent release and apply it with device
-   backup, health checks, QMD verification, and automatic rollback.
-8. Use the same verified transaction for Install, Update, or Repair.
+5. Press Install once. The installer adds any missing prerequisites from
+   bounded HTTPS artifacts whose byte length and SHA-256 are checked before
+   upload. Clean installs use a release-built ARM64 Node + Pi bundle instead of
+   resolving npm dependencies on the Move.
+6. It installs the Paper Agent payload and Settings app in an inactive staged
+   state, then automatically pauses for Pi's OpenAI/Codex device-code login.
+   The desktop displays only the approval URL and code; `auth.json` stays on
+   the tablet.
+7. After approval, installation resumes automatically and activates the
+   notebook integration with service health checks, QMD verification, and
+   rollback. The AI buttons are not exposed before a working login exists.
+8. The same guided transaction is used for Install, Update, or Repair.
 
 Safe uninstall removes Paper Agent's executable integration and Settings app,
 then signs out its `openai-codex` ChatGPT login. It preserves shared
@@ -70,8 +75,10 @@ release. Installers built from a `v*` tag embed that exact tag's manifest URL,
 so a release candidate can remain a GitHub Pre-release without resolving
 through the stable `latest` alias.
 
-`paper-agent-manifest.example.json` documents manifest schema 1. A relative
-bundle URL is resolved beside the manifest. GitHub's release workflow builds
-the ARM64 bundle and unsigned desktop binaries; a tagged build creates a draft
-release for maintainer review. Platform code signing/notarization remains a
-release-operations responsibility.
+`paper-agent-manifest.example.json` documents manifest schema 2. Relative
+device-release and runtime URLs are resolved beside the manifest. Schema 1
+remains readable for older published releases, but clean installs from schema
+2 use the prebuilt ARM64 Node + Pi runtime. GitHub's release workflow builds
+both ARM64 bundles and unsigned desktop binaries; a tagged build creates a
+draft release for maintainer review. Platform code signing/notarization remains
+a release-operations responsibility.

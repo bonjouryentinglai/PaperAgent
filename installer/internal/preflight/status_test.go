@@ -29,6 +29,7 @@ pi=1
 native_deps=1
 login=1
 paper_agent=1
+activation_required=1
 service=1
 settings_app=0
 installer_owned=xovi,appload,runtime,oauth
@@ -39,6 +40,9 @@ installed_version=0.2.0
 	}
 	if !status.SupportedModel || !status.DeveloperMode || !status.PaperAgent {
 		t.Fatalf("unexpected status: %#v", status)
+	}
+	if !status.ActivationRequired {
+		t.Fatal("expected staged installation to require activation")
 	}
 	if status.SettingsApp || status.FreeSpaceKB != 123456 {
 		t.Fatalf("unexpected settings/storage status: %#v", status)

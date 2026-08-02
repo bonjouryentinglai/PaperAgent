@@ -23,7 +23,7 @@ PaperAgent/
 │   ├── qmd/
 │   │   └── paper-agent-selection.qmd # Xochitl AI and Beautify menu actions
 │   ├── release/
-│   │   └── install.sh                # Transactional release activation/rollback
+│   │   └── install.sh                # Transactional staging, activation, rollback
 │   ├── runtime/                      # Local model, Scene parser and orchestration code
 │   │   ├── paper-agent-tools.ts      # Two terminating Pi tool schemas
 │   │   ├── scene.mjs                 # Scene v1 validation and compilation
@@ -72,8 +72,10 @@ credentials can appear under unexpected filenames.
 
 ## Release layout
 
-`scripts/package-release.sh` creates the deterministic device bundle under the
-ignored `dist/` directory. The release workflow builds that bundle plus the
-desktop installers from tracked source and creates a draft GitHub release for
-review. Release output must not contain a developer's Pi credential store, SSH
-configuration, private settings, notebook data, or local paths.
+`scripts/package-pi-runtime.sh` creates the deterministic ARM64 Node + Pi
+runtime on an ARM64 GitHub runner. `scripts/package-release.sh` creates the
+deterministic device bundle and schema-2 manifest under the ignored `dist/`
+directory. The release workflow publishes both verified bundles plus the
+desktop installers and creates a draft GitHub release for review. Release
+output must not contain a developer's Pi credential store, SSH configuration,
+private settings, notebook data, or local paths.

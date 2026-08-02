@@ -33,11 +33,12 @@ type Artifact struct {
 }
 
 type Manifest struct {
-	Schema             int      `json:"schema"`
-	Version            string   `json:"version"`
-	SupportedModels    []string `json:"supportedModels"`
-	MinimumFreeSpaceKB int64    `json:"minimumFreeSpaceKB"`
-	Bundle             Artifact `json:"bundle"`
+	Schema             int       `json:"schema"`
+	Version            string    `json:"version"`
+	SupportedModels    []string  `json:"supportedModels"`
+	MinimumFreeSpaceKB int64     `json:"minimumFreeSpaceKB"`
+	Bundle             Artifact  `json:"bundle"`
+	Runtime            *Artifact `json:"runtime,omitempty"`
 }
 
 func secureURL(raw string) (*url.URL, error) {
@@ -62,7 +63,7 @@ func (manifest Manifest) Validate(manifestURL string) (Manifest, error) {
 	if err != nil {
 		return Manifest{}, fmt.Errorf("manifest URL: %w", err)
 	}
-	if manifest.Schema != 1 {
+	if manifest.Schema != 1 && manifest.Schema != 2 {
 		return Manifest{}, fmt.Errorf("unsupported release manifest schema %d", manifest.Schema)
 	}
 	if !versionPattern.MatchString(manifest.Version) {
@@ -80,23 +81,41 @@ func (manifest Manifest) Validate(manifestURL string) (Manifest, error) {
 	if !hasMove {
 		return Manifest{}, fmt.Errorf("release does not declare Paper Pro Move support")
 	}
-	if manifest.Bundle.Bytes <= 0 || manifest.Bundle.Bytes > MaxBundleBytes {
-		return Manifest{}, fmt.Errorf("invalid release bundle size")
-	}
-	manifest.Bundle.SHA256 = strings.ToLower(strings.TrimSpace(manifest.Bundle.SHA256))
-	if !checksumPattern.MatchString(manifest.Bundle.SHA256) {
-		return Manifest{}, fmt.Errorf("invalid release bundle SHA-256")
-	}
-	bundleURL, err := url.Parse(strings.TrimSpace(manifest.Bundle.URL))
+	manifest.Bundle, err = validateArtifact(base, manifest.Bundle, "release bundle")
 	if err != nil {
-		return Manifest{}, fmt.Errorf("release bundle URL: %w", err)
+		return Manifest{}, err
 	}
-	bundleURL = base.ResolveReference(bundleURL)
-	if _, err := secureURL(bundleURL.String()); err != nil {
-		return Manifest{}, fmt.Errorf("release bundle URL: %w", err)
+	if manifest.Schema == 2 && manifest.Runtime == nil {
+		return Manifest{}, fmt.Errorf("release manifest is missing the ARM64 runtime bundle")
 	}
-	manifest.Bundle.URL = bundleURL.String()
+	if manifest.Runtime != nil {
+		runtimeArtifact, runtimeErr := validateArtifact(base, *manifest.Runtime, "runtime bundle")
+		if runtimeErr != nil {
+			return Manifest{}, runtimeErr
+		}
+		manifest.Runtime = &runtimeArtifact
+	}
 	return manifest, nil
+}
+
+func validateArtifact(base *url.URL, artifact Artifact, label string) (Artifact, error) {
+	if artifact.Bytes <= 0 || artifact.Bytes > MaxBundleBytes {
+		return Artifact{}, fmt.Errorf("invalid %s size", label)
+	}
+	artifact.SHA256 = strings.ToLower(strings.TrimSpace(artifact.SHA256))
+	if !checksumPattern.MatchString(artifact.SHA256) {
+		return Artifact{}, fmt.Errorf("invalid %s SHA-256", label)
+	}
+	artifactURL, err := url.Parse(strings.TrimSpace(artifact.URL))
+	if err != nil {
+		return Artifact{}, fmt.Errorf("%s URL: %w", label, err)
+	}
+	artifactURL = base.ResolveReference(artifactURL)
+	if _, err := secureURL(artifactURL.String()); err != nil {
+		return Artifact{}, fmt.Errorf("%s URL: %w", label, err)
+	}
+	artifact.URL = artifactURL.String()
+	return artifact, nil
 }
 
 func Fetch(ctx context.Context, client *http.Client, manifestURL string) (Manifest, error) {

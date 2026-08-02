@@ -137,23 +137,8 @@
         </div>
       </section>
 
-      <section class="card login-card">
-        <div><p class="step">Step 3</p><h2>Sign in to ChatGPT</h2></div>
-        <p>Pi performs device-code login on the Move. The desktop shows only the
-          approval URL and code; OAuth credentials remain on the tablet.</p>
-        <div id="login-guide" class="login-guide hidden">
-          <a id="login-url" target="_blank" rel="noreferrer">Open ChatGPT sign-in</a>
-          <div><span>Code</span><strong id="login-code">Waiting…</strong></div>
-        </div>
-        <p id="login-message" class="message">Install the runtime before signing in.</p>
-        <div class="actions">
-          <button id="login" disabled>Start ChatGPT sign-in</button>
-          <button id="cancel-login" disabled class="secondary">Cancel sign-in</button>
-        </div>
-      </section>
-
       <section class="card install-card">
-        <div><p class="step">Step 4</p><h2>Install, update, or repair</h2></div>
+        <div><p class="step">Step 3</p><h2>Install Paper Agent and Settings</h2></div>
         <div class="release">
           <span>Published release</span>
           <strong id="release-version">Not checked</strong>
@@ -175,6 +160,22 @@
           <strong>AppLoad not visible?</strong>
           <span>After installation or a Move restart, quickly press the power
             button three times to start or restart XOVI.</span>
+        </div>
+      </section>
+
+      <section class="card login-card">
+        <div><p class="step">Step 4</p><h2>Sign in and activate</h2></div>
+        <p>After prerequisites, Paper Agent, and Settings are installed, the
+          installer starts ChatGPT device-code login. OAuth credentials remain
+          on the Move; successful sign-in activates the notebook integration.</p>
+        <div id="login-guide" class="login-guide hidden">
+          <a id="login-url" target="_blank" rel="noreferrer">Open ChatGPT sign-in</a>
+          <div><span>Code</span><strong id="login-code">Waiting…</strong></div>
+        </div>
+        <p id="login-message" class="message">Install Paper Agent and Settings first. Sign-in starts automatically afterward.</p>
+        <div class="actions">
+          <button id="login" disabled>Retry ChatGPT sign-in</button>
+          <button id="cancel-login" disabled class="secondary">Cancel sign-in</button>
         </div>
       </section>
 

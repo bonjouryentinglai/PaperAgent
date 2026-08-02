@@ -30,8 +30,12 @@ Paper Agent's original code is MIT licensed unless a file says otherwise.
   it does not retain the upstream clipboard, inspection or notebook-link
   features. The GPL-3.0 license is preserved in
   `third_party/GPL-3.0.txt`.
-- **Pi**, MIT, copyright 2025 Mario Zechner. Pi is installed as an external
-  runtime and owns ChatGPT OAuth and RPC transport.
+- **Pi** 0.80.7 packages, MIT, copyright 2025 Mario Zechner. Pi owns ChatGPT
+  OAuth and RPC transport. Release builds redistribute the packages and their
+  dependency license files inside the checksum-verified ARM64 runtime bundle.
+- **Node.js** 22.22.3, distributed under the terms collected in Node.js's
+  bundled `LICENSE` file. The unmodified official Linux ARM64 distribution is
+  included in the checksum-verified runtime bundle.
 - **AppLoad**, GPL-3.0-only, copyright AppLoad contributors. The separate
   `device/settings/backend` protocol adapter is derived from AppLoad's Rust
   backend client so the Paper Agent Settings QML can communicate with its

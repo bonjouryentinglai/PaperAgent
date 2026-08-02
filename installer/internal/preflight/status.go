@@ -12,25 +12,26 @@ type Runner interface {
 }
 
 type Status struct {
-	Address          string   `json:"address"`
-	Model            string   `json:"model"`
-	OSVersion        string   `json:"osVersion"`
-	FreeSpaceKB      int64    `json:"freeSpaceKB"`
-	InstalledVersion string   `json:"installedVersion"`
-	SupportedModel   bool     `json:"supportedModel"`
-	DeveloperMode    bool     `json:"developerMode"`
-	XOVIInstalled    bool     `json:"xoviInstalled"`
-	AppLoadInstalled bool     `json:"appLoadInstalled"`
-	QMLIndex         bool     `json:"qmlIndex"`
-	XOVIPersistence  bool     `json:"xoviPersistence"`
-	NodeInstalled    bool     `json:"nodeInstalled"`
-	PiInstalled      bool     `json:"piInstalled"`
-	NativeDeps       bool     `json:"nativeDeps"`
-	ChatGPTLoggedIn  bool     `json:"chatGPTLoggedIn"`
-	PaperAgent       bool     `json:"paperAgent"`
-	ServiceActive    bool     `json:"serviceActive"`
-	SettingsApp      bool     `json:"settingsApp"`
-	InstallerOwned   []string `json:"installerOwned"`
+	Address            string   `json:"address"`
+	Model              string   `json:"model"`
+	OSVersion          string   `json:"osVersion"`
+	FreeSpaceKB        int64    `json:"freeSpaceKB"`
+	InstalledVersion   string   `json:"installedVersion"`
+	SupportedModel     bool     `json:"supportedModel"`
+	DeveloperMode      bool     `json:"developerMode"`
+	XOVIInstalled      bool     `json:"xoviInstalled"`
+	AppLoadInstalled   bool     `json:"appLoadInstalled"`
+	QMLIndex           bool     `json:"qmlIndex"`
+	XOVIPersistence    bool     `json:"xoviPersistence"`
+	NodeInstalled      bool     `json:"nodeInstalled"`
+	PiInstalled        bool     `json:"piInstalled"`
+	NativeDeps         bool     `json:"nativeDeps"`
+	ChatGPTLoggedIn    bool     `json:"chatGPTLoggedIn"`
+	PaperAgent         bool     `json:"paperAgent"`
+	ActivationRequired bool     `json:"activationRequired"`
+	ServiceActive      bool     `json:"serviceActive"`
+	SettingsApp        bool     `json:"settingsApp"`
+	InstallerOwned     []string `json:"installerOwned"`
 }
 
 const inspectCommand = `set -u
@@ -62,6 +63,7 @@ else
   echo 'login=0'
 fi
 test -x /home/root/paper-agent/native/paper-agent-native && echo 'paper_agent=1' || echo 'paper_agent=0'
+test -f /home/root/paper-agent/activation-required && echo 'activation_required=1' || echo 'activation_required=0'
 systemctl is-active --quiet paper-agent-native-oracle.service && echo 'service=1' || echo 'service=0'
 test -f /home/root/xovi/exthome/appload/paper-agent-settings/manifest.json && echo 'settings_app=1' || echo 'settings_app=0'
 OWN=/home/root/paper-agent/installer-owned
@@ -104,25 +106,26 @@ func parse(output, address string) (Status, error) {
 		}
 	}
 	return Status{
-		Address:          address,
-		Model:            model,
-		OSVersion:        strings.TrimSpace(values["os"]),
-		FreeSpaceKB:      freeSpace,
-		InstalledVersion: strings.TrimSpace(values["installed_version"]),
-		SupportedModel:   supported,
-		DeveloperMode:    true, // A successful root SSH session is the gate.
-		XOVIInstalled:    values["xovi"] == "1",
-		AppLoadInstalled: values["appload"] == "1",
-		QMLIndex:         values["qml_index"] == "1",
-		XOVIPersistence:  values["xovi_persistence"] == "1",
-		NodeInstalled:    values["node"] == "1",
-		PiInstalled:      values["pi"] == "1",
-		NativeDeps:       values["native_deps"] == "1",
-		ChatGPTLoggedIn:  values["login"] == "1",
-		PaperAgent:       values["paper_agent"] == "1",
-		ServiceActive:    values["service"] == "1",
-		SettingsApp:      values["settings_app"] == "1",
-		InstallerOwned:   installerOwned,
+		Address:            address,
+		Model:              model,
+		OSVersion:          strings.TrimSpace(values["os"]),
+		FreeSpaceKB:        freeSpace,
+		InstalledVersion:   strings.TrimSpace(values["installed_version"]),
+		SupportedModel:     supported,
+		DeveloperMode:      true, // A successful root SSH session is the gate.
+		XOVIInstalled:      values["xovi"] == "1",
+		AppLoadInstalled:   values["appload"] == "1",
+		QMLIndex:           values["qml_index"] == "1",
+		XOVIPersistence:    values["xovi_persistence"] == "1",
+		NodeInstalled:      values["node"] == "1",
+		PiInstalled:        values["pi"] == "1",
+		NativeDeps:         values["native_deps"] == "1",
+		ChatGPTLoggedIn:    values["login"] == "1",
+		PaperAgent:         values["paper_agent"] == "1",
+		ActivationRequired: values["activation_required"] == "1",
+		ServiceActive:      values["service"] == "1",
+		SettingsApp:        values["settings_app"] == "1",
+		InstallerOwned:     installerOwned,
 	}, nil
 }
 

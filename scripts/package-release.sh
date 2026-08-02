@@ -4,8 +4,8 @@ set -euo pipefail
 # Build one deterministic, device-ready Paper Agent release bundle and its
 # public manifest. ARM64 binaries must be built before running this script.
 
-if [ "$#" -lt 4 ] || [ "$#" -gt 5 ]; then
-  echo "usage: $0 VERSION NATIVE_BINARY IMAGE_PLUGIN SETTINGS_BUNDLE [OUTPUT_DIR]" >&2
+if [ "$#" -lt 5 ] || [ "$#" -gt 6 ]; then
+  echo "usage: $0 VERSION NATIVE_BINARY IMAGE_PLUGIN SETTINGS_BUNDLE PI_RUNTIME_BUNDLE [OUTPUT_DIR]" >&2
   exit 2
 fi
 
@@ -13,8 +13,9 @@ VERSION=$1
 NATIVE=$(cd "$(dirname "$2")" && pwd)/$(basename "$2")
 IMAGE=$(cd "$(dirname "$3")" && pwd)/$(basename "$3")
 SETTINGS=$(cd "$4" && pwd)
+PI_RUNTIME=$(cd "$(dirname "$5")" && pwd)/$(basename "$5")
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-OUTPUT=${5:-"$ROOT/dist/release"}
+OUTPUT=${6:-"$ROOT/dist/release"}
 STAGE=$(mktemp -d "${TMPDIR:-/tmp}/paper-agent-release.XXXXXX")
 TAR=${TAR:-tar}
 
@@ -39,6 +40,7 @@ test -f "$SETTINGS/resources.rcc"
 test -f "$SETTINGS/icon.png"
 test -x "$SETTINGS/backend/entry"
 file "$SETTINGS/backend/entry" | grep -Eq 'ARM aarch64|ARM64'
+test -s "$PI_RUNTIME"
 
 BUNDLE="$STAGE/bundle"
 PAYLOAD="$BUNDLE/payload"
@@ -83,15 +85,18 @@ find "$BUNDLE" -type d -exec chmod 0755 {} +
 
 rm -rf "$OUTPUT"
 mkdir -p "$OUTPUT"
+cp "$PI_RUNTIME" "$OUTPUT/paper-agent-pi-runtime.tar.gz"
 "$TAR" --sort=name --mtime='UTC 1970-01-01' --owner=0 --group=0 \
   --numeric-owner -cf - -C "$BUNDLE" . \
   | gzip -n -9 >"$OUTPUT/paper-agent-release.tar.gz"
 
 SHA=$(shasum -a 256 "$OUTPUT/paper-agent-release.tar.gz" | awk '{print $1}')
 BYTES=$(wc -c <"$OUTPUT/paper-agent-release.tar.gz" | tr -d ' ')
+RUNTIME_SHA=$(shasum -a 256 "$OUTPUT/paper-agent-pi-runtime.tar.gz" | awk '{print $1}')
+RUNTIME_BYTES=$(wc -c <"$OUTPUT/paper-agent-pi-runtime.tar.gz" | tr -d ' ')
 cat >"$OUTPUT/paper-agent-manifest.json" <<EOF
 {
-  "schema": 1,
+  "schema": 2,
   "version": "$VERSION",
   "supportedModels": ["chiappa"],
   "minimumFreeSpaceKB": 262144,
@@ -99,10 +104,17 @@ cat >"$OUTPUT/paper-agent-manifest.json" <<EOF
     "url": "paper-agent-release.tar.gz",
     "sha256": "$SHA",
     "bytes": $BYTES
+  },
+  "runtime": {
+    "url": "paper-agent-pi-runtime.tar.gz",
+    "sha256": "$RUNTIME_SHA",
+    "bytes": $RUNTIME_BYTES
   }
 }
 EOF
-printf '%s  %s\n' "$SHA" paper-agent-release.tar.gz \
+printf '%s  %s\n%s  %s\n' \
+  "$SHA" paper-agent-release.tar.gz \
+  "$RUNTIME_SHA" paper-agent-pi-runtime.tar.gz \
   >"$OUTPUT/SHA256SUMS"
 echo "release_bundle=$OUTPUT/paper-agent-release.tar.gz"
 echo "release_manifest=$OUTPUT/paper-agent-manifest.json"

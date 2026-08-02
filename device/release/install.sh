@@ -5,6 +5,12 @@ set -eu
 # release bundle. The desktop installer uploads and extracts the bundle below
 # /tmp, then executes this file. Updates and repairs use the same transaction.
 
+MODE=${1:-activate}
+case "$MODE" in
+  stage|activate) ;;
+  *) echo "Usage: install.sh [stage|activate]" >&2; exit 2 ;;
+esac
+
 RELEASE_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PAYLOAD="$RELEASE_ROOT/payload"
 BASE=/home/root/paper-agent
@@ -20,6 +26,7 @@ IMAGE_PLUGIN=/home/root/xovi/extensions.d/paper-agent-image.so
 SETTINGS_APP=/home/root/xovi/exthome/appload/paper-agent-settings
 CONFIG="$BASE/config.env"
 VERSION_FILE="$BASE/VERSION"
+ACTIVATION_REQUIRED="$BASE/activation-required"
 STATE_ROOT="$BASE/backups"
 STAMP=$(date +%Y%m%d-%H%M%S)
 BACKUP="$STATE_ROOT/install-$STAMP"
@@ -45,7 +52,9 @@ test -x "$PAYLOAD/settings-app/backend/entry"
 
 test -x /home/root/node/bin/node
 test -x /home/root/node/bin/pi
-test -f /home/root/.pi/agent/auth.json
+if [ "$MODE" = activate ]; then
+  test -f /home/root/.pi/agent/auth.json
+fi
 test -d "$QMD_HOME"
 test -f /home/root/xovi/extensions.d/appload.so
 for dep in framebuffer-spy.so rm-shot-aarch64.so qt-command-executor.so xovi-message-broker.so; do
@@ -126,6 +135,7 @@ backup_file paper-agent-image.so "$IMAGE_PLUGIN"
 backup_file paperAgentSelection.qmd "$QMD_FILE"
 backup_file config.env "$CONFIG"
 backup_file VERSION "$VERSION_FILE"
+backup_file activation-required "$ACTIVATION_REQUIRED"
 backup_dir paper-agent-settings "$SETTINGS_APP"
 OLD_ENABLED=$(systemctl is-enabled paper-agent-native-oracle.service 2>/dev/null || true)
 OLD_ACTIVE=$(systemctl is-active paper-agent-native-oracle.service 2>/dev/null || true)
@@ -150,6 +160,7 @@ rollback() {
   restore_file paperAgentSelection.qmd "$QMD_FILE"
   restore_file config.env "$CONFIG"
   restore_file VERSION "$VERSION_FILE"
+  restore_file activation-required "$ACTIVATION_REQUIRED"
   restore_dir paper-agent-settings "$SETTINGS_APP"
   systemctl daemon-reload || true
   if [ "$(cat "$BACKUP/service.enabled")" = enabled ]; then
@@ -177,9 +188,11 @@ for skill in $SKILLS; do
   cp "$INCOMING/runtime/skills/$skill/SKILL.md" "$NATIVE/skills/$skill/SKILL.md"
 done
 cp "$INCOMING/paper-agent-native-oracle.service" "$UNIT_SOURCE"
-cp "$INCOMING/paper-agent-xovi-post-start.sh" "$START_HOOK"
-ln -sf "$UNIT_SOURCE" "$UNIT"
-cp "$INCOMING/paper-agent-selection.qmd" "$QMD_FILE"
+if [ "$MODE" = activate ]; then
+  cp "$INCOMING/paper-agent-xovi-post-start.sh" "$START_HOOK"
+  ln -sf "$UNIT_SOURCE" "$UNIT"
+  cp "$INCOMING/paper-agent-selection.qmd" "$QMD_FILE"
+fi
 if [ ! -f "$CONFIG" ]; then cp "$INCOMING/paper-agent.env.example" "$CONFIG"; fi
 if grep -Eqx 'PAPER_AGENT_CJK_SCALE=(0\.78|0\.86)' "$CONFIG"; then
   sed -Ei 's/^PAPER_AGENT_CJK_SCALE=(0\.78|0\.86)$/PAPER_AGENT_CJK_SCALE=0.70/' "$CONFIG"
@@ -196,14 +209,40 @@ mv "$SETTINGS_APP.new" "$SETTINGS_APP"
 
 chmod 0755 "$NATIVE/paper-agent-native" "$NATIVE/native-oracle-service.sh" \
   "$NATIVE/native-selection-prepare.sh" "$NATIVE/native-selection-write.sh"
-chmod 0755 "$IMAGE_PLUGIN" "$START_HOOK" "$SETTINGS_APP/backend" \
+chmod 0755 "$IMAGE_PLUGIN" "$SETTINGS_APP/backend" \
   "$SETTINGS_APP/backend/entry"
 chmod 0644 "$NATIVE/"*.mjs "$NATIVE/"*.ts "$NATIVE/skills/"*/SKILL.md \
-  "$ICONS/"*.svg "$UNIT_SOURCE" "$QMD_FILE" "$SETTINGS_APP/manifest.json" \
+  "$ICONS/"*.svg "$UNIT_SOURCE" "$SETTINGS_APP/manifest.json" \
   "$SETTINGS_APP/resources.rcc" "$SETTINGS_APP/icon.png" "$VERSION_FILE"
+if [ "$MODE" = activate ]; then
+  chmod 0755 "$START_HOOK"
+  chmod 0644 "$QMD_FILE"
+fi
 chmod 0600 "$CONFIG"
 mkdir -p "$NATIVE/jobs" "$NATIVE/oracle-data" "$NATIVE/artifacts"
 chmod 0700 "$NATIVE/jobs" "$NATIVE/oracle-data" "$NATIVE/artifacts" "$BASE/selection"
+
+if [ "$MODE" = stage ]; then
+  : >"$ACTIVATION_REQUIRED"
+  chmod 0600 "$ACTIVATION_REQUIRED"
+  if ! /home/root/xovi/start; then
+    echo "Paper Agent staging rolled back: Settings app could not be loaded" >&2
+    exit 1
+  fi
+  sleep 3
+  if ! systemctl is-active --quiet xochitl; then
+    echo "Paper Agent staging rolled back: Xochitl failed" >&2
+    exit 1
+  fi
+  COMMITTED=1
+  echo "$BACKUP" >"$BASE/install-last-backup"
+  echo "paper_agent=staged"
+  echo "release_version=$RELEASE_VERSION"
+  echo "settings_app=installed"
+  echo "activation_required=1"
+  echo "xochitl=active"
+  exit 0
+fi
 
 if ! systemctl daemon-reload \
   || ! systemctl enable paper-agent-native-oracle.service >/dev/null \
@@ -246,6 +285,7 @@ if ! systemctl is-active --quiet xochitl \
   exit 1
 fi
 
+rm -f "$ACTIVATION_REQUIRED"
 COMMITTED=1
 echo "$BACKUP" >"$BASE/install-last-backup"
 echo "paper_agent=installed"

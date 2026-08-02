@@ -86,6 +86,8 @@ systemctl disable paper-agent-native-oracle.service >/dev/null 2>&1 || true
 [ -f "$UNIT_SOURCE" ] && cp -p "$UNIT_SOURCE" "$BACKUP/paper-agent-native-oracle.source"
 [ -f "$START_HOOK" ] && cp -p "$START_HOOK" "$BACKUP/paper-agent-native-oracle.hook"
 [ -f "$IMAGE_PLUGIN" ] && cp -p "$IMAGE_PLUGIN" "$BACKUP/paper-agent-image.so"
+[ -f "$BASE/VERSION" ] && cp -p "$BASE/VERSION" "$BACKUP/VERSION"
+[ -f "$BASE/activation-required" ] && cp -p "$BASE/activation-required" "$BACKUP/activation-required"
 [ -d "$SETTINGS_APP" ] && cp -a "$SETTINGS_APP" "$BACKUP/paper-agent-settings"
 if [ -d "$NATIVE" ]; then
   mkdir -p "$BACKUP/native"
@@ -98,7 +100,8 @@ if [ -d "$NATIVE" ]; then
   done
 fi
 [ -d "$BASE/assets" ] && cp -a "$BASE/assets" "$BACKUP/assets"
-rm -f "$QMD" "$UNIT_SOURCE" "$UNIT_RUN" "$UNIT_LEGACY" "$START_HOOK" "$IMAGE_PLUGIN"
+rm -f "$QMD" "$UNIT_SOURCE" "$UNIT_RUN" "$UNIT_LEGACY" "$START_HOOK" "$IMAGE_PLUGIN" \
+  "$BASE/VERSION" "$BASE/activation-required"
 rm -rf "$SETTINGS_APP"
 rm -rf "$NATIVE" "$BASE/assets" "$BASE/selection"
 rmdir "$SYSTEMD_HOME" 2>/dev/null || true

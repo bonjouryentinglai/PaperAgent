@@ -11,7 +11,18 @@ download pinned XOVI/AppLoad/runtime dependencies on the desktop, verify their
 HTTPS URL, declared size, and SHA-256, then upload them over the authenticated
 USB connection.
 
-Pi performs OpenAI/Codex device-code login on the Move. The desktop receives
+The published manifest contains both the Paper Agent device payload and a
+prebuilt ARM64 Node + Pi runtime. GitHub Actions builds that runtime on an
+ARM64 Linux runner, retaining the packages' license files. A clean Move only
+extracts the verified archive; npm dependency resolution no longer runs on the
+tablet. Existing external Node installations are preserved and use the legacy
+package-only path when Pi itself is missing.
+
+Pi performs OpenAI/Codex device-code login on the Move. One Install action
+prepares the prerequisites, installs the inactive Paper Agent payload and
+Settings app, then starts login. The notebook integration and oracle service
+remain disabled until approval succeeds, after which activation resumes
+automatically. The desktop receives
 only the approval URL, user code, and completion state; it does not read or
 copy `auth.json`. A published Paper Agent manifest similarly bounds the device
 bundle by model, size, and checksum. Install, Update, and Repair all call the

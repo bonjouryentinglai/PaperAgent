@@ -35,8 +35,8 @@ public API for third-party applications. Treat the integration as experimental
 and expect that authentication or transport changes may require a Paper Agent
 update.
 
-`scripts/uninstall.sh` intentionally preserves `/home/root/.pi/agent/auth.json`
-because that file may contain credentials used by Pi outside Paper Agent.
-Before transferring or retiring a Move, revoke the relevant ChatGPT session or
-remove the `openai-codex` credential with Pi's credential-management tooling.
-Deleting the whole file signs Pi out of every provider recorded there.
+`scripts/uninstall.sh` selectively removes the `openai-codex` credential used
+by Paper Agent while preserving any other Pi providers in the same credential
+store. If no providers remain, it removes the empty file. Before transferring
+or retiring a Move, also revoke the relevant ChatGPT session. Deleting the
+whole file manually signs Pi out of every provider recorded there.

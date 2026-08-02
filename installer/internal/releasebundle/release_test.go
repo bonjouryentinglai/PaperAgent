@@ -31,12 +31,17 @@ func TestFetchValidatesAndResolvesBundle(t *testing.T) {
 	payload := []byte("release")
 	digest := sha256.Sum256(payload)
 	body := `{
-  "schema": 1,
+  "schema": 2,
   "version": "0.2.0",
   "supportedModels": ["chiappa"],
   "minimumFreeSpaceKB": 262144,
   "bundle": {
     "url": "paper-agent-release.tar.gz",
+    "sha256": "` + hex.EncodeToString(digest[:]) + `",
+    "bytes": 7
+  },
+  "runtime": {
+    "url": "paper-agent-pi-runtime.tar.gz",
     "sha256": "` + hex.EncodeToString(digest[:]) + `",
     "bytes": 7
   }
@@ -53,6 +58,9 @@ func TestFetchValidatesAndResolvesBundle(t *testing.T) {
 	}
 	if manifest.Bundle.URL != "https://example.test/releases/paper-agent-release.tar.gz" {
 		t.Fatalf("unexpected bundle URL %q", manifest.Bundle.URL)
+	}
+	if manifest.Runtime == nil || manifest.Runtime.URL != "https://example.test/releases/paper-agent-pi-runtime.tar.gz" {
+		t.Fatalf("unexpected runtime URL %#v", manifest.Runtime)
 	}
 }
 
@@ -96,6 +104,11 @@ func TestManifestRejectsUnsafeOrUnsupportedInput(t *testing.T) {
 		{"oversize", "https://example.test/manifest.json", func() Manifest {
 			value := valid
 			value.Bundle.Bytes = MaxBundleBytes + 1
+			return value
+		}()},
+		{"schema 2 without runtime", "https://example.test/manifest.json", func() Manifest {
+			value := valid
+			value.Schema = 2
 			return value
 		}()},
 	}

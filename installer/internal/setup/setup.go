@@ -140,6 +140,7 @@ func Ensure(
 	host string,
 	password string,
 	status preflight.Status,
+	runtimeArtifact *releasebundle.Artifact,
 	forceRepair bool,
 	callback Reporter,
 ) (preflight.Status, error) {
@@ -162,7 +163,7 @@ func Ensure(
 	defer os.RemoveAll(stage)
 
 	plan := planPrerequisites(status, forceRepair)
-	var xoviPath, appLoadPath, rmShotPath, nodePath, tripleTapPath string
+	var xoviPath, appLoadPath, rmShotPath, nodePath, runtimePath, tripleTapPath string
 	if plan.xoviArchive {
 		report(callback, "download", "Downloading and verifying XOVI…", 8)
 		xoviPath, err = fetchDependency(ctx, client, dependencies.XOVI, stage)
@@ -185,8 +186,19 @@ func Ensure(
 		}
 	}
 	if !status.NodeInstalled {
-		report(callback, "download", "Downloading and verifying the ARM64 Node.js runtime…", 25)
-		nodePath, err = fetchDependency(ctx, client, dependencies.Node, stage)
+		if runtimeArtifact != nil {
+			report(callback, "download", "Downloading and verifying the prebuilt ARM64 Node + Pi runtime…", 25)
+			runtimePath, err = releasebundle.DownloadAs(
+				ctx,
+				client,
+				*runtimeArtifact,
+				stage,
+				"paper-agent-pi-runtime.tar.gz",
+			)
+		} else {
+			report(callback, "download", "Downloading and verifying the ARM64 Node.js runtime…", 25)
+			nodePath, err = fetchDependency(ctx, client, dependencies.Node, stage)
+		}
 		if err != nil {
 			return status, err
 		}
@@ -306,13 +318,52 @@ rm -f /tmp/paper-agent-rm-shot.so
 		}
 	}
 
-	if nodePath != "" {
+	if runtimePath != "" {
+		report(callback, "device", "Uploading the prebuilt Node + Pi runtime…", 54)
+		if err := connection.PushFile(runtimePath, "/tmp/paper-agent-pi-runtime.tar.gz", 0o600); err != nil {
+			return status, err
+		}
+	} else if nodePath != "" {
 		report(callback, "device", "Uploading the Node.js runtime…", 54)
 		if err := connection.PushFile(nodePath, "/tmp/paper-agent-node.tar.gz", 0o600); err != nil {
 			return status, err
 		}
 	}
-	if !status.NodeInstalled || !status.PiInstalled {
+	if runtimePath != "" {
+		report(callback, "device", "Installing the prebuilt Node + Pi runtime…", 62)
+		command := fmt.Sprintf(`set -eu
+umask 022
+RUNTIME=/home/root/paper-agent/runtime
+OWN=/home/root/paper-agent/installer-owned
+NODE_DIR="$RUNTIME/node-v%s"
+STAGING="$RUNTIME/.node-pi-staging"
+test -f /tmp/paper-agent-pi-runtime.tar.gz
+rm -rf "$STAGING"
+mkdir -p "$STAGING" "$OWN"
+tar -xzf /tmp/paper-agent-pi-runtime.tar.gz -C "$STAGING"
+rm -f /tmp/paper-agent-pi-runtime.tar.gz
+test -x "$STAGING/node-v%s/bin/node"
+test -x "$STAGING/node-v%s/bin/pi"
+test -x "$STAGING/node-v%s/bin/pi-ai"
+rm -rf "$NODE_DIR"
+mv "$STAGING/node-v%s" "$NODE_DIR"
+rmdir "$STAGING"
+if [ -e /home/root/node ] && [ ! -L /home/root/node ]; then
+  echo "/home/root/node exists and is not a symlink" >&2
+  exit 1
+fi
+ln -sfn "$NODE_DIR" /home/root/node
+: >"$OWN/runtime"
+: >"$OWN/pi-packages"
+chmod 0600 "$OWN/runtime" "$OWN/pi-packages"
+test -x /home/root/node/bin/node
+test -x /home/root/node/bin/pi
+test -x /home/root/node/bin/pi-ai
+`, nodeVersion, nodeVersion, nodeVersion, nodeVersion, nodeVersion)
+		if err := runChecked(connection, "install prebuilt Node.js and Pi", command); err != nil {
+			return status, err
+		}
+	} else if !status.NodeInstalled || !status.PiInstalled {
 		report(callback, "device", "Installing Node.js and Pi on the Move…", 62)
 		command := fmt.Sprintf(`set -eu
 umask 022
@@ -510,30 +561,44 @@ func inspectFresh(host, password string, attempts int) (preflight.Status, error)
 	return preflight.Status{}, fmt.Errorf("verify prerequisites: %w", last)
 }
 
-// Deploy uploads one already verified release bundle and executes its
-// transactional device installer.
-func Deploy(connection *device.Device, bundlePath string) (string, error) {
+func deploy(connection *device.Device, bundlePath, mode, confirmation string) (string, error) {
 	if filepath.Base(bundlePath) != "paper-agent-release.tar.gz" {
 		return "", fmt.Errorf("unexpected release bundle filename")
+	}
+	if mode != "stage" && mode != "activate" {
+		return "", fmt.Errorf("unexpected deployment mode")
 	}
 	if err := connection.PushFile(bundlePath, "/tmp/paper-agent-release.tar.gz", 0o600); err != nil {
 		return "", err
 	}
-	output, err := connection.Run(`set -eu
+	script := fmt.Sprintf(`set -eu
 rm -rf /tmp/paper-agent-release
 mkdir -p /tmp/paper-agent-release
 tar -xzf /tmp/paper-agent-release.tar.gz -C /tmp/paper-agent-release
 rm -f /tmp/paper-agent-release.tar.gz
-sh /tmp/paper-agent-release/install.sh
+sh /tmp/paper-agent-release/install.sh %s
 status=$?
 rm -rf /tmp/paper-agent-release
 exit "$status"
-`)
+`, mode)
+	output, err := connection.Run(script)
 	if err != nil {
 		return output, fmt.Errorf("install Paper Agent release: %w: %s", err, tail(output, 700))
 	}
-	if !strings.Contains(output, "paper_agent=installed") {
-		return output, fmt.Errorf("device did not confirm the Paper Agent installation")
+	if !strings.Contains(output, confirmation) {
+		return output, fmt.Errorf("device did not confirm the Paper Agent %s", mode)
 	}
 	return output, nil
+}
+
+// DeployStaged installs the release payload and Settings app without exposing
+// the notebook integration or starting the OAuth-dependent oracle service.
+func DeployStaged(connection *device.Device, bundlePath string) (string, error) {
+	return deploy(connection, bundlePath, "stage", "paper_agent=staged")
+}
+
+// Deploy activates one already staged or freshly downloaded release after
+// ChatGPT OAuth is available on the Move.
+func Deploy(connection *device.Device, bundlePath string) (string, error) {
+	return deploy(connection, bundlePath, "activate", "paper_agent=installed")
 }

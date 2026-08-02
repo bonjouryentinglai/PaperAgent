@@ -44,6 +44,7 @@ type ReleaseSummary struct {
 	Version            string `json:"version"`
 	MinimumFreeSpaceKB int64  `json:"minimumFreeSpaceKB"`
 	BundleBytes        int64  `json:"bundleBytes"`
+	RuntimeBytes       int64  `json:"runtimeBytes"`
 }
 
 type OperationState struct {
@@ -150,10 +151,15 @@ func (a *App) CheckRelease() (ReleaseSummary, error) {
 	if err != nil {
 		return ReleaseSummary{}, err
 	}
+	var runtimeBytes int64
+	if manifest.Runtime != nil {
+		runtimeBytes = manifest.Runtime.Bytes
+	}
 	return ReleaseSummary{
 		Version:            manifest.Version,
 		MinimumFreeSpaceKB: manifest.MinimumFreeSpaceKB,
 		BundleBytes:        manifest.Bundle.Bytes,
+		RuntimeBytes:       runtimeBytes,
 	}, nil
 }
 
@@ -272,6 +278,37 @@ func (a *App) operationProgress(stage, message string, percent int) {
 	})
 }
 
+func (a *App) pauseForLogin(status preflight.Status, message string) {
+	a.setOperation(func(state *OperationState) {
+		state.Running = false
+		state.Done = false
+		state.NeedsLogin = true
+		state.Stage = "login"
+		state.Message = message
+		state.Percent = 98
+		state.Status = status
+		state.HasStatus = true
+	})
+}
+
+func inspectWithRetry(host, password string, attempts int) (preflight.Status, error) {
+	var status preflight.Status
+	var last error
+	for attempt := 0; attempt < attempts; attempt++ {
+		connection, err := device.Connect(host, password)
+		if err == nil {
+			status, err = preflight.Inspect(connection, host)
+			connection.Close()
+			if err == nil {
+				return status, nil
+			}
+		}
+		last = err
+		time.Sleep(2 * time.Second)
+	}
+	return status, last
+}
+
 func (a *App) runOperation(ctx context.Context, kind, host, password string) {
 	connection, err := device.Connect(host, password)
 	if err != nil {
@@ -288,7 +325,7 @@ func (a *App) runOperation(ctx context.Context, kind, host, password string) {
 		a.finishOperation("This device is not a supported Paper Pro Move.", &status, fmt.Errorf("unsupported model: %s", status.Model))
 		return
 	}
-	if kind == "install" && status.PaperAgent {
+	if kind == "install" && status.PaperAgent && !status.ActivationRequired {
 		a.finishOperation("Paper Agent is already installed; use Update or Repair.", &status, fmt.Errorf("Paper Agent is already installed"))
 		return
 	}
@@ -322,6 +359,7 @@ func (a *App) runOperation(ctx context.Context, kind, host, password string) {
 		host,
 		password,
 		status,
+		manifest.Runtime,
 		kind == "repair",
 		a.operationProgress,
 	)
@@ -329,17 +367,13 @@ func (a *App) runOperation(ctx context.Context, kind, host, password string) {
 		a.finishOperation("Prerequisite setup failed.", &status, err)
 		return
 	}
-	if !status.ChatGPTLoggedIn {
-		a.setOperation(func(state *OperationState) {
-			state.Running = false
-			state.Done = true
-			state.NeedsLogin = true
-			state.Stage = "login"
-			state.Message = "Prerequisites are ready. Sign in to ChatGPT, then run this operation again."
-			state.Percent = 100
-			state.Status = status
-			state.HasStatus = true
-		})
+	if !status.ChatGPTLoggedIn && kind != "install" {
+		a.pauseForLogin(status, "Paper Agent is installed, but ChatGPT is signed out. Sign in to continue this maintenance operation.")
+		return
+	}
+	if !status.ChatGPTLoggedIn && status.ActivationRequired && status.SettingsApp &&
+		status.InstalledVersion == manifest.Version {
+		a.pauseForLogin(status, "Paper Agent and Settings are installed. Sign in to ChatGPT; activation will continue automatically.")
 		return
 	}
 
@@ -350,7 +384,7 @@ func (a *App) runOperation(ctx context.Context, kind, host, password string) {
 	}
 	defer os.RemoveAll(stage)
 
-	a.operationProgress("release", "Downloading and verifying the Paper Agent release…", 91)
+	a.operationProgress("release", "Downloading and verifying the Paper Agent release…", 95)
 	bundle, err := releasebundle.Download(ctx, a.httpClient, manifest.Bundle, stage)
 	if err != nil {
 		a.finishOperation("Release verification failed.", &status, err)
@@ -361,22 +395,35 @@ func (a *App) runOperation(ctx context.Context, kind, host, password string) {
 		a.finishOperation("Could not reconnect to the Move.", &status, err)
 		return
 	}
-	a.operationProgress("install", "Applying the release with backup and rollback protection…", 95)
+	if !status.ChatGPTLoggedIn {
+		a.operationProgress("install", "Installing Paper Agent and Settings before ChatGPT sign-in…", 97)
+		_, deployErr := setup.DeployStaged(connection, bundle)
+		connection.Close()
+		verified, verifyErr := inspectWithRetry(host, password, 30)
+		if verifyErr != nil {
+			if deployErr != nil {
+				verifyErr = fmt.Errorf("%v; verification: %w", deployErr, verifyErr)
+			}
+			a.finishOperation("Could not verify the staged installation.", &status, verifyErr)
+			return
+		}
+		if !verified.PaperAgent || !verified.SettingsApp || !verified.ActivationRequired ||
+			verified.InstalledVersion != manifest.Version {
+			if deployErr == nil {
+				deployErr = fmt.Errorf("staged components or version did not pass verification")
+			}
+			a.finishOperation("Paper Agent and Settings did not pass staged verification.", &verified, deployErr)
+			return
+		}
+		a.pauseForLogin(verified, "Paper Agent and Settings are installed. Sign in to ChatGPT; activation will continue automatically.")
+		return
+	}
+
+	a.operationProgress("activate", "Activating Paper Agent with backup and rollback protection…", 99)
 	_, deployErr := setup.Deploy(connection, bundle)
 	connection.Close()
 
-	var verified preflight.Status
-	for attempt := 0; attempt < 30; attempt++ {
-		connection, err = device.Connect(host, password)
-		if err == nil {
-			verified, err = preflight.Inspect(connection, host)
-			connection.Close()
-			if err == nil {
-				break
-			}
-		}
-		time.Sleep(2 * time.Second)
-	}
+	verified, err := inspectWithRetry(host, password, 30)
 	if err != nil {
 		if deployErr != nil {
 			err = fmt.Errorf("%v; verification: %w", deployErr, err)
@@ -384,7 +431,7 @@ func (a *App) runOperation(ctx context.Context, kind, host, password string) {
 		a.finishOperation("Could not verify the installation.", &status, err)
 		return
 	}
-	if !verified.PaperAgent || !verified.ServiceActive || !verified.SettingsApp ||
+	if !verified.PaperAgent || verified.ActivationRequired || !verified.ServiceActive || !verified.SettingsApp ||
 		verified.InstalledVersion != manifest.Version {
 		if deployErr == nil {
 			deployErr = fmt.Errorf("installed components or version did not pass verification")

@@ -59,6 +59,37 @@ function exactKeys(value, allowed, label) {
   }
 }
 
+function validateCanvasMetadata(value) {
+  const entries = Object.entries(value);
+  if (entries.length > 8) throw new Error("scene canvas contains too many fields");
+  for (const [key, metadata] of entries) {
+    if (key === "width" || key === "height") continue;
+    if (!/^[A-Za-z][A-Za-z0-9_-]{0,47}$/u.test(key)) {
+      throw new Error("scene canvas contains an unsafe metadata field");
+    }
+    if (typeof metadata === "string") {
+      if ([...metadata].length > 160 || metadata.includes("\0")) {
+        throw new Error("scene canvas metadata text is too long");
+      }
+      continue;
+    }
+    if (typeof metadata === "boolean") continue;
+    if (typeof metadata === "number") {
+      if (!Number.isFinite(metadata) || metadata < -4_000 || metadata > 4_000) {
+        throw new Error("scene canvas metadata number is out of bounds");
+      }
+      continue;
+    }
+    const point = object(metadata, "scene canvas metadata");
+    exactKeys(point, new Set(["x", "y"]), "scene canvas metadata");
+    for (const coordinate of Object.values(point)) {
+      if (!Number.isFinite(coordinate) || coordinate < -4_000 || coordinate > 4_000) {
+        throw new Error("scene canvas metadata coordinate is out of bounds");
+      }
+    }
+  }
+}
+
 function integer(value, label, minimum, maximum) {
   if (!Number.isSafeInteger(value) || value < minimum || value > maximum) {
     throw new Error(`${label} must be an integer within ${minimum}..=${maximum}`);
@@ -396,7 +427,11 @@ export function validateSceneToolCall(raw, action = "ai") {
   exactKeys(value, new Set(["version", "canvas", "objects", "background", "layout"]), "move_render_scene arguments");
   if (value.version !== SCENE_VERSION) throw new Error(`scene version must be ${SCENE_VERSION}`);
   const canvasRaw = object(value.canvas, "scene canvas");
-  exactKeys(canvasRaw, new Set(["width", "height"]), "scene canvas");
+  // Canvas metadata is non-authoritative. Provider models occasionally add
+  // fields such as a description or origin even though Paper Agent needs only
+  // the bounded width and height. Ignore those fields here while keeping the
+  // top-level scene and every renderable object fail-closed.
+  validateCanvasMetadata(canvasRaw);
   const canvas = {
     width: integer(canvasRaw.width, "scene canvas width", MIN_CANVAS, MAX_CANVAS),
     height: integer(canvasRaw.height, "scene canvas height", MIN_CANVAS, MAX_CANVAS),

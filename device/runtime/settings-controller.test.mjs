@@ -8,11 +8,16 @@ import test from "node:test";
 import {
   applySettings,
   DEFAULT_SETTINGS,
+  MODEL_OPTIONS,
   parseSettings,
   restartPaperAgent,
   updateSettings,
   validateSettings,
 } from "./settings-controller.mjs";
+
+test("offers the verified GPT 5.5 subscription model", () => {
+  assert.ok(MODEL_OPTIONS.includes("gpt-5.5"));
+});
 
 test("reads defaults and preserves unrelated settings", () => {
   assert.deepEqual(parseSettings("PAPER_AGENT_IMAGE_QUALITY=low\n"), DEFAULT_SETTINGS);

@@ -35,6 +35,9 @@ let lastStatus = null;
 let operationTimer = null;
 let loginTimer = null;
 let addressEditedThisSession = false;
+let pendingOperationKind = null;
+let automaticLoginStarting = false;
+let automaticResumeStarting = false;
 
 // WebKit may restore form values from an earlier installer session. Never reuse
 // a stale network address without the user editing the field in this session.
@@ -103,7 +106,7 @@ function render(status) {
     ["ChatGPT login", yes(status.chatGPTLoggedIn, "Signed in", "Not signed in")],
     ["Paper Agent", yes(
       status.paperAgent,
-      `${status.serviceActive ? "Running" : "Installed"}${status.installedVersion ? ` · ${status.installedVersion}` : ""}`,
+      `${status.activationRequired ? "Installed · sign-in required" : (status.serviceActive ? "Running" : "Installed")}${status.installedVersion ? ` · ${status.installedVersion}` : ""}`,
       "Not installed",
     )],
     ["Settings app", yes(status.settingsApp, "Installed")],
@@ -126,10 +129,10 @@ function render(status) {
   if (status.chatGPTLoggedIn) {
     loginGuide.classList.add("hidden");
     loginMessage.textContent = "ChatGPT is signed in on this Move.";
-  } else if (status.nodeInstalled && status.piInstalled) {
-    loginMessage.textContent = "Start ChatGPT sign-in when you are ready.";
+  } else if (status.activationRequired && status.paperAgent && status.settingsApp) {
+    loginMessage.textContent = "Paper Agent and Settings are installed. Sign in to activate the notebook integration.";
   } else {
-    loginMessage.textContent = "Run Install once to add the runtime before signing in.";
+    loginMessage.textContent = "Install Paper Agent and Settings first; ChatGPT sign-in starts afterward.";
   }
   updateUninstallOption();
   updateActions();
@@ -140,13 +143,15 @@ function updateActions() {
   const confirmed = riskConfirm.checked;
   const operationRunning = operationProgress.dataset.running === "true";
   const loginRunning = loginButton.dataset.running === "true";
-  installButton.disabled = !(ready && !lastStatus?.paperAgent && confirmed && !operationRunning && !loginRunning);
-  updateButton.disabled = !(ready && lastStatus?.paperAgent && confirmed && !operationRunning && !loginRunning);
-  repairButton.disabled = !(ready && lastStatus?.paperAgent && confirmed && !operationRunning && !loginRunning);
+  installButton.disabled = !(ready && (!lastStatus?.paperAgent || lastStatus?.activationRequired) && confirmed && !operationRunning && !loginRunning);
+  updateButton.disabled = !(ready && lastStatus?.paperAgent && !lastStatus?.activationRequired && confirmed && !operationRunning && !loginRunning);
+  repairButton.disabled = !(ready && lastStatus?.paperAgent && !lastStatus?.activationRequired && confirmed && !operationRunning && !loginRunning);
   loginButton.disabled = !(
     ready &&
     lastStatus?.nodeInstalled &&
     lastStatus?.piInstalled &&
+    lastStatus?.paperAgent &&
+    lastStatus?.settingsApp &&
     !lastStatus?.chatGPTLoggedIn &&
     !loginButton.dataset.running
   );
@@ -213,7 +218,8 @@ riskConfirm.addEventListener("change", updateActions);
 checkReleaseButton.addEventListener("click", () => busy(checkReleaseButton, async () => {
   releaseVersion.textContent = "Checking…";
   const release = await api("CheckRelease");
-  releaseVersion.textContent = `${release.version} · ${(release.bundleBytes / 1024 / 1024).toFixed(1)} MiB`;
+  const downloadBytes = release.bundleBytes + (release.runtimeBytes || 0);
+  releaseVersion.textContent = `${release.version} · ${(downloadBytes / 1024 / 1024).toFixed(1)} MiB first-install download`;
 }));
 
 function renderOperation(state) {
@@ -224,7 +230,7 @@ function renderOperation(state) {
   operationMessage.textContent = state.error || state.message || "Working…";
   if (state.hasStatus) render(state.status);
   if (state.needsLogin) {
-    loginMessage.textContent = "Runtime ready. Start ChatGPT sign-in, then continue installation.";
+    loginMessage.textContent = "Paper Agent and Settings are ready. Sign in to activate the notebook integration.";
   }
   updateActions();
 }
@@ -236,6 +242,10 @@ async function pollOperation() {
     if (!state.running && operationTimer) {
       clearInterval(operationTimer);
       operationTimer = null;
+    }
+    if (state.needsLogin && !state.error) {
+      pendingOperationKind = state.kind;
+      await startAutomaticLogin();
     }
   } catch (error) {
     operationMessage.textContent = error?.message || String(error);
@@ -254,6 +264,13 @@ async function startOperation(name, button) {
   operationTimer = setInterval(pollOperation, 700);
   await pollOperation();
   button.blur();
+}
+
+function operationForKind(kind) {
+  if (kind === "install") return { name: "StartInstall", button: installButton };
+  if (kind === "update") return { name: "StartUpdate", button: updateButton };
+  if (kind === "repair") return { name: "StartRepair", button: repairButton };
+  return null;
 }
 
 installButton.addEventListener("click", () => busy(
@@ -291,6 +308,46 @@ function renderLogin(state) {
   }
 }
 
+async function beginLogin() {
+  if (!pendingOperationKind && lastStatus?.activationRequired) {
+    pendingOperationKind = "install";
+  }
+  loginGuide.classList.add("hidden");
+  loginMessage.textContent = "Starting device-code login on the Move…";
+  await api("StartLogin", host.value, password.value);
+  if (loginTimer) clearInterval(loginTimer);
+  loginTimer = setInterval(pollLogin, 700);
+  await pollLogin();
+}
+
+async function startAutomaticLogin() {
+  if (automaticLoginStarting || loginButton.dataset.running === "true") return;
+  automaticLoginStarting = true;
+  try {
+    await beginLogin();
+  } catch (error) {
+    loginMessage.textContent = error?.message || String(error);
+  } finally {
+    automaticLoginStarting = false;
+  }
+}
+
+async function resumePendingOperation() {
+  if (!pendingOperationKind || automaticResumeStarting) return;
+  const target = operationForKind(pendingOperationKind);
+  pendingOperationKind = null;
+  if (!target) return;
+  automaticResumeStarting = true;
+  try {
+    operationMessage.textContent = "ChatGPT signed in. Continuing installation automatically…";
+    await startOperation(target.name, target.button);
+  } catch (error) {
+    operationMessage.textContent = error?.message || String(error);
+  } finally {
+    automaticResumeStarting = false;
+  }
+}
+
 async function pollLogin() {
   try {
     const state = await api("GetLoginState");
@@ -299,18 +356,14 @@ async function pollLogin() {
       clearInterval(loginTimer);
       loginTimer = null;
     }
+    if (state.signedIn) await resumePendingOperation();
   } catch (error) {
     loginMessage.textContent = error?.message || String(error);
   }
 }
 
 loginButton.addEventListener("click", () => busy(loginButton, async () => {
-  loginGuide.classList.add("hidden");
-  loginMessage.textContent = "Starting device-code login on the Move…";
-  await api("StartLogin", host.value, password.value);
-  if (loginTimer) clearInterval(loginTimer);
-  loginTimer = setInterval(pollLogin, 700);
-  await pollLogin();
+  await beginLogin();
 }));
 
 loginURL.addEventListener("click", async (event) => {
@@ -323,6 +376,7 @@ loginURL.addEventListener("click", async (event) => {
 });
 
 cancelLoginButton.addEventListener("click", async () => {
+  pendingOperationKind = null;
   await api("CancelLogin");
   await pollLogin();
 });

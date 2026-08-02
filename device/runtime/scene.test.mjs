@@ -63,6 +63,30 @@ test("contain mapping preserves a circle inside a portrait destination", () => {
   assert.ok(Math.abs(physicalRx - physicalRy) <= 2);
 });
 
+test("harmless provider canvas metadata is discarded before rendering", () => {
+  const scene = validateSceneToolCall({
+    version: 1,
+    canvas: {
+      width: 600,
+      height: 800,
+      description: "portrait notebook canvas",
+      origin: { x: 0, y: 0 },
+    },
+    objects: [{ type: "line", x1: 0, y1: 0, x2: 600, y2: 800 }],
+  });
+  assert.deepEqual(scene.canvas, { width: 600, height: 800 });
+  assert.equal(Object.hasOwn(scene.canvas, "description"), false);
+  assert.equal(Object.hasOwn(scene.canvas, "origin"), false);
+  assert.throws(
+    () => validateSceneToolCall({
+      version: 1,
+      canvas: { width: 600, height: 800, metadata: { nested: { value: "unsafe" } } },
+      objects: [{ type: "line", x1: 0, y1: 0, x2: 600, y2: 800 }],
+    }),
+    /canvas metadata/u,
+  );
+});
+
 test("semantic arcs and Bezier curves compile without model-authored polyline points", () => {
   const runs = compileScene({
     version: 1,

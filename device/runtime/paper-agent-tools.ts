@@ -147,7 +147,10 @@ const renderScene = defineTool({
 		canvas: Type.Object({
 			width: Type.Integer({ minimum: 48, maximum: 4000 }),
 			height: Type.Integer({ minimum: 48, maximum: 4000 }),
-		}, { additionalProperties: false }),
+		// Some provider models add harmless descriptive canvas metadata. The
+		// trusted local compiler reads only width and height and discards the
+		// rest before any rendering or writeback occurs.
+		}, { additionalProperties: true, maxProperties: 8 }),
 		background: Type.Optional(Type.Literal("transparent")),
 		layout: Type.Optional(Type.Union([Type.Literal("flow"), Type.Literal("spatial")])),
 		objects: Type.Array(SceneObject, { minItems: 1, maxItems: 192 }),

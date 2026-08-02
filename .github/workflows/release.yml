@@ -18,14 +18,34 @@ on:
       - "device/settings/**"
       - "installer/**"
       - "scripts/build-image-plugin.sh"
+      - "scripts/package-pi-runtime.sh"
       - "scripts/package-release.sh"
 
 permissions:
   contents: read
 
 jobs:
+  runtime:
+    name: Prebuilt ARM64 Node + Pi runtime
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Package Node.js and Pi on ARM64
+        run: scripts/package-pi-runtime.sh dist/runtime
+
+      - name: Upload runtime for release packaging
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: paper-agent-pi-runtime-build
+          path: dist/runtime/paper-agent-pi-runtime.tar.gz
+          if-no-files-found: error
+
   device:
     name: ARM64 device release
+    needs: runtime
     runs-on: ubuntu-22.04
     timeout-minutes: 35
     steps:
@@ -60,6 +80,12 @@ jobs:
       - name: Build XOVI image bridge
         run: scripts/build-image-plugin.sh
 
+      - name: Download prebuilt Node + Pi runtime
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: paper-agent-pi-runtime-build
+          path: dist/runtime
+
       - name: Package deterministic release
         env:
           INPUT_VERSION: ${{ inputs.version }}
@@ -72,7 +98,8 @@ jobs:
           scripts/package-release.sh "$version" \
             dist/paper-agent-native \
             dist/paper-agent-image-aarch64.so \
-            dist/paper-agent-settings
+            dist/paper-agent-settings \
+            dist/runtime/paper-agent-pi-runtime.tar.gz
 
       - name: Upload device release
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
